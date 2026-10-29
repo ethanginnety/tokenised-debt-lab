@@ -1,0 +1,45 @@
+{
+  "_note": "SIMULATED instruments for an educational prototype. None of these is a real security, an offer, or affiliated with any issuer named in its description. Every value marked as an assumption is a modelling choice, not observed data.",
+  "instruments": [
+    {
+      "id": "CENTURY-GBP-2126",
+      "type": "fixed_rate_bond",
+      "name": "Sterling century bond (model)",
+      "description": "A 100-year sterling corporate bond modelled on the kind of century tranche Alphabet issued in 2026. Educational model only: not an Alphabet security and not endorsed by Alphabet.",
+      "currency": "GBP",
+      "face": "100",
+      "coupon_rate": "0.06",
+      "frequency": 1,
+      "issue_date": "2026-03-30",
+      "maturity_date": "2126-03-30",
+      "day_count": "ACT/ACT-ICMA",
+      "benchmark": "GBP",
+      "credit_spread_bp": "95",
+      "assumptions": [
+        "Coupon 6.00% paid annually: assumed. The real tranche's coupon and payment frequency were not available in sources checked.",
+        "Issue date 30 Mar 2026: assumed from reporting dated 31 Mar 2026.",
+        "Credit spread 95 bp over gilts: assumed for a very highly rated issuer at a 100-year tenor. Not observed.",
+        "No gilt curve reaches 100 years, so rates beyond the curve's last point are held flat."
+      ]
+    },
+    {
+      "id": "SHORT-USD-2029",
+      "type": "fixed_rate_bond",
+      "name": "Three-year US dollar corporate bond (model)",
+      "description": "A generic single-A rated, three-year US dollar corporate bond, included to contrast short duration with the century bond.",
+      "currency": "USD",
+      "face": "100",
+      "coupon_rate": "0.045",
+      "frequency": 2,
+      "issue_date": "2026-02-17",
+      "maturity_date": "2029-02-17",
+      "day_count": "30/360",
+      "benchmark": "USD",
+      "credit_spread_bp": "110",
+      "assumptions": [
+        "Issuer, single-A rating and 4.50% semi-annual coupon: assumed.",
+        "Credit spread 110 bp over Treasuries: assumed for a single-A three-year bond. Not observed."
+      ]
+    }
+  ]
+}

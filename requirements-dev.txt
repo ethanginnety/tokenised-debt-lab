@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest>=8,<10
+QuantLib>=1.34   # independent reference for pricing tests only

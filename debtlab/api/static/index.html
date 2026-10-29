@@ -1,0 +1,507 @@
+<title>Tokenised Debt Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500&display=swap">
+<style>
+/* Layout: a fixed-income desk sheet. Status strip, then one panel per bond, then rate-risk charts, then provenance and the audit trail. */
+:root {
+  --bg: #f2f4f6;
+  --panel: #ffffff;
+  --ink: #17212b;
+  --muted: #5a6773;
+  --line: #d8dee4;
+  --soft: #e9edf1;
+  --s1: #1d5f8f;          /* series 1: century bond / GBP */
+  --s2: #a35d12;          /* series 2: short bond / USD */
+  --warn-bg: #fff1cf;
+  --warn-ink: #6e4600;
+  --warn-line: #e6c375;
+  --good: #23704a;
+  --bad: #a83232;
+  --font-display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1318; --panel: #151c23; --ink: #e3e8ed; --muted: #95a2ae; --line: #29333d; --soft: #1c252e;
+    --s1: #6aaee0; --s2: #e0a35c; --warn-bg: #36290d; --warn-ink: #f1c977; --warn-line: #6b5420;
+    --good: #6cc48f; --bad: #ef8080; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1318; --panel: #151c23; --ink: #e3e8ed; --muted: #95a2ae; --line: #29333d; --soft: #1c252e;
+  --s1: #6aaee0; --s2: #e0a35c; --warn-bg: #36290d; --warn-ink: #f1c977; --warn-line: #6b5420;
+  --good: #6cc48f; --bad: #ef8080; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  margin: 0;
+}
+.wrap {
+  max-width: 1180px; margin-inline: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+  display: flex; flex-direction: column; gap: 28px;
+}
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+h1 { font-family: var(--font-display); font-weight: 500; font-size: 1.9rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.05rem; font-weight: 600; }
+h3 { font-family: var(--font-display); font-weight: 500; font-size: 1.3rem; }
+p { margin: 0; }
+.num, td.num, .data { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 0.82rem; }
+.label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+header.top .sub { color: var(--muted); max-width: 62ch; margin-top: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip { font-size: 0.75rem; font-weight: 500; letter-spacing: 0.04em; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); white-space: nowrap; }
+.chip.sim { border-color: var(--s1); color: var(--s1); }
+.chip.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-line); }
+.chip.ok { color: var(--good); border-color: var(--good); }
+.chip.bad { color: var(--bad); border-color: var(--bad); }
+button { font: inherit; font-size: 0.85rem; font-weight: 500; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+.banner { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+.banner strong { font-weight: 600; }
+
+.bonds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 20px; }
+.bond { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; border-top: 3px solid var(--series); }
+.bond .head { display: flex; flex-direction: column; gap: 4px; }
+.bond .desc { color: var(--muted); font-size: 0.88rem; max-width: 65ch; }
+.terms { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.82rem; color: var(--muted); }
+.terms b { color: var(--ink); font-weight: 500; font-family: var(--font-data); }
+.price-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 28px; }
+.big { font-family: var(--font-data); font-size: 2.3rem; font-weight: 500; line-height: 1.1; letter-spacing: -0.02em; }
+.big small { font-size: 0.9rem; color: var(--muted); font-weight: 400; margin-left: 6px; letter-spacing: 0; }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 12px 16px; }
+.kv div { display: flex; flex-direction: column; gap: 2px; }
+.kv .v { font-family: var(--font-data); font-size: 1.02rem; font-variant-numeric: tabular-nums; }
+.gate { font-size: 0.84rem; padding: 8px 12px; border-radius: 6px; background: var(--soft); display: flex; gap: 8px; align-items: baseline; }
+.gate .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); flex: none; transform: translateY(-1px); }
+.gate.open .dot { background: var(--good); }
+.extrap { font-size: 0.84rem; color: var(--muted); }
+.extrap b { color: var(--ink); font-family: var(--font-data); font-weight: 500; }
+
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--soft); vertical-align: top; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.neg { color: var(--bad); }
+.pos { color: var(--good); }
+
+section.block { display: flex; flex-direction: column; gap: 14px; }
+.block-head { display: flex; flex-direction: column; gap: 4px; }
+.block-head p { color: var(--muted); font-size: 0.9rem; max-width: 72ch; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 20px; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart text { font-family: var(--font-data); font-size: 11px; fill: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.readout { font-family: var(--font-data); font-size: 0.8rem; color: var(--muted); min-height: 1.4em; margin-top: 6px; }
+
+.explain { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 16px; }
+.explain .panel p { font-size: 0.88rem; color: var(--muted); margin-top: 6px; }
+#assumptions { display: flex; flex-direction: column; gap: 14px; }
+ul.assume { margin: 6px 0 0; padding-left: 18px; font-size: 0.86rem; display: flex; flex-direction: column; gap: 4px; }
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 20px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+select { font: inherit; font-size: 0.85rem; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.log-wrap { max-height: 26rem; overflow: auto; }
+.log-wrap th { position: sticky; top: 0; background: var(--panel); }
+.payload { font-family: var(--font-data); font-size: 0.75rem; color: var(--muted); word-break: break-word; }
+.empty { color: var(--muted); font-size: 0.9rem; padding: 12px 0; }
+footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s; } }
+</style>
+
+<div class="wrap" id="app">
+  <header class="top">
+    <div>
+      <p class="label">Milestone 1 · bond pricing</p>
+      <h1>Tokenised Debt Lab</h1>
+      <p class="sub">A prototype marketplace for simulated tokenised debt. This page shows the pricing engine: what each bond is worth, how sensitive it is to rates, and where every number comes from.</p>
+    </div>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <section class="bonds" id="bonds" aria-label="Instruments"></section>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>What a rate move does to each bond</h2>
+      <p>Each bond is repriced in full after every shock. The duration-plus-convexity estimate sits beside it, so you can see where the quick approximation stops working.</p>
+    </div>
+    <div class="panel tbl-wrap"><table id="shocks"></table></div>
+  </section>
+
+  <section class="charts">
+    <div class="panel">
+      <h2>Price change for a parallel yield move</h2>
+      <p class="muted small">Clean price change against a change in each bond's own yield. The curvature is convexity.</p>
+      <div class="chart" id="pyChart"></div>
+      <div class="legend" id="pyLegend"></div>
+      <div class="readout" id="pyReadout">Hover the chart to read values.</div>
+    </div>
+    <div class="panel">
+      <h2>Benchmark curves</h2>
+      <p class="muted small">Government zero rates used for discounting, out to 100 years. Past the last real tenor the rate is held flat.</p>
+      <div class="chart" id="curveChart"></div>
+      <div class="legend" id="curveLegend"></div>
+    </div>
+  </section>
+
+  <section class="explain" aria-label="How to read this page">
+    <div class="panel">
+      <h2>Why prices fall when yields rise</h2>
+      <p>A bond's payments are fixed. Its price is what those payments are worth today, discounted at current rates. Higher rates shrink every future payment's value, and the further away a payment is, the more it shrinks. That is why the 100-year bond moves so much more than the 3-year one.</p>
+    </div>
+    <div class="panel">
+      <h2>Duration in one line</h2>
+      <p>Modified duration is the approximate % price change for a 1 percentage point yield move. A duration of 14 means a 1 point rise in yield costs roughly 14% of the price. Convexity is the correction for the fact that this relationship curves.</p>
+    </div>
+    <div class="panel">
+      <h2>Clean and dirty price</h2>
+      <p>The dirty price is what a buyer actually pays: the bond's value including interest built up since the last coupon. The clean price strips that accrued interest out, so it doesn't jump on coupon dates. Bonds are quoted clean.</p>
+    </div>
+  </section>
+
+  <section class="split">
+    <div class="block">
+      <div class="block-head">
+        <h2>Where the rates come from</h2>
+        <p>Each curve's source, observation date, age and status. Official sources publish once a day, so none of this is a live tick.</p>
+      </div>
+      <div class="panel tbl-wrap"><table id="curves"></table></div>
+    </div>
+    <div class="block">
+      <div class="block-head">
+        <h2>Assumptions</h2>
+        <p>Modelling choices behind each bond. None of these is observed market data.</p>
+      </div>
+      <div class="panel" id="assumptions"></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="toolbar">
+      <div class="block-head">
+        <h2>Audit log</h2>
+        <p>Every material action, newest first. Repeat valuations on the same data and date are recorded once.</p>
+      </div>
+      <label class="small muted">Show
+        <select id="logFilter"><option value="">all events</option></select>
+      </label>
+    </div>
+    <div class="panel log-wrap"><table id="log"></table></div>
+  </section>
+
+  <footer id="footer">Educational prototype. Simulated instruments only; nothing here is a real security, an offer, or a public-blockchain asset.</footer>
+</div>
+
+<script>
+(() => {
+  const SERIES = ["--s1", "--s2"];
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === "class") n.className = v; else if (k === "text") n.textContent = v; else n.setAttribute(k, v);
+    }
+    for (const k of kids) if (k != null) n.append(k);
+    return n;
+  };
+  const fmt = (x, dp) => Number(x).toLocaleString("en-GB", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+  const signed = (x, dp) => (Number(x) > 0 ? "+" : Number(x) < 0 ? "−" : "") + fmt(Math.abs(Number(x)), dp);
+  const when = (iso) => new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC";
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const sv = (tag, attrs = {}) => { const n = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
+
+  let DATA = null;
+  const live = !window.__SNAPSHOT__;
+
+  async function load() {
+    if (!live) { DATA = window.__SNAPSHOT__; render(); return; }
+    try {
+      const r = await fetch("api/overview");
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      DATA = await r.json(); render();
+    } catch (e) {
+      const b = document.getElementById("banner");
+      b.hidden = false;
+      b.replaceChildren(el("strong", { text: "Couldn't reach the app's API." }), el("span", { text: "Start it with: python -m debtlab.api, then reload. (" + e.message + ")" }));
+    }
+  }
+
+  async function refresh(btn) {
+    btn.disabled = true; btn.textContent = "Refreshing…";
+    try { const r = await fetch("api/refresh", { method: "POST" }); if (!r.ok) throw new Error("HTTP " + r.status); DATA = await r.json(); render(); }
+    catch (e) { btn.textContent = "Refresh failed: " + e.message; return; }
+    btn.disabled = false; btn.textContent = "Refresh prices";
+  }
+
+  function render() {
+    const d = DATA;
+    const bonds = d.instruments;
+    const illustrative = d.curves.some((c) => c.kind === "illustrative");
+
+    // chips
+    const chips = document.getElementById("chips");
+    chips.replaceChildren(
+      el("span", { class: "chip sim", text: "SIMULATION" }),
+      el("span", { class: "chip " + (illustrative ? "warn" : "ok"), text: illustrative ? "Illustrative rates" : "Official daily rates" }),
+      el("span", { class: "chip", text: "Settles " + d.settle }),
+      el("span", { class: "chip", text: (live ? "Updated " : "Snapshot ") + when(d.last_refresh || d.generated_at) }),
+    );
+    if (live) { const b = el("button", { type: "button", text: "Refresh prices" }); b.addEventListener("click", () => refresh(b)); chips.append(b); }
+
+    const banner = document.getElementById("banner");
+    if (illustrative) {
+      banner.hidden = false;
+      banner.replaceChildren(
+        el("strong", { text: "Illustrative rates: not market data." }),
+        el("span", { text: "The prices below are real calculations on made-up government curves, because this copy was run where official data sources weren't reachable. Run it in online mode on your own machine to price from official data." }),
+      );
+    } else banner.hidden = true;
+
+    // bond panels
+    const wrap = document.getElementById("bonds");
+    wrap.replaceChildren(...bonds.map((b, i) => bondPanel(b, i)));
+
+    shocksTable(bonds);
+    pyChart(bonds);
+    curveChart(d.curves, bonds);
+    curvesTable(d.curves);
+    assumptions(bonds, d.curves);
+    auditLog(d.events);
+    document.getElementById("footer").textContent =
+      `Version ${d.version} · data mode ${d.data_mode} · page generated ${when(d.generated_at)}. Educational prototype: simulated instruments only. Nothing here is a real security, an offer, or a public-blockchain asset.`;
+  }
+
+  function bondPanel(b, i) {
+    const t = b.terms;
+    const card = el("article", { class: "bond", style: `--series: var(${SERIES[i % 2]})` });
+    const freq = { 1: "annual", 2: "semi-annual", 4: "quarterly", 12: "monthly" }[t.frequency] || t.frequency + "×/yr";
+    card.append(
+      el("div", { class: "head" },
+        el("span", { class: "label", text: t.id + " · " + t.currency }),
+        el("h3", { text: t.name }),
+        el("p", { class: "desc", text: t.description })),
+      el("div", { class: "terms" },
+        termItem("Coupon", fmt(t.coupon_pct, 3) + "% " + freq),
+        termItem("Matures", t.maturity_date),
+        termItem("Day count", t.day_count),
+        termItem("Spread (assumed)", fmt(t.credit_spread_bp, 0) + " bp over " + t.benchmark + " govts")),
+    );
+    if (b.status !== "ok") {
+      card.append(el("p", { class: "empty", text: b.message }));
+      card.append(gate(b));
+      return card;
+    }
+    card.append(
+      el("div", { class: "price-row" },
+        el("div", {}, el("div", { class: "label", text: "Fair value, clean" }),
+          el("div", { class: "big" }, fmt(b.fair_clean, 4), el("small", { text: "per 100 face" }))),
+        el("div", {}, el("div", { class: "label", text: "Yield to maturity" }),
+          el("div", { class: "big" }, fmt(b.ytm_pct, 3) + "%"))),
+      el("div", { class: "kv" },
+        kv("Dirty price", fmt(b.fair_dirty, 4)),
+        kv("Accrued interest", fmt(b.accrued, 4)),
+        kv("Modified duration", fmt(b.modified_duration, 2)),
+        kv("Effective duration", fmt(b.effective_duration, 2)),
+        kv("Convexity", fmt(b.convexity, 1)),
+        kv("DV01 (per 100)", fmt(b.dv01, 4)),
+        kv("Years to maturity", fmt(b.years_to_maturity, 1)),
+        kv("Payments left", String(b.cash_flows_remaining))),
+    );
+    if (Number(b.beyond_curve_share_pct) > 0) {
+      card.append(el("p", { class: "extrap" }, el("b", { text: fmt(b.beyond_curve_share_pct, 1) + "%" }),
+        document.createTextNode(" of this bond's value comes from payments beyond the longest point on its curve, where the rate is extrapolated rather than observed.")));
+    }
+    card.append(gate(b));
+    return card;
+  }
+  const termItem = (k, v) => el("span", {}, k + " ", el("b", { text: v }));
+  const kv = (k, v) => el("div", {}, el("span", { class: "label", text: k }), el("span", { class: "v", text: v }));
+  function gate(b) {
+    return el("div", { class: "gate" + (b.trading_allowed ? " open" : "") }, el("span", { class: "dot" }),
+      el("span", { text: b.trading_allowed ? "Quoting allowed on this data." : "Quoting blocked: " + b.trading_gate_reason + "." }));
+  }
+
+  function shocksTable(bonds) {
+    const ok = bonds.filter((b) => b.status === "ok");
+    const tbl = document.getElementById("shocks");
+    if (!ok.length) { tbl.replaceChildren(el("caption", { class: "empty", text: "No bonds priced." })); return; }
+    const head = el("tr", {}, el("th", { text: "Scenario" }));
+    ok.forEach((b) => {
+      head.append(el("th", { class: "num", text: b.terms.name.replace(/ \(model\)$/, "") }));
+      head.append(el("th", { class: "num", text: "Estimate" }));
+    });
+    const rows = ok[0].shocks.map((s, k) => {
+      const tr = el("tr", {}, el("td", { text: s.name }));
+      ok.forEach((b) => {
+        const x = b.shocks[k];
+        tr.append(el("td", { class: "num " + (Number(x.change_pct) < 0 ? "neg" : "pos"), text: signed(x.change_pct, 2) + "%" }));
+        tr.append(el("td", { class: "num muted", text: signed(x.approx_change_pct, 2) + "%" }));
+      });
+      return tr;
+    });
+    tbl.replaceChildren(el("thead", {}, head), el("tbody", {}, ...rows));
+  }
+
+  function niceTicks(lo, hi, n) {
+    const span = hi - lo, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n) || 10 * mag;
+    const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10)); return out;
+  }
+
+  function frame(host, H) {
+    const W = Math.max(320, host.clientWidth || 520);
+    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+    host.replaceChildren(svg);
+    return { svg, W, H };
+  }
+  function measure(svg, text) { const t = sv("text", {}); t.textContent = text; svg.append(t); const w = t.getComputedTextLength(); t.remove(); return w; }
+
+  function pyChart(bonds) {
+    const host = document.getElementById("pyChart");
+    const ok = bonds.map((b, i) => ({ b, i })).filter((x) => x.b.status === "ok");
+    if (!ok.length) { host.replaceChildren(el("p", { class: "empty", text: "No priced bonds to chart." })); return; }
+    const series = ok.map(({ b, i }) => {
+      const prof = b.price_yield_profile;
+      const center = prof.reduce((best, p, k) => Math.abs(Number(p.ytm_pct) - Number(b.ytm_pct)) < Math.abs(Number(prof[best].ytm_pct) - Number(b.ytm_pct)) ? k : best, 0);
+      const p0 = Number(prof[center].clean_price), y0 = Number(prof[center].ytm_pct);
+      return { name: b.terms.name.replace(/ \(model\)$/, ""), color: css(SERIES[i % 2]),
+        pts: prof.map((p) => [Math.round((Number(p.ytm_pct) - y0) * 100), (Number(p.clean_price) / p0 - 1) * 100]) };
+    });
+    const { svg, W, H } = frame(host, 300);
+    const all = series.flatMap((s) => s.pts.map((p) => p[1]));
+    const yT = niceTicks(Math.min(...all), Math.max(...all), 6);
+    const yMin = Math.min(yT[0], Math.min(...all)), yMax = Math.max(yT[yT.length - 1], Math.max(...all));
+    const left = Math.max(...yT.map((v) => measure(svg, signed(v, 0) + "%"))) + 12, right = 12, top = 10, bottom = 34;
+    const X = (v) => left + (v + 300) / 600 * (W - left - right);
+    const Y = (v) => top + (yMax - v) / (yMax - yMin) * (H - top - bottom);
+    yT.forEach((v) => {
+      svg.append(sv("line", { x1: left, x2: W - right, y1: Y(v), y2: Y(v), stroke: css(v === 0 ? "--muted" : "--line"), "stroke-width": 1 }));
+      const t = sv("text", { x: left - 8, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = signed(v, 0) + "%"; svg.append(t);
+    });
+    [-300, -200, -100, 0, 100, 200, 300].forEach((v) => {
+      svg.append(sv("line", { x1: X(v), x2: X(v), y1: top, y2: H - bottom, stroke: css("--line"), "stroke-width": 1, "stroke-dasharray": v === 0 ? "" : "2 4" }));
+      const t = sv("text", { x: X(v), y: H - bottom + 16, "text-anchor": v === -300 ? "start" : v === 300 ? "end" : "middle" }); t.textContent = (v > 0 ? "+" : "") + v + " bp"; svg.append(t);
+    });
+    const xl = sv("text", { x: (left + W - right) / 2, y: H - 2, "text-anchor": "middle" }); xl.textContent = "change in yield"; svg.append(xl);
+    series.forEach((s) => {
+      svg.append(sv("path", { d: s.pts.map((p, k) => (k ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(" "), fill: "none", stroke: s.color, "stroke-width": 2.2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    });
+    const rule = sv("line", { y1: top, y2: H - bottom, stroke: css("--muted"), "stroke-width": 1, visibility: "hidden" });
+    const dots = series.map((s) => { const c = sv("circle", { r: 4, fill: s.color, visibility: "hidden" }); svg.append(c); return c; });
+    svg.append(rule);
+    const readout = document.getElementById("pyReadout");
+    svg.addEventListener("pointermove", (ev) => {
+      const r = svg.getBoundingClientRect(); const x = (ev.clientX - r.left) * W / r.width;
+      let k = Math.round(((x - left) / (W - left - right) * 600 - 300) / 25); k = Math.max(-12, Math.min(12, k));
+      const bpv = k * 25; rule.setAttribute("x1", X(bpv)); rule.setAttribute("x2", X(bpv)); rule.setAttribute("visibility", "visible");
+      const parts = [(bpv > 0 ? "+" : "") + bpv + " bp:"];
+      series.forEach((s, j) => { const p = s.pts.find((q) => q[0] === bpv); if (!p) return; dots[j].setAttribute("cx", X(p[0])); dots[j].setAttribute("cy", Y(p[1])); dots[j].setAttribute("visibility", "visible"); parts.push(s.name + " " + signed(p[1], 2) + "%"); });
+      readout.textContent = parts.join("  ");
+    });
+    svg.addEventListener("pointerleave", () => { rule.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); readout.textContent = "Hover the chart to read values."; });
+    document.getElementById("pyLegend").replaceChildren(...series.map((s) => el("span", {}, el("i", { style: "background:" + s.color }), document.createTextNode(s.name))));
+  }
+
+  function curveChart(curves, bonds) {
+    const host = document.getElementById("curveChart");
+    if (!curves.length) { host.replaceChildren(el("p", { class: "empty", text: "No curves loaded." })); return; }
+    const colorFor = (ccy) => { const i = bonds.findIndex((b) => b.terms.benchmark === ccy); return css(SERIES[(i < 0 ? 0 : i) % 2]); };
+    const { svg, W, H } = frame(host, 300);
+    const rates = curves.flatMap((c) => c.points.map((p) => Number(p.rate_pct)));
+    const yT = niceTicks(Math.floor(Math.min(...rates) * 2) / 2 - 0.25, Math.ceil(Math.max(...rates) * 2) / 2 + 0.25, 5);
+    const yMin = yT[0], yMax = yT[yT.length - 1];
+    const left = Math.max(...yT.map((v) => measure(svg, fmt(v, 1) + "%"))) + 12, right = 14, top = 10, bottom = 34;
+    const X = (t) => left + t / 100 * (W - left - right);
+    const Y = (v) => top + (yMax - v) / (yMax - yMin) * (H - top - bottom);
+    const longest = Math.min(...curves.map((c) => Number(c.longest_tenor_years)));
+    svg.append(sv("rect", { x: X(longest), y: top, width: X(100) - X(longest), height: H - top - bottom, fill: css("--soft") }));
+    const lab = sv("text", { x: (X(longest) + X(100)) / 2, y: top + 14, "text-anchor": "middle" }); lab.textContent = "no market data: held flat"; svg.append(lab);
+    yT.forEach((v) => {
+      svg.append(sv("line", { x1: left, x2: W - right, y1: Y(v), y2: Y(v), stroke: css("--line"), "stroke-width": 1 }));
+      const t = sv("text", { x: left - 8, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = fmt(v, 1) + "%"; svg.append(t);
+    });
+    [0, 10, 20, 30, 50, 100].forEach((v) => { const t = sv("text", { x: X(v), y: H - bottom + 16, "text-anchor": v === 0 ? "start" : v === 100 ? "end" : "middle" }); t.textContent = v + "y"; svg.append(t); });
+    const xl = sv("text", { x: (left + W - right) / 2, y: H - 2, "text-anchor": "middle" }); xl.textContent = "years to payment"; svg.append(xl);
+    curves.forEach((c) => {
+      const col = colorFor(c.currency);
+      const pts = c.points.map((p) => [Number(p.tenor_years), Number(p.rate_pct)]);
+      svg.append(sv("path", { d: pts.map((p, k) => (k ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(" "), fill: "none", stroke: col, "stroke-width": 2.2, "stroke-linejoin": "round" }));
+      const last = pts[pts.length - 1];
+      svg.append(sv("path", { d: `M${X(last[0])} ${Y(last[1])} L${X(100)} ${Y(last[1])}`, fill: "none", stroke: col, "stroke-width": 2, "stroke-dasharray": "5 4" }));
+      pts.forEach((p) => svg.append(sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 2.6, fill: col })));
+      bonds.filter((b) => b.terms.benchmark === c.currency && b.status === "ok").forEach((b) => {
+        const t = Math.min(100, Number(b.years_to_maturity));
+        svg.append(sv("line", { x1: X(t), x2: X(t), y1: top, y2: H - bottom, stroke: col, "stroke-width": 1, "stroke-dasharray": "1 3" }));
+      });
+    });
+    document.getElementById("curveLegend").replaceChildren(
+      ...curves.map((c) => el("span", {}, el("i", { style: "background:" + colorFor(c.currency) }), document.createTextNode(c.currency + (c.kind === "illustrative" ? " (illustrative)" : "")))),
+      el("span", { text: "Dotted verticals mark each bond's maturity." }));
+  }
+
+  function curvesTable(curves) {
+    const tbl = document.getElementById("curves");
+    const statusChip = (s) => el("span", { class: "chip " + (s === "fresh" ? "ok" : s === "stale" ? "bad" : "warn"), text: s });
+    tbl.replaceChildren(
+      el("thead", {}, el("tr", {}, ...["Curve", "Source", "Observed", "Age", "Status"].map((h) => el("th", { text: h })))),
+      el("tbody", {}, ...curves.map((c) => el("tr", {},
+        el("td", { class: "num", text: c.currency }),
+        el("td", {}, el("div", { text: c.source }), el("div", { class: "small muted", text: c.notes })),
+        el("td", { class: "num", text: c.observation_date }),
+        el("td", { class: "num", text: fmt(c.age_hours, 0) + " h" }),
+        el("td", {}, statusChip(c.status))))));
+  }
+
+  function assumptions(bonds, curves) {
+    const box = document.getElementById("assumptions");
+    box.replaceChildren(...bonds.map((b) => el("div", {},
+      el("div", { class: "label", text: b.terms.name }),
+      el("ul", { class: "assume" }, ...b.terms.assumptions.map((a) => el("li", { text: a }))))));
+  }
+
+  function auditLog(events) {
+    const sel = document.getElementById("logFilter");
+    const kinds = [...new Set(events.map((e) => e.kind))].sort();
+    const current = sel.value;
+    sel.replaceChildren(el("option", { value: "", text: "all events" }), ...kinds.map((k) => el("option", { value: k, text: k })));
+    sel.value = kinds.includes(current) ? current : "";
+    const draw = () => {
+      const rows = events.filter((e) => !sel.value || e.kind === sel.value);
+      document.getElementById("log").replaceChildren(
+        el("thead", {}, el("tr", {}, ...["#", "Time (UTC)", "Event", "Subject", "Details"].map((h) => el("th", { text: h })))),
+        el("tbody", {}, ...(rows.length ? rows.map((e) => el("tr", {},
+          el("td", { class: "num", text: String(e.id) }),
+          el("td", { class: "num", text: e.created_at.replace("T", " ").slice(0, 19) }),
+          el("td", { text: e.kind }),
+          el("td", { class: "num", text: e.entity || "" }),
+          el("td", { class: "payload", text: JSON.stringify(e.payload) })))
+          : [el("tr", {}, el("td", { colspan: "5", class: "empty", text: "No events of this kind." }))])));
+    };
+    sel.onchange = draw;
+    draw();
+  }
+
+  let lastW = 0;
+  window.addEventListener("resize", () => { const w = document.getElementById("app").clientWidth; if (DATA && Math.abs(w - lastW) > 30) { lastW = w; pyChart(DATA.instruments); curveChart(DATA.curves, DATA.instruments); } });
+  load();
+})();
+</script>
