@@ -39,7 +39,7 @@ def migrate(conn: sqlite3.Connection, migrations_dir: Path = MIGRATIONS_DIR) -> 
             continue
         conn.execute("BEGIN")
         try:
-            _exec_script(conn, f.read_text())
+            _exec_script(conn, f.read_text(encoding="utf-8"))
             conn.execute(
                 "INSERT INTO schema_migrations(name, applied_at) VALUES (?, ?)",
                 (f.name, _now()),

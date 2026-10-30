@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 — 30 Oct 2026
+
+- Fixed: on Windows the dashboard showed garbled characters (`Â·`, `âˆ’`) because files were read with the operating system's default encoding. Every file read and write now uses UTF-8 explicitly, and a new test fails if any doesn't. Found by Ethan running it on Windows.
+- The app now answers browser favicon requests with an empty response instead of a 404.
+
 ## 0.1.0-m1 — 29 Oct 2026
 
 Milestone 1: pricing slice.

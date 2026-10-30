@@ -24,7 +24,7 @@ def main() -> None:
     full = "--full" in sys.argv  # include <!doctype>/<head> for opening straight in a browser
     with TestClient(create_app(Settings.from_env())) as client:
         data = client.get("/api/overview").json()
-    out.write_text(render_page(json.dumps(data), shell=full))
+    out.write_text(render_page(json.dumps(data), shell=full), encoding="utf-8")
     print(f"wrote {out} ({out.stat().st_size:,} bytes)")
 
 

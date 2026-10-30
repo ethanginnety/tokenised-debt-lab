@@ -20,9 +20,12 @@ QuantLib is a test-only dependency, used as an independent check on the pricing 
 | Market data | Treasury CSV uses the latest row and skips blank cells; garbage raises instead of inventing; ECB parse and mixed-date rejection; retries then a clean failure. |
 | Staleness and risk gate | Fresh vs stale by age; illustrative, missing and stale data all block risk-taking. |
 | Storage and recovery | Migrations apply once; idempotent events; events survive a reopened database; last valid official curve used when the source fails, flagged stale; no curve invented when none stored. |
+| Portability | Every file read/write in the code and tests states UTF-8 (a Windows-only bug otherwise). |
 | API | Offline end to end (health, overview, events, refresh without duplicate valuations, dashboard page); online mode with all sources down leaves bonds unpriced; snapshot export escapes script tags. |
 
 ## Latest results
+
+**30 Oct 2026: 34 passed** after adding the UTF-8 portability test. Ethan's first run on Windows (Python via venv): 33 passed, 1 warning (from Starlette's test client, not project code); app started and dashboard loaded, which exposed the encoding bug fixed in 0.1.1.
 
 **29 Oct 2026: 33 passed, 0 failed, 0 skipped** (Python 3.13, QuantLib 1.44).
 

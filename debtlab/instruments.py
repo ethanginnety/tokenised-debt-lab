@@ -11,7 +11,7 @@ from debtlab.pricing.bond import FixedRateBond
 
 
 def load_instruments(path: Path) -> list[FixedRateBond]:
-    data = json.loads(Path(path).read_text())
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
     out = []
     seen = set()
     for item in data["instruments"]:

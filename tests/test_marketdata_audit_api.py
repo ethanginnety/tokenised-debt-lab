@@ -34,7 +34,7 @@ def settings(tmp_path, mode="offline", **kw):
 
 
 def test_treasury_csv_uses_latest_row_and_skips_blanks():
-    snap = parse_treasury_csv((FIX / "treasury_sample.csv").read_text(), NOW)
+    snap = parse_treasury_csv((FIX / "treasury_sample.csv").read_text(encoding="utf-8"), NOW)
     assert snap.observation_date == date(2026, 10, 27)
     assert snap.rate_type == "par" and snap.is_market_data
     tenors = [t for t, _ in snap.curve.points]
@@ -74,7 +74,7 @@ def test_retries_then_fails_cleanly():
 
 
 def test_staleness_and_risk_gate():
-    snap = parse_treasury_csv((FIX / "treasury_sample.csv").read_text(), NOW)
+    snap = parse_treasury_csv((FIX / "treasury_sample.csv").read_text(encoding="utf-8"), NOW)
     assert snap.status(NOW, 96) == "fresh"
     later = NOW + timedelta(days=5)
     assert snap.status(later, 96) == "stale"
@@ -105,7 +105,7 @@ def test_last_valid_curve_kept_when_source_fails(tmp_path, monkeypatch):
     s = settings(tmp_path, mode="online")
     conn = connect(s.db_path)
     migrate(conn)
-    old = parse_treasury_csv((FIX / "treasury_sample.csv").read_text(), NOW)
+    old = parse_treasury_csv((FIX / "treasury_sample.csv").read_text(encoding="utf-8"), NOW)
     save_curve(conn, old)
 
     def fail(_now):

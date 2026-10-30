@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from debtlab.audit.db import connect, migrate, record_event, recent_events
 from debtlab.config import Settings
@@ -30,7 +30,7 @@ _SHELL = (
 
 def render_page(snapshot_json: str | None = None, shell: bool = True) -> str:
     """The dashboard page. With `snapshot_json`, data is embedded (static export)."""
-    body = (STATIC / "index.html").read_text()
+    body = (STATIC / "index.html").read_text(encoding="utf-8")
     if snapshot_json is not None:
         safe = snapshot_json.replace("</", "<\\/")
         body = body.replace("<script>", f"<script>window.__SNAPSHOT__ = {safe};</script>\n<script>", 1)
@@ -126,5 +126,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def dashboard() -> str:
         return render_page()
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> Response:
+        return Response(status_code=204)  # no icon yet; avoids a 404 in the log
 
     return app
