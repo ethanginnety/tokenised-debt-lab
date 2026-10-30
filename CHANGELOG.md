@@ -7,6 +7,7 @@ Milestone 2, steps 1–2.
 - **Par-to-zero bootstrap.** US Treasury par yields are now converted into zero rates (semi-annual grid, par yields interpolated linearly) before pricing. Matches QuantLib's bootstrapper to 1e-12, and every par bond reprices to par. On the real 29 Oct curve the 20-year zero rate is 18 bp above the par yield; the 3-year bond's price moved from 97.2944 to 97.2803.
 - Curves now carry their own compounding convention (the bootstrapped Treasury curve is semi-annual). Curves that don't state one behave as before.
 - `scripts/save_fixtures.py` saves the raw Treasury and ECB downloads into `tests/fixtures/real/`; `tests/test_real_fixtures.py` parses every saved file and skips cleanly when none exist.
+- Fixed (found by Ethan in the audit log): a re-processed curve with the same source and date reused the old ID, so the bootstrapped curve and the changed valuation were silently not recorded. Curve IDs now include a fingerprint of the content. Stored par curves used as a fallback are bootstrapped on the way out.
 - `scripts/probe_treasury.py` kept as a diagnostic for download problems.
 
 ## 0.1.1 — 30 Oct 2026

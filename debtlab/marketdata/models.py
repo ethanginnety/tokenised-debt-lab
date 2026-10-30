@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
@@ -29,7 +30,10 @@ class CurveSnapshot:
 
     @property
     def id(self) -> str:
-        return f"{self.curve.currency}:{self.source}:{self.observation_date.isoformat()}"
+        """Unique per source, date AND content: a re-processed curve gets a new id."""
+        content = repr((self.rate_type, self.curve.compounding, self.curve.points))
+        digest = hashlib.sha256(content.encode("utf-8")).hexdigest()[:8]
+        return f"{self.curve.currency}:{self.source}:{self.observation_date.isoformat()}:{digest}"
 
     @property
     def is_market_data(self) -> bool:

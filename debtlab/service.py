@@ -7,7 +7,12 @@ from datetime import date, datetime, timezone
 
 from debtlab.audit.db import latest_curve, record_event, save_curve
 from debtlab.config import Settings
-from debtlab.marketdata.adapters import ONLINE_ADAPTERS, MarketDataError, illustrative_curves
+from debtlab.marketdata.adapters import (
+    ONLINE_ADAPTERS,
+    MarketDataError,
+    illustrative_curves,
+    to_zero_snapshot,
+)
 from debtlab.marketdata.models import MARKET_KINDS, CurveSnapshot, risk_increasing_allowed
 from debtlab.money import q
 from debtlab.pricing.bond import FixedRateBond
@@ -44,7 +49,9 @@ def load_curves(
                          {"error": str(exc), "fallback": previous.id if previous else None},
                          entity=ccy)
             if previous:
-                curves[ccy] = previous  # last valid observation, flagged by its age
+                # Last valid observation, flagged by its age. Stored par curves
+                # (from before the bootstrap existed) are converted on the way out.
+                curves[ccy] = to_zero_snapshot(previous)
     return curves
 
 

@@ -116,7 +116,8 @@ def test_last_valid_curve_kept_when_source_fails(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "ONLINE_ADAPTERS", {"USD": fail, "GBP": fail})
     later = NOW + timedelta(days=6)
     curves = load_curves(conn, s, later)
-    assert curves["USD"].id == old.id  # fell back to the stored observation
+    from debtlab.marketdata.adapters import to_zero_snapshot
+    assert curves["USD"].id == to_zero_snapshot(old).id  # the stored observation, bootstrapped
     assert curves["USD"].status(later, 96) == "stale"  # ...and it is flagged stale
     assert "GBP" not in curves  # nothing stored, so nothing invented
     assert all(c.kind in MARKET_KINDS for c in curves.values())
@@ -171,3 +172,34 @@ def test_online_without_gbp_source_leaves_century_unpriced(tmp_path, monkeypatch
 def test_snapshot_export_escapes_script_tags():
     html = render_page('{"x": "</script><b>"}', shell=False)
     assert "window.__SNAPSHOT__" in html and "</script><b>" not in html.split("window.__SNAPSHOT__")[1][:40]
+
+
+def test_reprocessed_curve_is_recorded_again(tmp_path):
+    """Same source and date but different content (par vs bootstrapped zero)
+    must get a new id, so the new curve and the new valuation are both logged."""
+    from debtlab.marketdata.adapters import to_zero_snapshot
+
+    conn = connect(tmp_path / "r.sqlite3")
+    migrate(conn)
+    par = parse_treasury_csv((FIX / "treasury_sample.csv").read_text(encoding="utf-8"), NOW)
+    zero = to_zero_snapshot(par)
+    assert par.id != zero.id
+    assert par.id.rsplit(":", 1)[0] == zero.id.rsplit(":", 1)[0]  # same source and date
+    assert save_curve(conn, par) and save_curve(conn, zero)
+    assert latest_curve(conn, "USD", MARKET_KINDS) is not None
+
+
+def test_fallback_par_curve_is_bootstrapped(tmp_path, monkeypatch):
+    import debtlab.service as service
+
+    s = settings(tmp_path, mode="online")
+    conn = connect(s.db_path)
+    migrate(conn)
+    save_curve(conn, parse_treasury_csv((FIX / "treasury_sample.csv").read_text(encoding="utf-8"), NOW))
+
+    def fail(_now):
+        raise MarketDataError("down")
+
+    monkeypatch.setattr(service, "ONLINE_ADAPTERS", {"USD": fail})
+    curves = load_curves(conn, s, NOW)
+    assert curves["USD"].rate_type == "zero_bootstrapped" and curves["USD"].curve.compounding == 2
