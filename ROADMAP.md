@@ -6,7 +6,7 @@ A milestone is done only when its tests pass and its behaviour has been demonstr
 |---|---|---|---|
 | M1 | Pricing slice | **Done** (29 Oct 2026) | App runs; century and short bonds priced; tests pass against QuantLib; dashboard shows prices, risk, shocks, assumptions; audit log records valuations. |
 | M2 | Real curves | **Done** (30 Oct 2026) | US, EUR and GBP adapters verified against real downloads; Treasury par-to-zero bootstrap; staleness gating; long-end extrapolation sensitivity shown. |
-| M3 | Instruments and ledger | **Built; awaiting Ethan's browser check** | Three instruments; simulated holder ledger; coupons, maturity and default with idempotent payments. |
+| M3 | Instruments and ledger | **Done** (30 Oct 2026) | Three instruments; simulated holder ledger; coupons, maturity and default with idempotent payments. |
 | M4 | Market maker (simulation) | Planned | Quotes with full records; limits, pause and kill switch; simulated fills with adverse selection; P&L split. |
 | M5 | Private credit depth | Planned | Withdrawal windows, caps, queue and gates; NAV vs secondary price; discount tests. |
 | M6 | XRPL testnet | Planned | Bonds as labelled testnet tokens; coupon transfers on testnet; reconciliation. |
@@ -34,7 +34,7 @@ A milestone is done only when its tests pass and its behaviour has been demonstr
 - Online mode prices the century bond from the real 29 Oct gilt curve; figures hand-checked (see TESTING.md). Staleness gating tested since M1.
 - Marked done by Ethan on 30 Oct 2026. The dashboard's long-end table has not been checked in a browser by Claude (no JavaScript engine available).
 
-## M3 plan (current)
+## M3 plan
 
 Approved by Ethan on 30 Oct 2026, with one change: lifecycle scenarios run in a **separate scenario database** (`data/scenario.sqlite3`), created fresh by a script, so the main database keeps a performing short bond for the M4 market maker. The dashboard shows which database it is reading.
 
@@ -43,26 +43,34 @@ Approved by Ethan on 30 Oct 2026, with one change: lifecycle scenarios run in a 
 3. ~~Coupons~~ (done 30 Oct: record-date rule, per-holder entitlements, idempotent payment proven by a crash-and-restart test, Dana recorded unpaid, books closed at the record date, `scripts/lifecycle.py`).
 4. ~~Maturity~~ (done 30 Oct: final coupon then principal, paid once per holder with units retired in the same transaction, status *matured*, unpaid amounts recorded; crash-and-restart tested).
 5. ~~Default scenario~~ (done 30 Oct: manual trigger, missed coupon, 30-day grace, declaration, flat pricing at +1,000 bp then on the 40.90 recovery value, recovery after 12 months with units retired, per-holder losses, all audited; record dates now count from the scheduled date).
-6. ~~Dashboard section and API~~ (done 30 Oct, read-only as proposed: `/api/lifecycle`, a `lifecycle` block in `/api/overview`, the *Lifecycle scenario* section; advancing and triggering stay in the CLI). M3 explanation written in README.md. **Waiting for Ethan to check the section in a browser before M3 is marked done.**
+6. ~~Dashboard section and API~~ (done 30 Oct, read-only as proposed: `/api/lifecycle`, a `lifecycle` block in `/api/overview`, the *Lifecycle scenario* section; advancing and triggering stay in the CLI). M3 explanation in README.md.
+
+## M3 evidence
+
+- 151 automated tests pass (see [TESTING.md](TESTING.md)), including crash-and-restart tests for coupons, principal and the recovery (each rerun pays only the holders not yet paid; a third run changes nothing), and a test that the lifecycle API changes no row of any table.
+- Live runs with `scripts/lifecycle.py` of the coupon, maturity and default scenarios on fresh scenario databases, figures in CHANGELOG: August 2026 coupon $202,500 of $225,000 paid (Dana on hold); short bond matured with Dana owed $1,135,000; default priced 86.68 flat in grace and 35.80 after declaration (illustrative curves), recovery 40.90 per 100, 60% loss per holder, Dana owed $431,500. Ledger integrity ok throughout.
+- The lifecycle API ran against copies of Ethan's real main and scenario databases (pages 200).
+- Ethan checked the dashboard, including the lifecycle section, in a browser and marked M3 done on 30 Oct 2026.
 
 ## Where we are (resume point, 30 Oct 2026)
 
 Written so a fresh session (after `/clear`) can pick up exactly here. Read PROMPT.md, this file, ASSUMPTIONS.md and CHANGELOG.md first.
 
-**Done in M3 so far:** steps 1-6 (step 6: read-only lifecycle API and dashboard section, 151 tests), plus the ultrareview fixes (`c77f8e8`; finding 6 deferred as risk R14, finding 10 declined after measuring 0.35s), the offline-banner wording fix and the record-date fix. 142 tests pass. Every step is committed; the working tree is clean. Ethan has seen the database chip in a browser (main and scenario).
+**M1, M2 and M3 are done.** 151 tests pass. Every step is committed; the working tree is clean.
 
-**How steps 3-5 work (build on it):** `debtlab/lifecycle.py`. `require_scenario()` guards everything. Simulation date in `db_meta`, moved by `advance_simulation`. A `Payment` (kind `coupon`, `principal` or `recovery`; record date from its `scheduled_date`) is fixed by `schedule()` and paid by `pay()`, one holder per `atomic` block. `pay_due()` builds the day's work in date order: payments, then for a defaulted bond `miss_payment`, `declare_default` and the recovery (built when its step runs). `instrument_status`: performing → grace_period → defaulted, or matured. `defaults` holds the terms fixed at the trigger. `scenario_price(conn, bond, curve, date)` prices every state; `default_losses()` and `unpaid()` report. CLI: `scripts/lifecycle.py status|pay|advance DATE|default BOND [--db PATH]`.
+**Next: M4, the simulated market maker. Propose a step-by-step plan to Ethan and get it approved before building**, as was done for M3. The brief's §5 is the spec: quotes with full records (fair value, bid, ask, spread in currency and bp, data timestamps, inventory, limits in force, the reason for each adjustment); spread widening with duration, credit risk, data age, inventory, illiquidity and costs; tick size and minimum order size; limits enforced in the execution layer and persisted (inventory per instrument, portfolio exposure, order size, daily loss, open orders, data age, cash reserve, pause/resume, kill switch); quote nothing when data, valuation, balances or a risk check is invalid; simulated fills, fees, slippage and adverse selection; P&L split into spread captured, inventory mark-to-market and fees, on the dashboard. Strategy and risk sit behind interfaces shared with the paper and live adapters (M7, M8). Things M4 must respect from earlier milestones:
+- `risk_increasing_allowed()`: illustrative, missing or stale curves block quoting (re-applied on every read, `with_current_gate`).
+- The fund share is never quoted off its NAV (secondary price comes in M5).
+- In a scenario database, `scenario_price` gives each bond's quoting state: *normal*, *restricted* (grace period; M4 defines what that allows) or *halted* (defaulted, matured).
+- Trades need a cash leg in the ledger (transfers are free of payment today), and should refuse transfers dated after a bond's final record date, which fixes risk R15.
+- The main database is never advanced: the market maker runs there on a performing bond.
 
-**Next: Ethan checks the lifecycle section in a browser (main database: one line saying lifecycle is off; scenario database: run the default commands in RUNBOOK.md and reload after each). Then mark M3 done here and in README, and move the dashboard header to "Milestone 3 complete".** Step 6 as built, from this proposal:
-- API: `/api/lifecycle` (simulation date, each bond's status and `scenario_price`, payments with entitlements, amounts owed, default terms and losses); in `/api/overview` a short `lifecycle` block. On the main database it says lifecycle is off (main is never advanced).
-- Dashboard: when reading a scenario database, a section with the simulation date and a note that prices use today's curve held constant; each bond's status chip (performing / grace period / defaulted / matured); the scenario price next to today's, with "trades flat" and the quoting state; a payments table (record date, status, paid / due, per holder on expand); amounts owed; default timeline and per-holder losses.
-- Read-only on the dashboard at first: advancing and triggering stay in the CLI (an API that rewrites history deserves its own decision). Ethan to check it in a browser.
-- Then M3 is complete: write the M3 explanation (brief §10) with worked examples, and mark it done when Ethan has seen it.
+**How the lifecycle works (build on it):** `debtlab/lifecycle.py`. `require_scenario()` guards everything. Simulation date in `db_meta`, moved by `advance_simulation`. A `Payment` (kind `coupon`, `principal` or `recovery`; record date from its `scheduled_date`) is fixed by `schedule()` and paid by `pay()`, one holder per `atomic` block. `pay_due()` builds the day's work in date order: payments, then for a defaulted bond `miss_payment`, `declare_default` and the recovery (built when its step runs). `instrument_status`: performing → grace_period → defaulted, or matured. `defaults` holds the terms fixed at the trigger. `scenario_price(conn, bond, curve, date)` prices every state; `default_losses()` and `unpaid()` report. CLI: `scripts/lifecycle.py status|pay|advance DATE|default BOND [--db PATH]`. `service.lifecycle_view` reads it all for `GET /api/lifecycle`, read-only, in one read transaction.
 
-**Working conventions:** small steps, tests first, run everything, update the docs (CHANGELOG, ASSUMPTIONS, TESTING, ARCHITECTURE, ROADMAP), commit after each step. Ethan's git identity is now set globally. `.gitattributes` keeps LF line endings: write files with the editor tools or `open(..., newline="")`, since plain `write_text` writes CRLF on Windows. There is no JavaScript engine in Claude's environment, so dashboard changes need Ethan to look at them in a browser.
+**Working conventions:** small steps, tests first, run everything, update the docs (CHANGELOG, ASSUMPTIONS, TESTING, ARCHITECTURE, ROADMAP), commit after each step. Ethan's git identity is now set globally. `.gitattributes` keeps LF line endings: write files with the editor tools or `open(..., newline="")`, since plain `write_text` writes CRLF on Windows. There is no JavaScript engine in Claude's environment, so dashboard changes need Ethan to look at them in a browser (esprima can still syntax-check the page script: `pip install --target <scratch> esprima`).
 
-**Not yet seen in a browser:** the new illustrative-rates banner wording (offline mode, and the per-currency failure list in online mode).
+**Not confirmed in a browser:** the illustrative-rates banner's per-currency failure list in online mode (it only appears when a source fails).
 
-**Open items:** confirm the ECB compounding convention (below); risk R14, a stalled source blocking startup (M9).
+**Open items:** confirm the ECB compounding convention (below); risk R14, a stalled source blocking startup (M9); risk R15 (M4).
 
 Open M2 item: read the ECB technical notes to confirm its spot rates are continuously compounded (currently taken from the data portal's label).

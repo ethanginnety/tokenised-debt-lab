@@ -4,7 +4,7 @@ A prototype marketplace for **simulated** tokenised debt: a bond-pricing engine,
 
 > **Educational prototype.** The instruments are simulations. Nothing here is a real security, an offer, or a public-blockchain asset.
 
-**Status:** Milestones 1 (pricing) and 2 (real curves) complete; Milestone 3 (instruments and ledger) built and waiting for a browser check. See [ROADMAP.md](ROADMAP.md). The full brief is in [PROMPT.md](PROMPT.md).
+**Status:** Milestones 1 (pricing) and 2 (real curves) complete; Milestone 3 (instruments and ledger) complete. Next: Milestone 4, the simulated market maker. See [ROADMAP.md](ROADMAP.md). The full brief is in [PROMPT.md](PROMPT.md).
 
 ## Quick start
 
@@ -182,7 +182,7 @@ python scripts/lifecycle.py advance 2028-03-20            # recovery, 60% losses
 - The default can't be cured, recovery is a single cash payment, and the terms are fixed assumptions rather than an indenture.
 - The fund share has no lifecycle yet: withdrawal windows, queues, gates and the secondary price come in M5.
 - One transfer pattern can stall a scenario at maturity (risk R15, fixed when trading arrives in M4).
-- Claude hasn't seen the lifecycle section in a browser, since there is no JavaScript engine in its environment.
+- The lifecycle section was checked in a browser by Ethan (30 Oct 2026), not by Claude, which has no JavaScript engine.
 
 **Next:** M4, the simulated market maker. It quotes around these fair values with inventory and risk limits, and has to respect the lifecycle: no quotes on a halted bond, restricted quoting in a grace period.
 

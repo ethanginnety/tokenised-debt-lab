@@ -2,7 +2,7 @@
 
 ## 0.3.0-dev — 30 Oct 2026
 
-Milestone 3 (in progress).
+Milestone 3 (complete). Marked done by Ethan on 30 Oct 2026 after checking the dashboard in a browser.
 
 - **Instrument C: private-credit fund share** (`PCF-USD-SIM`). Its value is a NAV the manager reports, never a price: each report records the NAV per share, the date it values the portfolio at, when it was published (UTC) and its source. The dashboard shows the NAV, its age (30 days on 30 Oct), days since it was reported, and whether it is stale (over 45 days). Quoting is always blocked on a fund share, with the reason shown. The figures are invented and labelled so. Withdrawals, the secondary price and the discount come in M5.
 - New table `nav_reports` (migration `002_nav_reports.sql`), append-only like curves. The configured NAV is stored once; restarts don't duplicate it or its `nav_loaded` audit event. Checked on a copy of the real main database: the migration applied once and kept all 33 existing events.
@@ -36,7 +36,8 @@ Milestone 3 (in progress).
 - **Lifecycle on the dashboard (M3 step 6), read-only.** New `GET /api/lifecycle`: the simulation date, each bond's status, units outstanding, scenario price (with the curve it used) next to today's price, the default's terms, a four-step timeline (*done*, *due* if the date has passed but `lifecycle.py pay` hasn't run, or *upcoming*) and per-holder losses, every payment with its entitlements, each holder's positions and cash, amounts owed and unpaid, and the ledger integrity check. `/api/overview` gains a short `lifecycle` block. On the main database both say lifecycle is off and how to see it. There is no endpoint that writes: advancing the date and triggering a default stay in `scripts/lifecycle.py`, and the page picks up a CLI change on reload, without a restart. All the lifecycle reads for one request run in one SQLite read transaction, so a CLI run part-way through isn't half-shown.
 - Dashboard: a *Lifecycle scenario* section under the instrument panels, with a status chip per bond (performing / grace period / defaulted / matured), the scenario price and today's side by side ("trades flat" when it does), the lifecycle quoting state, the default timeline and losses, a payments table that opens to each holder's entitlement, holders, and amounts owed. On the main database it shows one line saying lifecycle is off. A bond panel whose scenario status isn't performing says so, since its figures are today's. `export_snapshot.py` embeds the lifecycle too, so a static snapshot shows it.
 - `money.plain()` formats an exact Decimal without exponent or trailing zeros.
-- Live run (scratch scenario database, offline): default triggered, advanced to 19 Mar 2027: *defaulted*, scenario price 35.7982 flat, quoting halted, timeline triggered/missed/declared done, recovery upcoming; advanced to 20 Mar 2028: losses $2,454,000 / $1,840,500 / $1,227,000 / $613,500 (60% each), Dana owed $431,500 in 2 items. Every field the page's script reads was checked against these responses, and the script parses (esprima, ES2017). **Not yet seen in a browser.**
+- Live run (scratch scenario database, offline): default triggered, advanced to 19 Mar 2027: *defaulted*, scenario price 35.7982 flat, quoting halted, timeline triggered/missed/declared done, recovery upcoming; advanced to 20 Mar 2028: losses $2,454,000 / $1,840,500 / $1,227,000 / $613,500 (60% each), Dana owed $431,500 in 2 items. Every field the page's script reads was checked against these responses, and the script parses (esprima, ES2017). Checked in a browser by Ethan, 30 Oct.
+- Dashboard header now reads "Milestone 3 complete".
 
 ## 0.2.0-dev — 30 Oct 2026
 

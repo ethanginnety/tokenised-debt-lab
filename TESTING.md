@@ -35,7 +35,7 @@ QuantLib is a test-only dependency, used as an independent check on the pricing 
 
 ## Latest results
 
-**30 Oct 2026 (M3 step 6, lifecycle API and dashboard): 151 passed, 0 skipped**, 1 warning (Starlette). Live run of the default scenario on a scratch scenario database through the API (figures in CHANGELOG); every field the dashboard's lifecycle script reads exists in the responses; the page script parses with esprima (ES2017). **Not yet checked:** the lifecycle section in a real browser (no JavaScript engine here to run it).
+**30 Oct 2026 (M3 step 6, lifecycle API and dashboard): 151 passed, 0 skipped**, 1 warning (Starlette). Live run of the default scenario on a scratch scenario database through the API (figures in CHANGELOG); every field the dashboard's lifecycle script reads exists in the responses; the page script parses with esprima (ES2017). Ethan then checked the dashboard in a browser ('it all looks right') and marked M3 done.
 
 **30 Oct 2026 (M3 step 5, default; record-date fix): 142 passed, 0 skipped**, 1 warning (Starlette). Live run of the whole default scenario with `lifecycle.py` on a fresh scenario database (figures in CHANGELOG); migration 006 checked on a matured step-4 scenario database and on a copy of the real main database (app pages 200 on both). The live run caught two bugs the first tests missed, both now tested: a single jump past both declaration and recovery skipped the recovery (its date was looked up before the declaration step ran), and the missed coupon was still listed as owed after the recovery had settled it.
 
@@ -71,5 +71,4 @@ Manual checks the same day:
 ## Not yet tested
 
 - Visual rendering in real browsers (the headless DOM check doesn't measure layout).
-- The lifecycle section of the dashboard in a browser (Ethan to check).
 - Market making and XRPL: later milestones.
