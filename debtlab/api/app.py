@@ -19,6 +19,7 @@ from debtlab.audit.db import atomic, connect, get_db_role, migrate, record_event
 from debtlab.config import ROOT, Settings
 from debtlab.instruments import FundShare, load_instruments
 from debtlab.marketmaker.book import load_book_config, seed_book
+from debtlab.marketmaker.controls import seed_limits
 from debtlab.pricing.bond import FixedRateBond
 from debtlab.service import (
     curve_view,
@@ -76,6 +77,7 @@ class State:
         ledger.seed(self.conn, ledger.load_holders_config(settings.holders_file), instruments)
         if self.db_role == "main":  # a scenario database gets the market maker's book only when created with it
             seed_book(self.conn, load_book_config(settings.marketmaker_file), instruments)
+            seed_limits(self.conn, settings.marketmaker_file)  # first time only: the database then rules
         self.bonds = [i for i in instruments if isinstance(i, FixedRateBond)]
         self.funds = [i for i in instruments if isinstance(i, FundShare)]
         self.curves: dict = {}

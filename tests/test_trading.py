@@ -57,7 +57,7 @@ def test_parties_rebuild_keeps_data_and_foreign_keys(tmp_path):
     c.execute("INSERT INTO ledger_entries(txn_id, owner, asset, amount) VALUES"
               " ('t1', 'issuer:X', 'X', '-10'), ('t1', 'alder', 'X', '10')")
 
-    assert migrate(c) == ["007_market_parties.sql"]
+    assert migrate(c)[0] == "007_market_parties.sql"  # then any later ones
     assert [(p["id"], p["role"], p["payments_blocked"]) for p in ledger.parties(c)] == [
         ("alder", "holder", False), ("dana", "holder", True), ("issuer:X", "issuer", False)]
     assert c.execute("PRAGMA foreign_keys").fetchone()[0] == 1  # back on after the rebuild

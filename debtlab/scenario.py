@@ -17,6 +17,7 @@ from debtlab.audit.db import connect, get_db_role, migrate, record_event, set_db
 from debtlab.config import ROOT, Settings
 from debtlab.instruments import load_instruments
 from debtlab.marketmaker.book import load_book_config, seed_book
+from debtlab.marketmaker.controls import seed_limits
 
 DEFAULT_SCENARIO_DB = ROOT / "data" / "scenario.sqlite3"
 SQLITE_SIDE_FILES = ("-wal", "-shm")  # WAL-mode companions that belong with the main file
@@ -45,6 +46,7 @@ def create_scenario_db(path: Path, settings: Settings, now: datetime | None = No
         posted = ledger.seed(conn, ledger.load_holders_config(settings.holders_file), instruments)
         if market_maker:
             posted += seed_book(conn, load_book_config(settings.marketmaker_file), instruments)
+            seed_limits(conn, settings.marketmaker_file)
         lifecycle.start_simulation(conn, now.date())  # the simulation starts today and only moves forward
         record_event(conn, "scenario_created", {
             "path": str(path), "seed_transactions": posted, "market_maker": market_maker,

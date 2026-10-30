@@ -18,8 +18,15 @@
     "USD": {"market_maker": "1500000", "market": "5000000"}
   },
   "limits": {
-    "_note": "Approved 30 Oct 2026. Persisted and enforced from M4 step 3; the quote model reads max_inventory to size and skew quotes.",
-    "max_inventory": {"CENTURY-GBP-2126": "2000000", "SHORT-USD-2029": "2000000"}
+    "_note": "Starting values, approved 30 Oct 2026. Copied into the database the first time only; after that the database is what counts (change a limit with scripts/mm.py, never here). Face amounts, currency amounts, currency per bp, hours.",
+    "max_inventory": {"CENTURY-GBP-2126": "2000000", "SHORT-USD-2029": "2000000"},
+    "max_order_size": {"CENTURY-GBP-2126": "250000", "SHORT-USD-2029": "250000"},
+    "max_exposure_value": {"GBP": "2000000", "USD": "2000000"},
+    "max_exposure_dv01": {"GBP": "3000", "USD": "450"},
+    "max_daily_loss": {"GBP": "20000", "USD": "5000"},
+    "min_cash_reserve": {"GBP": "250000", "USD": "250000"},
+    "max_open_orders": {"all": "4"},
+    "max_data_age_hours": {"all": "96"}
   },
   "quoting": {
     "defaults": {
