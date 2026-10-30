@@ -59,7 +59,9 @@ def market_maker_id(conn: sqlite3.Connection) -> str:
 
 
 def open_orders(conn: sqlite3.Connection) -> list[dict]:
-    return [dict(r) for r in conn.execute("SELECT * FROM mm_orders WHERE status = 'open' ORDER BY id")]
+    """Open orders, each with `remaining` = size less what has filled."""
+    rows = conn.execute("SELECT * FROM mm_orders WHERE status = 'open' ORDER BY id")
+    return [{**dict(r), "remaining": Decimal(r["size"]) - Decimal(r["filled"])} for r in rows]
 
 
 def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark], daily_pnl: dict[str, Decimal],
@@ -87,7 +89,7 @@ def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark], daily_
 
     ccy, inst = mark.currency, order.instrument_id
     others = [o for o in open_orders(conn) if o["id"] != order.id and o["id"] not in replacing]
-    others += [{"id": o.id, "instrument_id": o.instrument_id, "side": o.side, "price": o.price, "size": o.size}
+    others += [{"id": o.id, "instrument_id": o.instrument_id, "side": o.side, "price": o.price, "remaining": o.size}
                for o in pending if o.id != order.id]
     mm = market_maker_id(conn)
 
@@ -101,7 +103,7 @@ def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark], daily_
         reasons.append(f"daily loss {-daily_pnl[ccy]:,f} {ccy} has reached the maximum {cap:,f}")
 
     def resting(instrument: str, side: str) -> Decimal:
-        return sum((Decimal(o["size"]) for o in others if o["instrument_id"] == instrument and o["side"] == side), ZERO)
+        return sum((o["remaining"] for o in others if o["instrument_id"] == instrument and o["side"] == side), ZERO)
 
     held = ledger.balance(conn, mm, inst)
     if order.side == "buy":
@@ -128,13 +130,28 @@ def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark], daily_
     if order.side == "buy" and (floor := limit("min_cash_reserve", ccy)) is not None:
         def cost(o_size: Decimal, o_price: Decimal, m: Mark) -> Decimal:
             return o_size * (o_price + m.accrued) / HUNDRED
-        committed = sum((cost(Decimal(o["size"]), Decimal(o["price"]), marks[o["instrument_id"]])
+        committed = sum((cost(o["remaining"], Decimal(o["price"]), marks[o["instrument_id"]])
                          for o in others if o["side"] == "buy" and o["instrument_id"] in marks
                          and marks[o["instrument_id"]].currency == ccy), ZERO)
         left = ledger.balance(conn, mm, ccy) - committed - cost(order.size, order.price, mark)
         if left < floor:
             reasons.append(f"{ccy} cash would fall to {money(left):,f} if every bid fills; the reserve is {floor:,f}")
     return reasons
+
+
+def enforce_daily_loss(conn: sqlite3.Connection, daily_pnl: dict[str, Decimal],
+                       now: datetime | None = None) -> str | None:
+    """If any currency's loss has reached its limit, pause the whole bot (cancelling every order)
+    and return why; otherwise None. Called before every quoting round and every order."""
+    lim = controls.limits(conn)
+    for ccy, value in sorted(daily_pnl.items()):
+        cap = lim.get(("max_daily_loss", ccy))
+        if cap is not None and value <= -cap:
+            reason = f"daily loss {-value:,f} {ccy} has reached the maximum {cap:,f}"
+            if controls.state(conn)["state"] == "running":
+                controls.pause(conn, "risk check", reason, now)
+            return reason
+    return None
 
 
 def place_order(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark],
@@ -152,9 +169,7 @@ def place_order(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark],
         payload = {"id": order.id, "instrument": order.instrument_id, "side": order.side,
                    "price": plain(order.price), "size": plain(order.size)}
         if reasons:
-            breach = any(r.startswith("daily loss") for r in reasons)
-            if breach and controls.state(conn)["state"] == "running":
-                controls.pause(conn, "risk check", next(r for r in reasons if r.startswith("daily loss")), now)
+            breach = enforce_daily_loss(conn, daily_pnl, now) is not None
             record_event(conn, "order_refused", {**payload, "reasons": reasons}, entity=order.instrument_id)
             return Decision(False, tuple(reasons), paused=breach)
         conn.execute("INSERT INTO mm_orders(id, instrument_id, side, price, size, status, created_at, updated_at)"

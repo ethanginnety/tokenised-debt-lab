@@ -2,7 +2,7 @@
 
 For every instrument, in order:
 1. A fund share is never quoted off its reported NAV.
-2. The bot must be running, the ledger must pass its integrity check, and there must be a market maker.
+2. A daily-loss breach in any currency pauses the bot first. The bot must be running, the ledger must pass its integrity check, and there must be a market maker.
 3. The bond's curve must be official and fresh (`risk_increasing_allowed`).
 4. The bond must value. Its lifecycle state sets what is allowed: *normal*; *restricted*
    (grace period: only the ask, at twice the spread and half the size); *halted*
@@ -64,6 +64,7 @@ def decide_quotes(conn: sqlite3.Connection, instruments: list[Instrument], curve
                   on: date, now: datetime, max_curve_age_hours: int, config_path: Path,
                   daily_pnl: dict[str, Decimal]) -> list[QuoteDecision]:
     """Decide and record a quote (or none) for every instrument, valued on `on`."""
+    execution.enforce_daily_loss(conn, daily_pnl, now)  # a breach in any currency pauses everything
     blockers = _blockers(conn)
     mm = None if any(b.startswith("no market maker") for b in blockers) else execution.market_maker_id(conn)
     bonds = [i for i in instruments if isinstance(i, FixedRateBond)]

@@ -46,5 +46,24 @@
       "long_end_weight": "0.5"
     },
     "CENTURY-GBP-2126": {"illiquidity_bp": "10"}
+  },
+  "simulation": {
+    "_note": "SIMULATED market, M4 step 5, approved 30 Oct 2026 with Ethan's changes. Yield moves in bp; one step is one simulated minute. The jump probability comes from the profile (normal unless asked).",
+    "steps": 390,
+    "step_seconds": 60,
+    "requote_every": 10,
+    "lag_steps": 3,
+    "vol_bp_per_step": "0.2",
+    "jump_bp": "8",
+    "arrival_prob": "0.15",
+    "informed_arrival_prob": "0",
+    "k": {"CENTURY-GBP-2126": "0.02", "SHORT-USD-2029": "0.10"},
+    "unwind_at_end": false,
+    "outside_half_spread_bp": {"CENTURY-GBP-2126": "50", "SHORT-USD-2029": "5"},
+    "impact_bp_per_million": "10",
+    "profiles": {
+      "normal": {"_note": "About 8.1 bp daily yield s.d., close to real 30-year gilts.", "jump_prob": "0.002"},
+      "stress": {"_note": "About 16.3 bp daily yield s.d.: five times the jumps, for showing adverse selection.", "jump_prob": "0.01"}
+    }
   }
 }

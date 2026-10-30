@@ -184,7 +184,7 @@ python scripts/lifecycle.py advance 2028-03-20            # recovery, 60% losses
 - One transfer pattern can stall a scenario at maturity (risk R15, fixed when trading arrives in M4).
 - The lifecycle section was checked in a browser by Ethan (30 Oct 2026), not by Claude, which has no JavaScript engine.
 
-**Next:** M4, the simulated market maker. It quotes around these fair values with inventory and risk limits, and has to respect the lifecycle: no quotes on a halted bond, restricted quoting in a grace period.
+**Next:** M4, the simulated market maker. It quotes around these fair values with inventory and risk limits, and has to respect the lifecycle: no quotes on a halted bond, restricted quoting in a grace period. Its simulated informed clients arrive at random rather than around news, so the adverse selection it shows is likely understated compared with real markets.
 
 ## What "default" means here
 

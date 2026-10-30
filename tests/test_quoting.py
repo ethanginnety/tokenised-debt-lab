@@ -171,10 +171,12 @@ def test_own_open_orders_are_replaced_not_counted(conn):
     assert d[SHORT.id].status == "none"  # the century's two count against it
 
 
-def test_daily_loss_stops_quotes_in_that_currency(conn):
+def test_daily_loss_in_one_currency_pauses_everything(conn):
+    # Decision 3: a breach in either currency pauses the whole bot and cancels every order.
     d = decide(conn, pnl={"GBP": D(-20_000)})
-    assert d[CENTURY.id].status == "none" and d[SHORT.id].status == "quoted"
-    assert d[CENTURY.id].reasons[0] == "no bid: daily loss 20,000 GBP has reached the maximum 20,000"
+    assert d[CENTURY.id].status == d[SHORT.id].status == "none"
+    assert d[SHORT.id].reasons == ("bot is paused (daily loss 20,000 GBP has reached the maximum 20,000)",)
+    assert controls.state(conn)["changed_by"] == "risk check"
 
 
 def test_halted_after_maturity(conn):

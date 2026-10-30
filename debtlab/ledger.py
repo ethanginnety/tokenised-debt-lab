@@ -281,7 +281,7 @@ def trade(conn: sqlite3.Connection, txn_id: str, bond: FixedRateBond, buyer: str
     if buyer == seller:
         raise LedgerError("a party can't trade with itself")
     _trading_parties(conn, buyer, seller, "trades are between holders, the market maker and the market")
-    flat = _trades_flat(conn, bond.id)
+    flat = trades_flat(conn, bond.id)
     accrued = ZERO if flat else accrued_per_100(bond, trade_date)
     cash = money(face * (clean_price + accrued) / HUNDRED)
     posted = post(conn, txn_id, "trade", trade_date, [
@@ -297,7 +297,7 @@ def _trading_parties(conn: sqlite3.Connection, a: str, b: str, message: str) -> 
         raise LedgerError(message)
 
 
-def _trades_flat(conn: sqlite3.Connection, instrument_id: str) -> bool:
+def trades_flat(conn: sqlite3.Connection, instrument_id: str) -> bool:
     """A bond in grace period or default trades without accrued interest (see lifecycle)."""
     row = conn.execute("SELECT status FROM instrument_status WHERE instrument_id = ?", (instrument_id,)).fetchone()
     return row is not None and row["status"] in ("grace_period", "defaulted")
