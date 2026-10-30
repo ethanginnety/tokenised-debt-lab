@@ -147,7 +147,7 @@ def real():
     for bond_id, snap in (("CENTURY-GBP-2126", gbp), ("SHORT-USD-2029", usd)):
         bond = BONDS[bond_id]
         v = value_bond(bond, snap.curve, NOW.date())
-        params = load_quote_params(CONFIG, bond_id)
+        params = load_quote_params(CONFIG, bond_id, D(2_000_000))
         out[bond_id] = make_quote(inputs_from_valuation(v, bond, snap, params.target_inventory, NOW), params, NOW)
     return out
 
@@ -169,6 +169,17 @@ def test_short_bond_has_no_long_end_risk_and_a_tighter_spread(real):
 
 
 def test_config_overrides_per_instrument():
-    assert load_quote_params(CONFIG, "CENTURY-GBP-2126").illiquidity_bp == D(10)
-    assert load_quote_params(CONFIG, "SHORT-USD-2029").illiquidity_bp == D(2)
-    assert load_quote_params(CONFIG, "SHORT-USD-2029").max_inventory == D(2_000_000)
+    assert load_quote_params(CONFIG, "CENTURY-GBP-2126", D(1)).illiquidity_bp == D(10)
+    assert load_quote_params(CONFIG, "SHORT-USD-2029", D(1)).illiquidity_bp == D(2)
+    # Maximum inventory is whatever the caller read from the database, not the config's starting value.
+    assert load_quote_params(CONFIG, "SHORT-USD-2029", D(1_234_000)).max_inventory == D(1_234_000)
+
+
+def test_restricted_quotes_only_the_ask_at_double_spread_and_half_size():
+    normal = make_quote(INPUTS, PARAMS, NOW)
+    quote = make_quote(INPUTS, PARAMS, NOW, restricted=True)
+    assert parts(quote)["restricted"] == normal.half_spread == D("0.78505")
+    assert quote.half_spread == 2 * normal.half_spread
+    assert (quote.bid, quote.bid_size) == (None, 0)
+    assert quote.ask == D("101.58") and quote.ask_size == D(50_000)  # 100 + 1.5701 rounds up
+    assert "grace period" in quote.notes[0]

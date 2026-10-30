@@ -62,9 +62,13 @@ def open_orders(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in conn.execute("SELECT * FROM mm_orders WHERE status = 'open' ORDER BY id")]
 
 
-def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark],
-          daily_pnl: dict[str, Decimal]) -> list[str]:
-    """Every reason the order can't be placed now; empty if it can."""
+def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark], daily_pnl: dict[str, Decimal],
+          pending: tuple[Order, ...] = (), replacing: frozenset[str] = frozenset()) -> list[str]:
+    """Every reason the order can't be placed now; empty if it can.
+
+    `pending`: orders about to be placed with this one (the other side of a quote, other
+    instruments), counted as open. `replacing`: open orders that will be cancelled first.
+    """
     reasons: list[str] = []
     st = controls.state(conn)
     if st["state"] != "running":
@@ -82,7 +86,9 @@ def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark],
         return lim.get((name, scope))
 
     ccy, inst = mark.currency, order.instrument_id
-    others = [o for o in open_orders(conn) if o["id"] != order.id]
+    others = [o for o in open_orders(conn) if o["id"] != order.id and o["id"] not in replacing]
+    others += [{"id": o.id, "instrument_id": o.instrument_id, "side": o.side, "price": o.price, "size": o.size}
+               for o in pending if o.id != order.id]
     mm = market_maker_id(conn)
 
     if (cap := limit("max_order_size", inst)) is not None and order.size > cap:

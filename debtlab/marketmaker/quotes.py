@@ -12,8 +12,10 @@ century bond about six times what it costs a three-year bond.
 Prices are rounded outward to the tick (bid down, ask up), so rounding never
 narrows the spread. A side is left out when the bot can't honour it: no ask
 without inventory to sell (nobody sells short), no bid at maximum inventory.
-Whether to quote at all (data, limits, the bond's state) is decided before this
-(M4 steps 3 and 4).
+A bond in grace period is *restricted*: only the ask is quoted (selling is the one
+side that reduces inventory, since nobody sells short), at twice the spread and
+half the size. Whether to quote at all (data, limits, the bond's state) is decided
+in `quoting.py`.
 """
 
 from __future__ import annotations
@@ -43,7 +45,7 @@ class QuoteParams:
     size_step: Decimal  # face
     quote_size: Decimal  # face, each side
     target_inventory: Decimal  # face the bot aims to hold
-    max_inventory: Decimal  # face
+    max_inventory: Decimal  # face: the database limit in force, never the config copy
     base_bp: Decimal  # of price: the floor cost of quoting at all
     intraday_move_bp: Decimal  # yield move assumed before the bot can react
     credit_factor: Decimal  # share of the credit spread taken as a possible yield move
@@ -118,14 +120,18 @@ class Quote:
         return None if self.spread is None else self.spread * face / HUNDRED
 
 
-def make_quote(m: MarketInputs, p: QuoteParams, now: datetime) -> Quote:
+def make_quote(m: MarketInputs, p: QuoteParams, now: datetime, restricted: bool = False) -> Quote:
     imbalance = _imbalance(m.inventory, p.target_inventory, p.max_inventory)
     skew = m.dv01 * p.skew_bp * imbalance
     reservation = m.fair_clean - skew
     components = _components(m, p, imbalance)
     half = sum((c.per_100 for c in components), ZERO)
+    if restricted:
+        components += (Component("restricted", half, half / m.fair_clean * BP_PER_UNIT,
+                                 "bond in grace period: spread doubled"),)
+        half += half
 
-    bid_size, ask_size, notes = _sizes(m.inventory, p)
+    bid_size, ask_size, notes = _sizes(m.inventory, p, restricted)
     bid = _to_tick(reservation - half, p.tick, ROUND_FLOOR) if bid_size else None
     ask = _to_tick(reservation + half, p.tick, ROUND_CEILING) if ask_size else None
     if bid is not None and bid <= 0:
@@ -178,14 +184,18 @@ def _imbalance(inventory: Decimal, target: Decimal, maximum: Decimal) -> Decimal
     return max(-ONE, min(ONE, (inventory - target) / room)) if room else ZERO
 
 
-def _sizes(inventory: Decimal, p: QuoteParams) -> tuple[Decimal, Decimal, tuple[str, ...]]:
+def _sizes(inventory: Decimal, p: QuoteParams, restricted: bool) -> tuple[Decimal, Decimal, tuple[str, ...]]:
+    quote_size = p.quote_size / 2 if restricted else p.quote_size
+
     def size(available: Decimal) -> Decimal:
-        s = (min(p.quote_size, max(available, ZERO)) / p.size_step).to_integral_value(ROUND_DOWN) * p.size_step
+        s = (min(quote_size, max(available, ZERO)) / p.size_step).to_integral_value(ROUND_DOWN) * p.size_step
         return s if s >= p.min_order else ZERO
 
-    bid_size, ask_size = size(p.max_inventory - inventory), size(inventory)
+    bid_size, ask_size = (ZERO if restricted else size(p.max_inventory - inventory)), size(inventory)
     notes = []
-    if not bid_size:
+    if restricted:
+        notes.append("no bid: bond in grace period, only the side that reduces inventory is quoted, at half size")
+    elif not bid_size:
         notes.append(f"no bid: room to maximum inventory ({p.max_inventory - inventory:,f}) "
                      f"below the minimum order {p.min_order:,f}")
     if not ask_size:
@@ -213,13 +223,17 @@ def inputs_from_valuation(v: Valuation, bond: FixedRateBond, snapshot: CurveSnap
     )
 
 
-def load_quote_params(path: Path, instrument_id: str) -> QuoteParams:
-    """Defaults, overridden per instrument; target and maximum inventory from the book and limits."""
+def load_quote_params(path: Path, instrument_id: str, max_inventory: Decimal) -> QuoteParams:
+    """Defaults, overridden per instrument, and the target inventory from the book.
+
+    `max_inventory` is the limit in force, read from the database by the caller
+    (`controls.limit`): the config holds only its starting value.
+    """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     q = {**data["quoting"]["defaults"], **data["quoting"].get(instrument_id, {})}
     q = {k: v for k, v in q.items() if not k.startswith("_")}
     return QuoteParams(
         **{k: D(v) for k, v in q.items()},
         target_inventory=D(data["units"][instrument_id]["market_maker"]),
-        max_inventory=D(data["limits"]["max_inventory"][instrument_id]),
+        max_inventory=max_inventory,
     )
