@@ -15,7 +15,7 @@ One application, one database, no microservices. Pieces are kept separate in cod
    dates · curve · bond · engine            │
                                             ▼
                                      api/app.py (FastAPI)
-                                     /api/health  /api/overview  /api/events  /api/refresh
+                                     /api/health  /api/overview  /api/lifecycle  /api/events  /api/refresh
                                             │
                                             ▼
                                      api/static/index.html (dashboard)
@@ -28,8 +28,8 @@ One application, one database, no microservices. Pieces are kept separate in cod
 | Pricing engine | `debtlab/pricing`: pure Decimal functions, no I/O. | Curve bootstrap (M2). |
 | Market data | Official adapters (Treasury, ECB), illustrative curves, staleness and risk gate. | BoE gilts (M2), RLUSD/XRP book (M7). |
 | Fund share (C) | `instruments.py` `FundShare`, `NavReport`; `nav_reports` table; `service.fund_view`. NAV, age and staleness; never quoted. | Withdrawal windows, queue, gates, secondary price (M5). |
-| Simulated ledger | `ledger.py`: parties (holders, issuers), double-entry journal (`ledger_txns`, `ledger_entries`), balances as of a date, transfers, seeding from `config/holders.json`. `scenario.py` makes scenario databases; `db_meta` marks each database main or scenario. | Maturity, default (M3 steps 4-5), trading with cash legs (M4). |
-| Lifecycle | `lifecycle.py` (scenario databases only): a stored simulation date that only moves forward; coupons scheduled from holdings at the record date (`payment_events`, `entitlements`), then paid one holder per atomic block. Principal at maturity the same way, units returned to the issuer in the holder's transaction; `instrument_status` records *matured*. Default scenario: `trigger_default` stores the terms (`defaults` table); `pay_due` then records the next coupon *missed*, declares default after the grace period and pays the recovery like principal; `scenario_price` prices each state (flat after the missed coupon). `scripts/lifecycle.py` drives it. | Dashboard and API (step 6). |
+| Simulated ledger | `ledger.py`: parties (holders, issuers), double-entry journal (`ledger_txns`, `ledger_entries`), balances as of a date, transfers, seeding from `config/holders.json`. `scenario.py` makes scenario databases; `db_meta` marks each database main or scenario. | Trading with cash legs (M4). |
+| Lifecycle | `lifecycle.py` (scenario databases only): a stored simulation date that only moves forward; coupons scheduled from holdings at the record date (`payment_events`, `entitlements`), then paid one holder per atomic block. Principal at maturity the same way, units returned to the issuer in the holder's transaction; `instrument_status` records *matured*. Default scenario: `trigger_default` stores the terms (`defaults` table); `pay_due` then records the next coupon *missed*, declares default after the grace period and pays the recovery like principal; `scenario_price` prices each state (flat after the missed coupon). `scripts/lifecycle.py` drives it. `service.lifecycle_view` reads it for `/api/lifecycle` and the dashboard, read-only, in one read transaction. | Controls from the dashboard, if ever (a separate decision). |
 | Market maker | n/a | Strategy and risk interfaces shared by simulation, paper and live adapters (M4, M7, M8). |
 | XRPL integration | n/a | `xrpl-py`; testnet tokens (M6), mainnet read-only, paper, then gated live (M7, M8). |
 | Database | SQLite with numbered migrations; `events`, `curve_snapshots`, `nav_reports`, `db_meta`, `parties`, `ledger_txns`, `ledger_entries`, `payment_events`, `entitlements`, `instrument_status`, `defaults`. Main and scenario databases share the schema. | PostgreSQL for deployment (M9). |

@@ -27,10 +27,18 @@ def parse_args(argv: list[str]) -> tuple[Path, bool]:
     return Path(positional[0] if positional else "snapshot.html"), "--full" in argv
 
 
+def snapshot_data(client: TestClient) -> dict:
+    """The overview, plus the lifecycle detail a static page can't fetch for itself."""
+    data = client.get("/api/overview").json()
+    if data["lifecycle"]["enabled"]:
+        data["lifecycle_detail"] = client.get("/api/lifecycle").json()
+    return data
+
+
 def main() -> None:
     out, full = parse_args(sys.argv[1:])
     with TestClient(create_app(Settings.from_env())) as client:
-        data = client.get("/api/overview").json()
+        data = snapshot_data(client)
     out.write_text(render_page(json.dumps(data), shell=full), encoding="utf-8")
     print(f"wrote {out} ({out.stat().st_size:,} bytes)")
 

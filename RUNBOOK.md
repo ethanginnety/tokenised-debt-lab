@@ -71,6 +71,8 @@ python scripts/lifecycle.py advance 2027-03-19           # default declared, pri
 python scripts/lifecycle.py advance 2028-03-20           # 40.90 per 100 recovered, units retired, losses per holder
 ```
 
+With the app running on the scenario database, the dashboard's *Lifecycle scenario* section shows the result of each command: reload the page (or press Refresh) after running one. The page and `GET /api/lifecycle` only read; there is no button that moves the date or triggers a default. A step shown as *due* means its date has passed but `pay` hasn't run yet.
+
 `pay` is always safe to repeat: if a run stops part-way, running it again pays only the holders not yet paid. Dana's amounts show as *unpaid (payments blocked)*. Add `--db PATH` for another scenario database; the script refuses a main database. A scenario database made before 30 Oct's coupon step has no simulation date: recreate it. One from the coupon step picks up the maturity table automatically.
 
 Run `new_scenario_db.py` again to start the demo from scratch. Stop the app first (Windows locks open files). The previous scenario database is moved to `data/archive/`, never deleted. The script refuses to replace any database that isn't marked as a scenario.

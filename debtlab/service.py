@@ -6,7 +6,9 @@ import hashlib
 import json
 import sqlite3
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
+from debtlab import ledger, lifecycle
 from debtlab.audit.db import latest_curve, latest_nav, record_event, save_curve, save_nav
 from debtlab.config import Settings
 from debtlab.instruments import FundShare, NavReport
@@ -17,8 +19,9 @@ from debtlab.marketdata.adapters import (
     to_zero_snapshot,
 )
 from debtlab.marketdata.models import MARKET_KINDS, CurveSnapshot, risk_increasing_allowed
-from debtlab.money import q
+from debtlab.money import D, plain, q
 from debtlab.pricing.bond import FixedRateBond
+from debtlab.pricing.dates import following
 from debtlab.pricing.engine import price_yield_profile, value_bond
 
 
@@ -203,6 +206,125 @@ def value_all(
                      idempotency_key=f"valuation:{b.id}:{snap.id}:{settle.isoformat()}:{digest}")
         out.append(result)
     return out
+
+
+LIFECYCLE_OFF = ("Lifecycle runs only in a scenario database; this is the main database, which is never "
+                 "advanced, so the market maker keeps a performing bond. To see it, create one with "
+                 "python scripts/new_scenario_db.py and start the app with DEBTLAB_DB_PATH=data/scenario.sqlite3.")
+PRICE_NOTE = ("Scenario prices are on the simulation date, using the curve this page loaded (today's), held "
+              "constant: the scenario moves the calendar, not the market.")
+
+
+def lifecycle_summary(conn: sqlite3.Connection, db_role: str | None, bonds: list[FixedRateBond]) -> dict:
+    """The short block in /api/overview. Reads only."""
+    if db_role != "scenario":
+        return {"enabled": False, "reason": LIFECYCLE_OFF}
+    sim = lifecycle.simulation_date(conn)
+    return {
+        "enabled": True,
+        "simulation_date": sim.isoformat() if sim else None,
+        "statuses": {b.id: lifecycle.instrument_status(conn, b.id)["status"] for b in bonds},
+        "payments": conn.execute("SELECT COUNT(*) FROM payment_events").fetchone()[0],
+        "owed": len(lifecycle.unpaid(conn)),
+    }
+
+
+def lifecycle_view(
+    conn: sqlite3.Connection, db_role: str | None, bonds: list[FixedRateBond],
+    curves: dict[str, CurveSnapshot], valuations: list[dict],
+) -> dict:
+    """Everything /api/lifecycle shows: simulation date, each bond's state and price, payments,
+    holders and amounts owed. Reads only: advancing and triggering stay in scripts/lifecycle.py."""
+    if db_role != "scenario":
+        return {"enabled": False, "reason": LIFECYCLE_OFF}
+    sim = lifecycle.simulation_date(conn)
+    today = {v["terms"]["id"]: v for v in valuations}
+    out_bonds = []
+    for b in bonds:
+        st = lifecycle.instrument_status(conn, b.id)
+        out_bonds.append({
+            "id": b.id, "name": b.name, "currency": b.currency, **st,
+            "units_outstanding": plain(-ledger.balance(conn, ledger.issuer_id(b.id), b.id)),
+            "price": _scenario_price(conn, b, curves.get(b.benchmark), sim),
+            "today": _today_price(today.get(b.id)),
+            "default": _default_view(conn, b, sim),
+        })
+    balances = ledger.balances(conn)
+    holders = [{
+        "id": p["id"], "name": p["name"], "payments_blocked": p["payments_blocked"],
+        "positions": {a: plain(v) for a, v in sorted(balances.get(p["id"], {}).items()) if not ledger.is_cash(a)},
+        "cash": {a: plain(v) for a, v in sorted(balances.get(p["id"], {}).items()) if ledger.is_cash(a)},
+    } for p in ledger.parties(conn) if p["role"] == "holder"]
+    owed: dict[tuple[str, str], list[Decimal]] = {}
+    for u in lifecycle.unpaid(conn):
+        owed.setdefault((u["holder"], u["currency"]), []).append(D(u["amount_due"]))
+    return {
+        "enabled": True,
+        "simulation_date": sim.isoformat() if sim else None,
+        "price_note": PRICE_NOTE,
+        "bonds": out_bonds,
+        "payments": lifecycle.payments(conn),
+        "holders": holders,
+        "owed": [{"holder": h, "currency": c, "amount": plain(sum(v, Decimal(0))), "count": len(v)}
+                 for (h, c), v in sorted(owed.items())],
+        "owed_items": lifecycle.unpaid(conn),
+        "integrity": ledger.check_integrity(conn),
+    }
+
+
+def _scenario_price(conn: sqlite3.Connection, b: FixedRateBond, snap: CurveSnapshot | None, on: date | None) -> dict:
+    if on is None:
+        return {"basis": "none", "quoting": "halted", "message": "no simulation date; recreate the scenario database"}
+    if snap is None:
+        return {"basis": "none", "quoting": "halted", "message": f"no {b.benchmark} curve loaded"}
+    price = lifecycle.scenario_price(conn, b, snap.curve, on)
+    return {**price, "curve": {"currency": b.benchmark, "kind": snap.kind, "snapshot_id": snap.id,
+                               "source": snap.source, "observation_date": snap.observation_date.isoformat()}}
+
+
+def _today_price(v: dict | None) -> dict | None:
+    if v is None:
+        return None
+    if v["status"] != "ok":
+        return {"status": v["status"], "message": v["message"]}
+    return {"status": "ok", "settle": v["settle"], "clean": v["fair_clean"], "dirty": v["fair_dirty"]}
+
+
+def _default_view(conn: sqlite3.Connection, b: FixedRateBond, sim: date | None) -> dict | None:
+    """The default's fixed terms, its four steps (done, due but not yet run, or upcoming) and losses."""
+    d = lifecycle.default_terms(conn, b.id)
+    if d is None:
+        return None
+    declare_on, recovery_on = lifecycle.default_dates(d)
+    claim = 100 + d["missed_per_100"]
+    missed = conn.execute("SELECT status FROM payment_events WHERE id = ?", (d["missed_payment_id"],)).fetchone()
+    rate_pct = plain(d["recovery_rate"] * 100)
+
+    def step(name: str, on: date, done: bool, label: str) -> dict:
+        state = "done" if done else "due" if sim is not None and on <= sim else "upcoming"
+        return {"step": name, "date": on.isoformat(), "state": state, "label": label}
+
+    return {
+        "triggered_on": d["triggered_on"].isoformat(),
+        "missed_payment_id": d["missed_payment_id"],
+        "missed_pay_date": d["missed_pay_date"].isoformat(),
+        "grace_days": d["grace_days"],
+        "distressed_spread_bp": plain(d["distressed_spread_bp"]),
+        "recovery_rate_pct": rate_pct,
+        "recovery_delay_months": d["recovery_delay_months"],
+        "claim_per_100": plain(claim),
+        "recovery_per_100": plain(d["recovery_rate"] * claim),
+        "timeline": [
+            step("triggered", d["triggered_on"], True, "Default scenario triggered by hand"),
+            step("missed", d["missed_pay_date"], missed is not None and missed["status"] == "missed",
+                 f"Coupon missed; {d['grace_days']}-day grace period starts"),
+            step("declared", declare_on, d["declared_on"] is not None,
+                 f"Default declared after {d['grace_days']}-day grace"),
+            step("recovered", following(recovery_on), d["recovery_paid_on"] is not None,
+                 f"Recovery paid: {rate_pct}% of the claim, units retired"),
+        ],
+        "losses": lifecycle.default_losses(conn, b),
+    }
 
 
 def load_navs(conn: sqlite3.Connection, funds: list[FundShare]) -> dict[str, NavReport | None]:

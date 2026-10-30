@@ -15,11 +15,20 @@ from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, Response
 
 from debtlab import ledger
-from debtlab.audit.db import connect, get_db_role, migrate, record_event, recent_events, set_db_role
+from debtlab.audit.db import atomic, connect, get_db_role, migrate, record_event, recent_events, set_db_role
 from debtlab.config import ROOT, Settings
 from debtlab.instruments import FundShare, load_instruments
 from debtlab.pricing.bond import FixedRateBond
-from debtlab.service import curve_view, fund_view, load_curves, load_navs, value_all, with_current_gate
+from debtlab.service import (
+    curve_view,
+    fund_view,
+    lifecycle_summary,
+    lifecycle_view,
+    load_curves,
+    load_navs,
+    value_all,
+    with_current_gate,
+)
 
 STATIC = Path(__file__).resolve().parent / "static"
 VERSION = "0.3.0-dev"
@@ -105,6 +114,12 @@ def create_app(settings: Settings | None = None, clock: Callable[[], datetime] =
 
     app = FastAPI(title="Tokenised Debt Lab", version=VERSION, lifespan=lifespan)
 
+    def read_lifecycle(build: Callable[[State], dict]) -> dict:
+        """Lifecycle reads in one snapshot, so a scripts/lifecycle.py run part-way through isn't half-shown."""
+        s: State = app.state.s
+        with s.lock, atomic(s.conn):  # an outer savepoint is a read transaction; nothing is written
+            return build(s)
+
     def overview() -> dict:
         s: State = app.state.s
         now = s.clock()
@@ -120,6 +135,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], datetime] =
             "source_failures": s.source_failures,
             "instruments": with_current_gate(s.valuations, s.curves, now, settings.max_curve_age_hours),
             "funds": [fund_view(f, s.navs.get(f.id), now) for f in s.funds],
+            "lifecycle": read_lifecycle(lambda s: lifecycle_summary(s.conn, s.db_role, s.bonds)),
             "events": recent_events(s.conn, limit=100),
         }
 
@@ -143,6 +159,12 @@ def create_app(settings: Settings | None = None, clock: Callable[[], datetime] =
     @app.get("/api/overview")
     def get_overview() -> dict:
         return overview()
+
+    @app.get("/api/lifecycle")
+    def get_lifecycle() -> dict:
+        """Read-only. Advancing the simulation date and triggering a default stay in scripts/lifecycle.py."""
+        view = read_lifecycle(lambda s: lifecycle_view(s.conn, s.db_role, s.bonds, s.curves, s.valuations))
+        return {"database": {"role": app.state.s.db_role, "path": _display_path(settings.db_path)}, **view}
 
     @app.get("/api/events")
     def events(kind: str | None = None, limit: int = Query(100, ge=1, le=1000)) -> list[dict]:

@@ -6,7 +6,7 @@ A milestone is done only when its tests pass and its behaviour has been demonstr
 |---|---|---|---|
 | M1 | Pricing slice | **Done** (29 Oct 2026) | App runs; century and short bonds priced; tests pass against QuantLib; dashboard shows prices, risk, shocks, assumptions; audit log records valuations. |
 | M2 | Real curves | **Done** (30 Oct 2026) | US, EUR and GBP adapters verified against real downloads; Treasury par-to-zero bootstrap; staleness gating; long-end extrapolation sensitivity shown. |
-| M3 | Instruments and ledger | **In progress** | Three instruments; simulated holder ledger; coupons, maturity and default with idempotent payments. |
+| M3 | Instruments and ledger | **Built; awaiting Ethan's browser check** | Three instruments; simulated holder ledger; coupons, maturity and default with idempotent payments. |
 | M4 | Market maker (simulation) | Planned | Quotes with full records; limits, pause and kill switch; simulated fills with adverse selection; P&L split. |
 | M5 | Private credit depth | Planned | Withdrawal windows, caps, queue and gates; NAV vs secondary price; discount tests. |
 | M6 | XRPL testnet | Planned | Bonds as labelled testnet tokens; coupon transfers on testnet; reconciliation. |
@@ -43,17 +43,17 @@ Approved by Ethan on 30 Oct 2026, with one change: lifecycle scenarios run in a 
 3. ~~Coupons~~ (done 30 Oct: record-date rule, per-holder entitlements, idempotent payment proven by a crash-and-restart test, Dana recorded unpaid, books closed at the record date, `scripts/lifecycle.py`).
 4. ~~Maturity~~ (done 30 Oct: final coupon then principal, paid once per holder with units retired in the same transaction, status *matured*, unpaid amounts recorded; crash-and-restart tested).
 5. ~~Default scenario~~ (done 30 Oct: manual trigger, missed coupon, 30-day grace, declaration, flat pricing at +1,000 bp then on the 40.90 recovery value, recovery after 12 months with units retired, per-holder losses, all audited; record dates now count from the scheduled date).
-6. Dashboard section (holders, payments, default state), API endpoints, docs, demo.
+6. ~~Dashboard section and API~~ (done 30 Oct, read-only as proposed: `/api/lifecycle`, a `lifecycle` block in `/api/overview`, the *Lifecycle scenario* section; advancing and triggering stay in the CLI). M3 explanation written in README.md. **Waiting for Ethan to check the section in a browser before M3 is marked done.**
 
 ## Where we are (resume point, 30 Oct 2026)
 
 Written so a fresh session (after `/clear`) can pick up exactly here. Read PROMPT.md, this file, ASSUMPTIONS.md and CHANGELOG.md first.
 
-**Done in M3 so far:** steps 1-5, plus the ultrareview fixes (`c77f8e8`; finding 6 deferred as risk R14, finding 10 declined after measuring 0.35s), the offline-banner wording fix and the record-date fix. 142 tests pass. Every step is committed; the working tree is clean. Ethan has seen the database chip in a browser (main and scenario).
+**Done in M3 so far:** steps 1-6 (step 6: read-only lifecycle API and dashboard section, 151 tests), plus the ultrareview fixes (`c77f8e8`; finding 6 deferred as risk R14, finding 10 declined after measuring 0.35s), the offline-banner wording fix and the record-date fix. 142 tests pass. Every step is committed; the working tree is clean. Ethan has seen the database chip in a browser (main and scenario).
 
 **How steps 3-5 work (build on it):** `debtlab/lifecycle.py`. `require_scenario()` guards everything. Simulation date in `db_meta`, moved by `advance_simulation`. A `Payment` (kind `coupon`, `principal` or `recovery`; record date from its `scheduled_date`) is fixed by `schedule()` and paid by `pay()`, one holder per `atomic` block. `pay_due()` builds the day's work in date order: payments, then for a defaulted bond `miss_payment`, `declare_default` and the recovery (built when its step runs). `instrument_status`: performing → grace_period → defaulted, or matured. `defaults` holds the terms fixed at the trigger. `scenario_price(conn, bond, curve, date)` prices every state; `default_losses()` and `unpaid()` report. CLI: `scripts/lifecycle.py status|pay|advance DATE|default BOND [--db PATH]`.
 
-**Next: step 6, dashboard section and API.** Proposed (confirm with Ethan before building):
+**Next: Ethan checks the lifecycle section in a browser (main database: one line saying lifecycle is off; scenario database: run the default commands in RUNBOOK.md and reload after each). Then mark M3 done here and in README, and move the dashboard header to "Milestone 3 complete".** Step 6 as built, from this proposal:
 - API: `/api/lifecycle` (simulation date, each bond's status and `scenario_price`, payments with entitlements, amounts owed, default terms and losses); in `/api/overview` a short `lifecycle` block. On the main database it says lifecycle is off (main is never advanced).
 - Dashboard: when reading a scenario database, a section with the simulation date and a note that prices use today's curve held constant; each bond's status chip (performing / grace period / defaulted / matured); the scenario price next to today's, with "trades flat" and the quoting state; a payments table (record date, status, paid / due, per holder on expand); amounts owed; default timeline and per-holder losses.
 - Read-only on the dashboard at first: advancing and triggering stay in the CLI (an API that rewrites history deserves its own decision). Ethan to check it in a browser.

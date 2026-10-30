@@ -42,3 +42,8 @@ def q(value: Decimal, places: int = 6) -> Decimal:
 def money(value: Decimal) -> Decimal:
     """Round a cash amount to cents."""
     return q(value, 2)
+
+
+def plain(amount: Decimal) -> str:
+    """Exact text without exponent or trailing zeros: 90000, not 9E+4; 40.9, not 40.90."""
+    return f"{amount.normalize():f}"

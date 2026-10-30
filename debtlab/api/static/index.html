@@ -122,6 +122,20 @@ select { font: inherit; font-size: 0.85rem; padding: 5px 8px; border-radius: 6px
 .log-wrap th { position: sticky; top: 0; background: var(--panel); }
 .payload { font-family: var(--font-data); font-size: 0.75rem; color: var(--muted); word-break: break-word; }
 .empty { color: var(--muted); font-size: 0.9rem; padding: 12px 0; }
+.life-bonds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 20px; }
+.life-bond { display: flex; flex-direction: column; gap: 14px; border-top: 3px solid var(--series); }
+.life-bond .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.life-bond .basis { font-size: 0.84rem; color: var(--muted); }
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem; }
+.timeline li { display: grid; grid-template-columns: 6.5rem 1fr auto; gap: 10px; align-items: baseline; }
+.timeline .mark { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 2px solid var(--muted); margin-right: 6px; transform: translateY(1px); }
+.timeline li.done .mark { background: var(--ink); border-color: var(--ink); }
+.timeline li.due .mark { border-color: var(--warn-ink); background: var(--warn-bg); }
+.timeline li.upcoming { color: var(--muted); }
+button.link { padding: 0 6px; border: none; background: none; color: var(--s1); font-size: 0.8rem; }
+tr.detail > td { background: var(--soft); }
+tr.detail table { font-size: 0.8rem; }
+.lifeoff { color: var(--muted); font-size: 0.9rem; }
 footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); padding-top: 14px; }
 @media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s; } }
 </style>
@@ -139,6 +153,14 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
   <div class="banner" id="banner" hidden></div>
 
   <section class="bonds" id="bonds" aria-label="Instruments"></section>
+
+  <section class="block" id="lifecycle" aria-label="Lifecycle scenario">
+    <div class="block-head">
+      <h2>Lifecycle scenario</h2>
+      <p id="lifeIntro">Coupons, maturity and the default scenario, as recorded in this database.</p>
+    </div>
+    <div id="lifeBody"></div>
+  </section>
 
   <section class="block">
     <div class="block-head">
@@ -239,14 +261,23 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
   const sv = (tag, attrs = {}) => { const n = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
 
   let DATA = null;
+  let LIFE = null;  // /api/lifecycle, fetched only when reading a scenario database
   const live = !window.__SNAPSHOT__;
 
+  async function loadLifecycle() {
+    LIFE = null;
+    if (!DATA.lifecycle || !DATA.lifecycle.enabled) return;
+    if (!live) { LIFE = DATA.lifecycle_detail || null; return; }
+    try { const r = await fetch("api/lifecycle"); if (!r.ok) throw new Error("HTTP " + r.status); LIFE = await r.json(); }
+    catch (e) { LIFE = { error: e.message }; }
+  }
+
   async function load() {
-    if (!live) { DATA = window.__SNAPSHOT__; render(); return; }
+    if (!live) { DATA = window.__SNAPSHOT__; await loadLifecycle(); render(); return; }
     try {
       const r = await fetch("api/overview");
       if (!r.ok) throw new Error("HTTP " + r.status);
-      DATA = await r.json(); render();
+      DATA = await r.json(); await loadLifecycle(); render();
     } catch (e) {
       const b = document.getElementById("banner");
       b.hidden = false;
@@ -256,7 +287,7 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
 
   async function refresh(btn) {
     btn.disabled = true; btn.textContent = "Refreshing…";
-    try { const r = await fetch("api/refresh", { method: "POST" }); if (!r.ok) throw new Error("HTTP " + r.status); DATA = await r.json(); render(); }
+    try { const r = await fetch("api/refresh", { method: "POST" }); if (!r.ok) throw new Error("HTTP " + r.status); DATA = await r.json(); await loadLifecycle(); render(); }
     catch (e) { btn.disabled = false; btn.textContent = "Refresh failed: " + e.message + " (retry)"; return; }
     btn.disabled = false; btn.textContent = "Refresh prices";
   }
@@ -299,6 +330,7 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     const wrap = document.getElementById("bonds");
     wrap.replaceChildren(...bonds.map((b, i) => bondPanel(b, i)), ...(d.funds || []).map(fundPanel));
 
+    lifecycleSection(d.lifecycle, LIFE);
     shocksTable(bonds);
     longEndTables(bonds);
     pyChart(bonds);
@@ -352,6 +384,10 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
         document.createTextNode(" of this bond's value comes from payments beyond the longest point on its curve, where the rate is extrapolated rather than observed.")));
     }
     card.append(gate(b));
+    const life = DATA.lifecycle && DATA.lifecycle.enabled ? DATA.lifecycle.statuses[t.id] : null;
+    if (life && life !== "performing") card.append(el("p", { class: "gate" },
+      el("span", { text: "In this scenario the bond is " + STATUS_TEXT[life] + " as of the simulation date " + DATA.lifecycle.simulation_date
+        + ". The figures above are today's, as if it were still performing; see the lifecycle section below." })));
     return card;
   }
   // Instrument C: no curve, no yield. Its only number is a NAV the manager reported, with an age.
@@ -411,6 +447,154 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     }
     else text += "Different conventions, so the two differ slightly.";
     return el("p", { class: "muted small", text });
+  }
+
+  // ---------------------------------------------------------------- lifecycle (read-only)
+  const STATUS_TEXT = { performing: "performing", grace_period: "in its grace period", defaulted: "defaulted", matured: "matured" };
+  const STATUS_CHIP = { performing: ["ok", "Performing"], grace_period: ["warn", "Grace period"], defaulted: ["bad", "Defaulted"], matured: ["", "Matured"] };
+  const PAY_CHIP = { paid: "ok", partly_paid: "warn", missed: "bad", scheduled: "", in_progress: "warn" };
+  const ENT_CHIP = { paid: "ok", unpaid: "warn", written_off: "", due: "" };
+  const QUOTING = { normal: "no lifecycle restriction (the data gate in the bond panel still applies)", restricted: "restricted: coupon missed, bond in its grace period", halted: "halted" };
+  const chip = (cls, text) => el("span", { class: "chip " + cls, text });
+  const words = (s) => s.replace(/_/g, " ");
+  const money = (ccy, x) => ccy + " " + fmt(x, 2);
+  const shortName = (name) => name.replace(/ \(model\)$/, "");
+
+  function lifecycleSection(summary, life) {
+    const body = document.getElementById("lifeBody"), intro = document.getElementById("lifeIntro");
+    if (!summary || !summary.enabled) {
+      intro.textContent = "Coupons, maturity and the default scenario run only in a separate scenario database.";
+      body.replaceChildren(el("div", { class: "panel lifeoff", text: (summary && summary.reason) || "Lifecycle not available." }));
+      return;
+    }
+    if (!life || life.error) {
+      body.replaceChildren(el("div", { class: "panel lifeoff", text: "Couldn't load the lifecycle" + (life ? ": " + life.error : " (not in this snapshot).") }));
+      return;
+    }
+    intro.textContent = "Simulation date " + life.simulation_date + ". " + life.price_note
+      + " Read-only: the simulation date is moved, and the default triggered, with scripts/lifecycle.py; reload the page to see a change.";
+    const names = Object.fromEntries(life.holders.map((h) => [h.id, h.name]));
+    body.replaceChildren(
+      el("div", { class: "life-bonds" }, ...life.bonds.map((b, i) => lifeBondPanel(b, i, names))),
+      lifeBlock("Payments", "Every coupon, principal and recovery payment fixed so far, oldest first. Who is owed is fixed at the end of the record date; open a row to see each holder.", paymentsTable(life.payments, names)),
+      el("div", { class: "split" },
+        lifeBlock("Holders", "Positions (face amount, or fund shares) and cash, from the double-entry ledger.", holdersTable(life.holders)),
+        lifeBlock("Owed and unpaid", "Amounts a holder is entitled to but hasn't been paid: a compliance hold, or a missed payment not yet settled by a recovery.", owedTable(life.owed, life.owed_items, names))),
+      el("p", { class: "muted small", text: "Ledger integrity: " + (life.integrity.length ? life.integrity.join("; ") : "every transaction balances and no holder is below zero.") }),
+    );
+  }
+  const lifeBlock = (title, text, content) => el("div", { class: "block" },
+    el("div", { class: "block-head" }, el("h2", { text: title }), el("p", { text })), el("div", { class: "panel tbl-wrap" }, content));
+
+  function lifeBondPanel(b, i, names) {
+    const [cls, label] = STATUS_CHIP[b.status] || ["", b.status];
+    const p = b.price;
+    const card = el("article", { class: "panel life-bond", style: `--series: var(${SERIES[i % 2]})` },
+      el("div", { class: "row" }, el("h3", { text: shortName(b.name) }), chip(cls, label)),
+      el("p", { class: "muted small", text: b.id + (b.since ? " · " + label.toLowerCase() + " since " + b.since : "") + (b.reason ? " · " + b.reason : "") }));
+    const today = b.today && b.today.status === "ok" ? b.today : null;
+    if (p.basis === "none") {
+      card.append(el("p", { class: "empty", text: "No scenario price: " + p.message + "." }),
+        el("div", { class: "kv" }, kv("Units outstanding", fmt(b.units_outstanding, 0))));
+    } else {
+      const illustrative = p.curve && p.curve.kind === "illustrative";
+      card.append(
+        el("div", { class: "price-row" },
+          el("div", {}, el("div", { class: "label", text: "Scenario price, " + p.on }),
+            el("div", { class: "big" }, fmt(p.clean, 4), el("small", { text: p.flat ? "trades flat" : "clean" }))),
+          el("div", {}, el("div", { class: "label", text: today ? "Today's price, " + today.settle : "Today's price" }),
+            el("div", { class: "big muted" }, today ? fmt(today.clean, 4) : "–", el("small", { text: "clean" })))),
+        el("div", { class: "kv" },
+          kv("Dirty", fmt(p.dirty, 4)),
+          kv("Accrued", p.flat ? "none (flat)" : fmt(p.accrued, 4)),
+          kv("Spread", fmt(p.spread_bp, 0) + " bp"),
+          kv("Units outstanding", fmt(b.units_outstanding, 0))),
+        el("p", { class: "basis", text: "Basis: " + p.basis + ". Curve: " + (p.curve ? p.curve.currency + " "
+          + (illustrative ? "ILLUSTRATIVE, not market data" : p.curve.source + ", observed " + p.curve.observation_date) : "none") + ", held constant." }));
+    }
+    card.append(el("div", { class: "gate" + (p.quoting === "normal" ? " open" : "") }, el("span", { class: "dot" }),
+      el("span", { text: "Lifecycle quoting: " + (QUOTING[p.quoting] || p.quoting) + "." })));
+    if (b.default) card.append(defaultBlock(b.default, b.currency, names));
+    return card;
+  }
+
+  function defaultBlock(d, ccy, names) {
+    const box = el("div", { class: "block" },
+      el("div", { class: "label", text: "Default scenario" }),
+      el("p", { class: "muted small", text: `Claim ${fmt(d.claim_per_100, 2)} per 100 (face plus the missed coupon). Recovery ${d.recovery_rate_pct}% of it, ${fmt(d.recovery_per_100, 2)} per 100, ${d.recovery_delay_months} months after declaration. Distressed spread ${fmt(d.distressed_spread_bp, 0)} bp. All assumed, and fixed when the scenario was triggered on ${d.triggered_on}.` }),
+      el("ol", { class: "timeline" }, ...d.timeline.map((s) => el("li", { class: s.state },
+        el("span", { class: "num" }, el("span", { class: "mark" }), document.createTextNode(s.date)),
+        el("span", { text: s.label }),
+        el("span", { class: "small muted", text: s.state === "due" ? "due: run lifecycle.py pay" : s.state })))));
+    if (!d.losses.length) {
+      box.append(el("p", { class: "muted small", text: "Per-holder losses appear once the recovery date arrives and the recovery is scheduled." }));
+      return box;
+    }
+    box.append(el("div", { class: "tbl-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, ...["Holder", "Claim", "Recovery", "Loss", "Status"].map((h, k) => el("th", { class: k && k < 4 ? "num" : "", text: h })))),
+      el("tbody", {}, ...d.losses.map((x) => el("tr", {},
+        el("td", { text: names[x.holder] || x.holder }),
+        el("td", { class: "num", text: money(ccy, x.claim) }),
+        el("td", { class: "num", text: money(ccy, x.recovery_due) }),
+        el("td", { class: "num neg", text: money(ccy, x.loss) + " (" + fmt(x.loss_pct, 0) + "%)" }),
+        el("td", {}, chip(ENT_CHIP[x.status] || "", words(x.status)))))))));
+    return box;
+  }
+
+  function paymentsTable(payments, names) {
+    if (!payments.length) return el("p", { class: "empty", text: "No payments yet. Move the simulation date with: python scripts/lifecycle.py advance YYYY-MM-DD" });
+    const rows = payments.flatMap((p) => {
+      const detail = el("tr", { class: "detail" }, el("td", { colspan: "7" }, el("table", {},
+        el("thead", {}, el("tr", {}, ...["Holder", "Units at record date", "Due", "Paid", "Status", "Reason"].map((h, k) => el("th", { class: k && k < 4 ? "num" : "", text: h })))),
+        el("tbody", {}, ...p.entitlements.map((e) => el("tr", {},
+          el("td", { text: names[e.holder] || e.holder }),
+          el("td", { class: "num", text: fmt(e.units, 0) }),
+          el("td", { class: "num", text: money(p.currency, e.amount_due) }),
+          el("td", { class: "num", text: money(p.currency, e.amount_paid) }),
+          el("td", {}, chip(ENT_CHIP[e.status] || "", words(e.status))),
+          el("td", { class: "small muted", text: e.reason || "" })))))));
+      detail.hidden = true;
+      const toggle = el("button", { type: "button", class: "link", "aria-expanded": "false", text: "▸ holders" });
+      toggle.addEventListener("click", () => {
+        detail.hidden = !detail.hidden;
+        toggle.setAttribute("aria-expanded", String(!detail.hidden));
+        toggle.textContent = (detail.hidden ? "▸" : "▾") + " holders";
+      });
+      const main = el("tr", {},
+        el("td", {}, el("div", { text: p.kind + " · " + p.instrument_id }), toggle),
+        el("td", { class: "num", text: p.pay_date }),
+        el("td", { class: "num", text: p.record_date }),
+        el("td", { class: "num", text: fmt(p.amount_per_100, 4) }),
+        el("td", {}, chip(PAY_CHIP[p.status] || "", words(p.status))),
+        el("td", { class: "num", text: money(p.currency, p.total_due) }),
+        el("td", { class: "num", text: money(p.currency, p.total_paid) }));
+      return [main, detail];
+    });
+    return el("table", {},
+      el("thead", {}, el("tr", {}, ...["Payment", "Pay date", "Record date", "Per 100", "Status", "Due", "Paid"].map((h, k) => el("th", { class: [1, 2, 3, 5, 6].includes(k) ? "num" : "", text: h })))),
+      el("tbody", {}, ...rows));
+  }
+
+  function holdersTable(holders) {
+    const assets = [...new Set(holders.flatMap((h) => Object.keys(h.positions)))].sort();
+    const ccys = [...new Set(holders.flatMap((h) => Object.keys(h.cash)))].sort();
+    return el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { text: "Holder" }), ...assets.map((a) => el("th", { class: "num", text: a })), ...ccys.map((c) => el("th", { class: "num", text: c + " cash" })))),
+      el("tbody", {}, ...holders.map((h) => el("tr", {},
+        el("td", {}, el("div", { text: h.name }), h.payments_blocked ? el("div", { class: "small muted", text: "payments on compliance hold" }) : null),
+        ...assets.map((a) => el("td", { class: "num", text: h.positions[a] ? fmt(h.positions[a], 0) : "–" })),
+        ...ccys.map((c) => el("td", { class: "num", text: h.cash[c] ? fmt(h.cash[c], 2) : "–" }))))));
+  }
+
+  function owedTable(owed, items, names) {
+    if (!owed.length) return el("p", { class: "empty", text: "Nothing owed: every entitlement so far has been paid." });
+    return el("table", {},
+      el("thead", {}, el("tr", {}, ...["Holder", "Owed", "Made up of"].map((h, k) => el("th", { class: k === 1 ? "num" : "", text: h })))),
+      el("tbody", {}, ...owed.map((o) => el("tr", {},
+        el("td", { text: names[o.holder] || o.holder }),
+        el("td", { class: "num", text: money(o.currency, o.amount) }),
+        el("td", { class: "small muted", text: items.filter((u) => u.holder === o.holder && u.currency === o.currency)
+          .map((u) => u.kind + " " + u.instrument_id + " " + u.pay_date + ": " + fmt(u.amount_due, 2) + " (" + u.reason + ")").join("; ") })))));
   }
 
   function shocksTable(bonds) {

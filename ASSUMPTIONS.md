@@ -64,6 +64,17 @@ Terms approved by Ethan on 30 Oct 2026, with his two corrections (recovery on th
 | Per-holder loss | Claim (units × 102.25 / 100) minus the recovery entitlement. With no trading after the default, every holder loses 60% (Alder: claim $4,090,000, recovered $1,636,000, loss $2,454,000). Dana's recovery is owed but unpaid (hold), and shown as owed, not as a loss. | |
 | Repricing at a future date | Today's curve, held constant: times are measured from the simulation date. The CLI uses the scenario database's latest stored official curve, else the illustrative one, labelled. | No forecast of future curves. |
 
+## Lifecycle on the dashboard (M3 step 6)
+
+| Item | Assumption | Why |
+|---|---|---|
+| Read-only | `/api/lifecycle` and the dashboard only read. Advancing the simulation date and triggering a default stay in `scripts/lifecycle.py`. | An API that rewrites history deserves its own decision (Ethan, 30 Oct). |
+| Curve for scenario prices | The curve the app loaded (the one the page shows: illustrative offline, official online), held constant. The CLI instead uses the scenario database's latest stored official curve, else the illustrative one. So in offline mode the two can differ, if the scenario database has stored an official curve from an earlier online run. Both label the curve they used. | The dashboard stays consistent with its own banner and curve table. |
+| Today's price beside it | The bond panel's valuation at the settlement date (today), shown next to the scenario price on the simulation date. | Shows what the scenario changed. |
+| Timeline states | *done* once the step has been recorded; *due* if its date is on or before the simulation date but `pay` hasn't run since the date was moved; otherwise *upcoming*. | `advance` pays as it goes, but a date moved without paying should be visible, not hidden. |
+| Losses | Shown once the recovery is scheduled (its date has arrived): claim minus the recovery entitlement, per holder of record. Before then, only the per-100 claim and recovery. | No projected losses: the holders of record aren't fixed until the recovery's record date. |
+| Owed | Every entitlement with status *unpaid*, grouped by holder and currency. A missed coupon settled by a recovery is *written off* and not counted. | Same rule as `lifecycle.unpaid()`. |
+
 ## Pricing
 
 | Item | Assumption |
