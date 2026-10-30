@@ -110,7 +110,7 @@ def post(conn: sqlite3.Connection, txn_id: str, kind: str, effective_date: date,
             if roles[ln.owner] == "holder":
                 _no_back_dating(conn, ln.owner, ln.asset, effective_date)
         for asset in {ln.asset for ln in lines if not is_cash(ln.asset)}:
-            _books_open(conn, asset, effective_date)
+            _books_open(conn, asset, effective_date, kind)
 
         conn.execute(
             "INSERT INTO ledger_txns(id, kind, effective_date, fingerprint, memo, created_at)"
@@ -158,11 +158,14 @@ def _no_back_dating(conn: sqlite3.Connection, owner: str, asset: str, effective:
         )
 
 
-def _books_open(conn: sqlite3.Connection, instrument_id: str, effective: date) -> None:
+def _books_open(conn: sqlite3.Connection, instrument_id: str, effective: date, kind: str) -> None:
     """Once a payment is scheduled, holdings on its record date are fixed: no unit movement
-    dated on or before it, or who is owed what would no longer match the ledger."""
-    row = conn.execute("SELECT MAX(record_date) AS closed FROM payment_events WHERE instrument_id = ?",
-                       (instrument_id,)).fetchone()
+    dated on or before it, or who is owed what would no longer match the ledger. Once the
+    principal is scheduled, the only movement left is redeeming units from holders of record."""
+    row = conn.execute("SELECT MAX(record_date) AS closed, MAX(kind = 'principal') AS maturing"
+                       " FROM payment_events WHERE instrument_id = ?", (instrument_id,)).fetchone()
+    if row["maturing"] and kind != "redemption":
+        raise LedgerError(f"{instrument_id} has reached maturity; its units can only be redeemed")
     if row["closed"] and effective.isoformat() <= row["closed"]:
         raise LedgerError(
             f"{instrument_id} holdings are fixed up to its record date {row['closed']}; "

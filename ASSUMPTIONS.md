@@ -38,10 +38,13 @@ Every modelling or technical choice made without explicit instruction. Each one 
 | Books close at the record date | Once a payment is scheduled, the ledger refuses movements in that bond dated on or before its record date. | Otherwise a back-dated transfer could change who "should" have been paid after the fact. |
 | Entitlement | Units × coupon per 100 ÷ 100, rounded to cents per holder (banker's rounding). The exact total minus the rounded total is stored as the rounding residue. | Cash settles in cents; the residue makes rounding visible. |
 | Payment date in the ledger | A coupon's ledger transaction is dated its scheduled payment date (after the weekend roll), even if the run happens later. | The coupon belongs to that date; late payment of an old coupon isn't modelled yet. |
-| Due coupons | Every coupon whose payment date is on or before the simulation date, oldest first. The final coupon is included; principal comes with maturity (step 4). | |
+| Due payments | Every coupon whose payment date is on or before the simulation date, oldest first, then principal on the maturity payment date (after the final coupon). | |
+| Principal | Paid like a coupon: same record date, one atomic block per holder. Each holder's transaction pays face in cash *and* hands the units back to the issuer, so cash and units move together. | A redemption is an exchange; recording one leg without the other would leave the ledger wrong after a crash. |
+| Maturity status | *Matured* once every principal entitlement is paid or recorded unpaid, dated the principal payment date, set once. Anything unpaid stays recorded as owed. Dana's units stay outstanding (the issuer still owes her $1m) until she is paid. | The brief: settle principal once, change status, record anything unpaid. |
+| After maturity | Once principal is scheduled, the ledger allows no movement in the bond except redemptions. If units moved after the final record date but before principal was scheduled, principal is refused (the holders of record no longer hold what they would hand back). | A matured bond stops trading. The refusal stops the scenario at that point (see risk R15); recreate the scenario database to continue. |
 | Blocked holder | Dana's entitlement is recorded as *unpaid (payments blocked)* when the coupon is scheduled; nothing is posted. The coupon's status is then *partly paid*. A hold can't be lifted yet. | Gives "unpaid amounts" a concrete case outside default. |
 | Payment status | *scheduled* → *in progress* → *paid* (all holders) or *partly paid* (some still unpaid). *Missed* is reserved for the default scenario (step 5). | |
-| Instrument status table | Deferred to step 4 (maturity), the first step that changes an instrument's status. The approved plan listed it in migration 004. | No unused table. |
+| Instrument status | `instrument_status` (migration 005): no row means *performing*; a row is written when that changes (*matured* now, *defaulted* in step 5). Moved from migration 004 to 005, since step 4 is the first to write it. | No unused table. |
 
 ## Pricing
 

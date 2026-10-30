@@ -1,7 +1,7 @@
 """Run the bond lifecycle in the scenario database.
 
-    python scripts/lifecycle.py status              simulation date, payments, cash balances
-    python scripts/lifecycle.py pay                 pay every coupon due by the simulation date
+    python scripts/lifecycle.py status              simulation date, bond status, payments, amounts owed
+    python scripts/lifecycle.py pay                 make every payment due by the simulation date
     python scripts/lifecycle.py advance 2027-02-17  move the simulation date forward, then pay what is due
 
 Add --db PATH to use another scenario database (default: data/scenario.sqlite3).
@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import defaultdict
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -22,6 +24,7 @@ from debtlab import ledger, lifecycle  # noqa: E402
 from debtlab.audit.db import connect, migrate  # noqa: E402
 from debtlab.config import Settings  # noqa: E402
 from debtlab.instruments import load_instruments  # noqa: E402
+from debtlab.money import D  # noqa: E402
 from debtlab.pricing.bond import FixedRateBond  # noqa: E402
 from debtlab.scenario import DEFAULT_SCENARIO_DB  # noqa: E402
 
@@ -46,21 +49,26 @@ def main() -> None:
             before = lifecycle.advance_simulation(conn, args.date)
             print(f"simulation date {before} -> {args.date}")
         if args.command in ("pay", "advance"):
-            results = lifecycle.pay_due_coupons(conn, bonds)
+            results = lifecycle.pay_due(conn, bonds)
             for r in results:
                 print(f"  {r.payment_id}: {r.status}, paid {r.total_paid:,f} of {r.total_due:,f}"
                       f" ({r.paid_now} paid by this run)" + (f"; unpaid: {', '.join(r.unpaid)}" if r.unpaid else ""))
             if not results:
-                print("  no coupons due yet")
-        status(conn)
+                print("  no payments due yet")
+        status(conn, bonds)
     except lifecycle.LifecycleError as exc:
         sys.exit(f"refused: {exc}")
     finally:
         conn.close()
 
 
-def status(conn) -> None:
+def status(conn, bonds) -> None:
     print(f"\nsimulation date {lifecycle.simulation_date(conn)}")
+    for b in bonds:
+        st = lifecycle.instrument_status(conn, b.id)
+        outstanding = -ledger.balance(conn, ledger.issuer_id(b.id), b.id)
+        print(f"  {b.id:<18} {st['status']:<10}{' since ' + st['since'] if st['since'] else ''}"
+              f"  units outstanding {outstanding:,f}")
     for e in lifecycle.payments(conn):
         print(f"  {e['id']}  record {e['record_date']}  {e['status']:<12} "
               f"due {e['currency']} {e['total_due']}  paid {e['total_paid']}")
@@ -72,6 +80,13 @@ def status(conn) -> None:
         cash = {a: v for a, v in assets.items() if ledger.is_cash(a)}
         if cash:
             print(f"  {owner:<26} " + ", ".join(f"{a} {v:,f}" for a, v in sorted(cash.items())))
+    owed: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
+    for u in lifecycle.unpaid(conn):
+        owed[(u["holder"], u["currency"])] += D(u["amount_due"])
+    if owed:
+        print("owed and unpaid:")
+        for (holder, ccy), amount in sorted(owed.items()):
+            print(f"  {holder:<26} {ccy} {amount:,f}")
     problems = ledger.check_integrity(conn)
     print("ledger integrity:", "ok" if not problems else problems)
 

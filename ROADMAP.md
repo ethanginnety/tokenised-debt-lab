@@ -41,7 +41,7 @@ Approved by Ethan on 30 Oct 2026, with one change: lifecycle scenarios run in a 
 1. ~~Instrument C, the private-credit fund share~~ (done 30 Oct: reported NAV with as-of date, report time, age and staleness; never quoted off).
 2. ~~Holder ledger~~ (done 30 Oct: double-entry journal, four fictional test holders, balances as of any date, transfers, `scripts/new_scenario_db.py`, main/scenario role shown on the dashboard).
 3. ~~Coupons~~ (done 30 Oct: record-date rule, per-holder entitlements, idempotent payment proven by a crash-and-restart test, Dana recorded unpaid, books closed at the record date, `scripts/lifecycle.py`).
-4. Maturity: final coupon and principal paid once, units retired, status *matured*, unpaid amounts recorded.
+4. ~~Maturity~~ (done 30 Oct: final coupon then principal, paid once per holder with units retired in the same transaction, status *matured*, unpaid amounts recorded; crash-and-restart tested).
 5. Default scenario on the short USD bond, triggered manually: missed coupon, 30-day grace, default declared, quoting halted, spread repriced (1,000 bp, then recovery basis), 40% recovery of face + missed coupons after 12 months, per-holder losses, all audited.
 6. Dashboard section (holders, payments, default state), API endpoints, docs, demo.
 
@@ -49,16 +49,16 @@ Approved by Ethan on 30 Oct 2026, with one change: lifecycle scenarios run in a 
 
 Written so a fresh session (after `/clear`) can pick up exactly here. Read PROMPT.md, this file, ASSUMPTIONS.md and CHANGELOG.md first.
 
-**Done in M3 so far:** steps 1-3, plus the ultrareview fixes (`c77f8e8`; finding 6 deferred as risk R14, finding 10 declined after measuring 0.35s) and the offline-banner wording fix. 128 tests pass. Every step is committed; the working tree is clean. Ethan has seen the database chip in a browser (main and scenario).
+**Done in M3 so far:** steps 1-4, plus the ultrareview fixes (`c77f8e8`; finding 6 deferred as risk R14, finding 10 declined after measuring 0.35s) and the offline-banner wording fix. 132 tests pass. Every step is committed; the working tree is clean. Ethan has seen the database chip in a browser (main and scenario).
 
-**How step 3 works (build on it):** `debtlab/lifecycle.py`. `require_scenario()` guards everything. Simulation date in `db_meta` (`simulation_date`), set by `create_scenario_db`, moved by `advance_simulation`. `schedule_coupon` fixes entitlements from `ledger.holdings(as_of=record_date)` (Dana stored as `unpaid` with a reason); `pay_coupon` pays each `due` entitlement in its own `atomic` block (ledger txn `coupon:<bond>:<pay date>:<holder>` + mark paid), then `_finish` sets *paid* / *partly paid*. `payment_events.kind` has no CHECK, so `principal` needs no table rebuild; status CHECK already allows `missed`. `ledger._books_open` refuses unit movements dated on or before any scheduled record date. CLI: `scripts/lifecycle.py status|pay|advance DATE [--db PATH]`.
+**How steps 3-4 work (build on it):** `debtlab/lifecycle.py`. `require_scenario()` guards everything. Simulation date in `db_meta` (`simulation_date`), set by `create_scenario_db`, moved by `advance_simulation`. A `Payment` (kind `coupon` or `principal`) is scheduled by `schedule()`, which fixes entitlements from `ledger.holdings(as_of=record_date)` (Dana stored as `unpaid` with a reason), and paid by `pay()`, one holder per `atomic` block (ledger txn `<payment id>:<holder>`, kind `coupon` or `redemption`, plus the paid mark); `_finish` sets *paid* / *partly paid*. `pay_due()` runs every due payment in date order. After principal, `_mark_matured` writes `instrument_status`. `lifecycle.unpaid()` lists amounts owed. `payment_events.kind` has no CHECK; its status CHECK already allows `missed`, and `instrument_status` allows `defaulted`. `ledger._books_open` refuses unit movements dated on or before any scheduled record date, and anything but a redemption once principal is scheduled. CLI: `scripts/lifecycle.py status|pay|advance DATE [--db PATH]`.
 
-**Next: step 4, maturity.** Proposed (confirm with Ethan before building):
-- Migration 005: `instrument_status` (instrument, status *performing* / *matured* / *defaulted*, since date, reason), deferred from step 3.
-- Principal as a payment event of kind `principal` on the maturity payment date, same record-date rule and same per-holder atomic pay as coupons (reuse the scheduling and paying code rather than copying it). The final coupon is already paid by the coupon run.
-- Units retired: each paid holder's ledger transaction returns its units to the issuer and receives cash (one transaction per holder, so units and cash move together). Dana's principal recorded unpaid; her units stay outstanding until paid, so the issuer still owes them.
-- Status *matured* once the principal event is processed, recorded once; no more coupons scheduled after maturity; pricing already skips a matured bond.
-- Demo: advance the scenario to 2029-02-20 and check: all six short coupons and principal paid once, issuer's units back to −1,000,000 (Dana's), Dana's unpaid total $1,000,000 + 6 × $22,500.
+**Next: step 5, the default scenario on the short USD bond.** Agreed outline (from the plan above; propose the details to Ethan before building):
+- Triggered manually (a CLI command such as `lifecycle.py default SHORT-USD-2029`), only in a scenario database, only on a performing bond; recorded with the simulation date.
+- The next coupon is *missed*: scheduled as usual, nothing paid, entitlements unpaid with reason "issuer missed payment". `pay_due` must not pay coupons of a bond flagged as missing payments.
+- 30-day grace period, then a default declaration: status *defaulted*, quoting halted, spread repriced (1,000 bp, then the recovery basis).
+- 40% recovery of face + missed coupons, paid 12 months after the declaration, per holder (Dana's share recorded unpaid like her other amounts), units retired; per-holder loss = claim − recovery. All audited.
+- Needs a design decision: how repricing at the simulation date is shown (today's curve held constant), and where a defaulted bond's price comes from (recovery basis: 40 × discount factor to the recovery date). Probably shown in step 6.
 
 **Then:** step 5 default scenario, step 6 dashboard section and API (see the plan above). Assumptions already approved: 30-day grace, 1,000 bp distressed spread, 40% recovery of face + missed coupons, 12-month recovery delay, scenario reset by recreating the scenario database. Repricing at a future simulation date uses today's curve held constant (say so on the dashboard; step 6).
 

@@ -50,17 +50,18 @@ $env:DEBTLAB_DB_PATH = "data/scenario.sqlite3"; python -m debtlab.api
 Remove-Item Env:DEBTLAB_DB_PATH                         # back to the main database
 ```
 
-### Coupons in the scenario database
+### Coupons and maturity in the scenario database
 
 The scenario starts on the day it was created, and its simulation date only moves forward. Run these with the app stopped or running (SQLite allows both):
 
 ```powershell
-python scripts/lifecycle.py status              # simulation date, payments, cash balances
-python scripts/lifecycle.py pay                 # pay every coupon due by the simulation date
+python scripts/lifecycle.py status              # simulation date, bond status, payments, amounts owed
+python scripts/lifecycle.py pay                 # make every payment due by the simulation date
 python scripts/lifecycle.py advance 2027-03-30  # move the date forward, then pay what is due
+python scripts/lifecycle.py advance 2029-02-20  # past the short bond's maturity: principal paid, status matured
 ```
 
-`pay` is always safe to repeat: if a run stops part-way, running it again pays only the holders not yet paid. Dana's amounts show as *unpaid (payments blocked)*. Add `--db PATH` for another scenario database; the script refuses a main database. A scenario database made before 30 Oct's coupon step has no simulation date: recreate it.
+`pay` is always safe to repeat: if a run stops part-way, running it again pays only the holders not yet paid. Dana's amounts show as *unpaid (payments blocked)*. Add `--db PATH` for another scenario database; the script refuses a main database. A scenario database made before 30 Oct's coupon step has no simulation date: recreate it. One from the coupon step picks up the maturity table automatically.
 
 Run `new_scenario_db.py` again to start the demo from scratch. Stop the app first (Windows locks open files). The previous scenario database is moved to `data/archive/`, never deleted. The script refuses to replace any database that isn't marked as a scenario.
 
