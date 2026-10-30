@@ -11,7 +11,9 @@ Milestone 2, steps 1–2.
 - **Bank of England gilt curve.** Reads the nominal spot curve (0.5–40 years) from the BoE's daily "latest yield curve data" zip, laid out exactly as Ethan's probe showed on 30 Oct. Blank cells are skipped; an empty or sparse latest day falls back to the previous one. The century bond can now be priced from real UK rates.
 - **Continuous compounding.** The BoE states its spot rates are continuously compounded; the ECB's curve is labelled the same way. Curves can now say so, and pricing uses DF = e^(−r·t). Checked against QuantLib to 1e-10.
 - `save_fixtures.py` also saves the raw BoE zip. New dependency: `openpyxl`.
-- `scripts/probe_treasury.py` kept as a diagnostic for download problems.
+- `scripts/probe_treasury.py` kept as a diagnostic for download problems; `scripts/probe_boe.py` (Ethan's probe of the BoE file layout) added alongside it.
+- **First real BoE run (30 Oct, Ethan's machine).** `save_fixtures.py` saved all three sources; the BoE zip parsed to the 29 Oct curve with 80 maturities (0.5–40Y; 10Y 5.28%, 20Y 5.74%, 40Y 5.33%). In online mode the century bond is priced from it: clean 90.6201, yield 6.62%, modified duration 14.55, DV01 0.1369, 8.3% of value beyond 40 years. All hand-checked.
+- Fixed a test gap: saved BoE downloads were never parsed by a test. `test_real_boe_file` now checks every saved zip (continuous zero rates, unbroken half-year grid, sane levels). The three real fixtures from 30 Oct are committed so these tests run on any clone.
 
 ## 0.1.1 — 30 Oct 2026
 

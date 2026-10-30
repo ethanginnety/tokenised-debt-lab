@@ -36,7 +36,7 @@ Every modelling or technical choice made without explicit instruction. Each one 
 | Freshness | A daily curve becomes **stale after 96 hours**, measured from midnight UTC on its observation date. That allows a weekend plus one late publication. |
 | Illustrative GBP curve | 10Y and 30Y set near levels reported in the press on 14 Oct 2026 (10Y about 5.4%, 30Y about 6%). Every other point is invented for shape. |
 | Illustrative USD curve | Entirely invented for a plausible shape. |
-| Source formats | The Treasury and ECB parsers follow documented formats but **have not yet been run against a real download** (the build environment had no access). To be verified in M2. |
+| Source formats | Treasury, ECB and BoE parsers verified against real downloads on 30 Oct 2026 (saved in `tests/fixtures/real/`). |
 
 ## Technical
 

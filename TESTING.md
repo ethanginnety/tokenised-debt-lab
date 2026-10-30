@@ -21,12 +21,16 @@ QuantLib is a test-only dependency, used as an independent check on the pricing 
 | Staleness and risk gate | Fresh vs stale by age; illustrative, missing and stale data all block risk-taking. |
 | Storage and recovery | Migrations apply once; idempotent events; events survive a reopened database; last valid official curve used when the source fails, flagged stale; no curve invented when none stored. |
 | Bootstrap | Flat par curve gives the same flat zero curve; two-step hand example; every par bond on the real 29 Oct curve reprices to par (1e-24); real curve shape; matches QuantLib `PiecewiseLogLinearDiscount` to 1e-12; Treasury snapshots come out bootstrapped. |
-| Real downloads | Every saved Treasury and ECB file parses, has sane levels, and (Treasury) bootstraps cleanly. Skipped until files exist. |
+| Real downloads | Every saved Treasury, ECB and BoE file parses and has sane levels; Treasury bootstraps cleanly; BoE is continuous with an unbroken half-year grid. Fixtures from 30 Oct are committed. |
 | Gilts and compounding | Workbook built to the real BoE layout: latest day used, blank cells skipped, sparse day falls back, bad zips and empty months raise; continuous discount factors exact; continuous curve pricing matches QuantLib to 1e-10; century bond prices off a gilt curve with sensible duration and extrapolated share. |
 | Portability | Every file read/write in the code and tests states UTF-8 (a Windows-only bug otherwise). |
 | API | Offline end to end (health, overview, events, refresh without duplicate valuations, dashboard page); online mode with all sources down leaves bonds unpriced; snapshot export escapes script tags. |
 
 ## Latest results
+
+**30 Oct 2026 (first real BoE run, Ethan's Windows machine, Python 3.14.6): 53 passed, 0 skipped**, 1 warning (Starlette test client deprecation, not project code). `save_fixtures.py` saved Treasury (14 maturities), ECB (11) and BoE (80).
+
+Manual check, online mode: century bond priced from `GBP:Bank of England nominal gilt spot curve:2026-10-29` (fresh, 38h old). Independent plain-Python check of the app's figures: accrued 6 × 214/365 = 3.517808 ✓; re-discounting 100 cash flows at the 6.6188% yield gives dirty 94.1379 / clean 90.6201 ✓ (perpetuity 6/y = 90.65); Macaulay 15.5099 ✓ (below the perpetuity limit 16.11); modified 14.5471 ✓; DV01 0.136943 ✓.
 
 **30 Oct 2026 (gilts): 49 passed, 3 skipped** (the 3 wait for real downloads).
 
@@ -43,6 +47,5 @@ Manual checks the same day:
 
 ## Not yet tested
 
-- Real downloads from the Treasury and ECB (the build environment had no access). See RUNBOOK, "First online run".
 - Visual rendering in real browsers (the headless DOM check doesn't measure layout).
 - Coupons, default, market making and XRPL: later milestones.
