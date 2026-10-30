@@ -1,4 +1,4 @@
-"""SQLite storage: migrations, the audit event log and stored curves.
+"""SQLite storage: migrations, the audit event log, stored curves and NAV reports.
 
 SQLite is a single file, needs no server, and survives restarts, which is
 enough while everything runs on one machine. The PostgreSQL switch happens
@@ -12,6 +12,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from debtlab.instruments import NavReport
 from debtlab.marketdata.models import CurveSnapshot
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
@@ -120,3 +121,23 @@ def latest_curve(
         (currency, *kinds),
     ).fetchone()
     return CurveSnapshot.from_json(row["payload"]) if row else None
+
+
+def save_nav(conn: sqlite3.Connection, report: NavReport) -> bool:
+    """Store a reported NAV. Returns False if this exact report is already stored."""
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO nav_reports(id, fund_id, nav_per_share, as_of, reported_at, source)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (report.id, report.fund_id, str(report.nav_per_share), report.as_of.isoformat(),
+         report.reported_at.astimezone(timezone.utc).isoformat(), report.source),
+    )
+    return cur.rowcount == 1
+
+
+def latest_nav(conn: sqlite3.Connection, fund_id: str) -> NavReport | None:
+    """The NAV for the most recent as-of date; a later restatement of it wins."""
+    row = conn.execute(
+        "SELECT * FROM nav_reports WHERE fund_id = ? ORDER BY as_of DESC, reported_at DESC LIMIT 1",
+        (fund_id,),
+    ).fetchone()
+    return NavReport.from_dict(fund_id, dict(row)) if row else None

@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from debtlab.api.app import create_app, render_page
-from debtlab.audit.db import connect, latest_curve, migrate, record_event, recent_events, save_curve
+from debtlab.audit.db import MIGRATIONS_DIR, connect, latest_curve, migrate, record_event, recent_events, save_curve
 from debtlab.config import Settings
 from debtlab.marketdata import adapters
 from debtlab.marketdata.adapters import MarketDataError, parse_ecb_csv, parse_treasury_csv
@@ -91,7 +91,8 @@ def test_staleness_and_risk_gate():
 def test_migrations_idempotent_and_events_survive_restart(tmp_path):
     db = tmp_path / "a.sqlite3"
     conn = connect(db)
-    assert migrate(conn) == ["001_init.sql"]
+    every = sorted(f.name for f in MIGRATIONS_DIR.glob("*.sql"))
+    assert every[0] == "001_init.sql" and migrate(conn) == every  # all, in order
     assert migrate(conn) == []
     assert record_event(conn, "valuation", {"x": 1}, entity="B", idempotency_key="k1") is True
     assert record_event(conn, "valuation", {"x": 1}, entity="B", idempotency_key="k1") is False

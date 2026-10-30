@@ -27,10 +27,11 @@ One application, one database, no microservices. Pieces are kept separate in cod
 |---|---|---|
 | Pricing engine | `debtlab/pricing`: pure Decimal functions, no I/O. | Curve bootstrap (M2). |
 | Market data | Official adapters (Treasury, ECB), illustrative curves, staleness and risk gate. | BoE gilts (M2), RLUSD/XRP book (M7). |
+| Fund share (C) | `instruments.py` `FundShare`, `NavReport`; `nav_reports` table; `service.fund_view`. NAV, age and staleness; never quoted. | Withdrawal windows, queue, gates, secondary price (M5). |
 | Simulated ledger | n/a | Holder balances, coupons, maturity, default (M3). |
 | Market maker | n/a | Strategy and risk interfaces shared by simulation, paper and live adapters (M4, M7, M8). |
 | XRPL integration | n/a | `xrpl-py`; testnet tokens (M6), mainnet read-only, paper, then gated live (M7, M8). |
-| Database | SQLite with numbered migrations; `events` and `curve_snapshots`. | PostgreSQL for deployment (M9). |
+| Database | SQLite with numbered migrations; `events`, `curve_snapshots`, `nav_reports`. | PostgreSQL for deployment (M9). |
 | API and dashboard | FastAPI; plain HTML, JS and SVG. | Controls (pause, kill switch) in M4. |
 | Worker and scheduler | Curves load on start and on Refresh. | Scheduled refresh, heartbeats, alerts (M9). |
 

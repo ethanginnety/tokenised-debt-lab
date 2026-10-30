@@ -40,6 +40,27 @@
         "Issuer, single-A rating and 4.50% semi-annual coupon: assumed.",
         "Credit spread 110 bp over Treasuries: assumed for a single-A three-year bond. Not observed."
       ]
+    },
+    {
+      "id": "PCF-USD-SIM",
+      "type": "fund_share",
+      "name": "Private-credit fund share (model)",
+      "description": "A share in a simulated semi-liquid private-credit fund that lends to mid-sized companies. Its value is a NAV the manager reports monthly, some weeks after the date it refers to. It is not traded on an exchange and has no coupon or maturity.",
+      "currency": "USD",
+      "nav_frequency": "monthly",
+      "nav_stale_after_days": 45,
+      "reported_nav": {
+        "nav_per_share": "10.2417",
+        "as_of": "2026-09-30",
+        "reported_at": "2026-10-24T16:00:00+00:00",
+        "source": "simulated"
+      },
+      "assumptions": [
+        "NAV of 10.2417 per share as of 30 Sep 2026, reported 24 Oct 2026: invented for the simulation. Not a real fund's figure.",
+        "NAV reported monthly with a lag of a few weeks, as is common for private-credit funds. A NAV more than 45 days past its as-of date is marked stale.",
+        "Reported NAV is an appraisal of loans that rarely trade, not a price anyone will pay. It is never used as an executable price.",
+        "Withdrawal windows, caps, queues, gates and a secondary-market price arrive in Milestone 5."
+      ]
     }
   ]
 }

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0-dev — 30 Oct 2026
+
+Milestone 3 (in progress).
+
+- **Instrument C: private-credit fund share** (`PCF-USD-SIM`). Its value is a NAV the manager reports, never a price: each report records the NAV per share, the date it values the portfolio at, when it was published (UTC) and its source. The dashboard shows the NAV, its age (30 days on 30 Oct), days since it was reported, and whether it is stale (over 45 days). Quoting is always blocked on a fund share, with the reason shown. The figures are invented and labelled so. Withdrawals, the secondary price and the discount come in M5.
+- New table `nav_reports` (migration `002_nav_reports.sql`), append-only like curves. The configured NAV is stored once; restarts don't duplicate it or its `nav_loaded` audit event. Checked on a copy of the real main database: the migration applied once and kept all 33 existing events.
+- The API's `/api/overview` has a new `funds` list; `instruments` still holds the two bonds only.
+- The migration test now expects every file in `migrations/`, in order, instead of a hard-coded list.
+
 ## 0.2.0-dev — 30 Oct 2026
 
 Milestone 2 (complete).

@@ -1,12 +1,13 @@
-"""Glue: load curves, value every instrument, record what happened."""
+"""Glue: load curves and NAVs, value every instrument, record what happened."""
 
 from __future__ import annotations
 
 import sqlite3
 from datetime import date, datetime, timezone
 
-from debtlab.audit.db import latest_curve, record_event, save_curve
+from debtlab.audit.db import latest_curve, latest_nav, record_event, save_curve, save_nav
 from debtlab.config import Settings
+from debtlab.instruments import FundShare, NavReport
 from debtlab.marketdata.adapters import (
     ONLINE_ADAPTERS,
     MarketDataError,
@@ -169,3 +170,41 @@ def value_all(
         )
         out.append(result)
     return out
+
+
+def load_navs(conn: sqlite3.Connection, funds: list[FundShare]) -> dict[str, NavReport | None]:
+    """Seed each fund's configured NAV report (once), then return the latest stored one."""
+    out: dict[str, NavReport | None] = {}
+    for f in funds:
+        if save_nav(conn, f.initial_nav):
+            record_event(conn, "nav_loaded", f.initial_nav.to_dict(), entity=f.id,
+                         idempotency_key=f"nav_loaded:{f.initial_nav.id}")
+        out[f.id] = latest_nav(conn, f.id)
+    return out
+
+
+NAV_GATE_REASON = "reported NAV is an appraisal, not an executable price; no secondary market until M5"
+
+
+def fund_view(f: FundShare, nav: NavReport | None, now: datetime) -> dict:
+    """What the dashboard shows for a fund share. Quoting is never allowed off a NAV."""
+    terms = {
+        "id": f.id, "name": f.name, "description": f.description, "currency": f.currency,
+        "nav_frequency": f.nav_frequency, "nav_stale_after_days": f.nav_stale_after_days,
+        "assumptions": list(f.assumptions),
+    }
+    base = {"terms": terms, "executable": False, "trading_allowed": False,
+            "trading_gate_reason": NAV_GATE_REASON}
+    if nav is None:
+        return {**base, "nav_status": "missing", "message": "No NAV has been reported."}
+    age = (now.date() - nav.as_of).days
+    return {
+        **base,
+        "nav_status": "stale" if age > f.nav_stale_after_days else "current",
+        "nav_per_share": str(nav.nav_per_share),
+        "nav_as_of": nav.as_of.isoformat(),
+        "nav_reported_at": nav.reported_at.isoformat(),
+        "nav_source": nav.source,
+        "nav_age_days": age,  # how old the valuation is
+        "days_since_reported": (now.date() - nav.reported_at.date()).days,
+    }

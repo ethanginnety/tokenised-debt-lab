@@ -15,11 +15,12 @@ from fastapi.responses import HTMLResponse, Response
 
 from debtlab.audit.db import connect, migrate, record_event, recent_events
 from debtlab.config import Settings
-from debtlab.instruments import load_instruments
-from debtlab.service import curve_view, load_curves, value_all
+from debtlab.instruments import FundShare, load_instruments
+from debtlab.pricing.bond import FixedRateBond
+from debtlab.service import curve_view, fund_view, load_curves, load_navs, value_all
 
 STATIC = Path(__file__).resolve().parent / "static"
-VERSION = "0.2.0-dev"
+VERSION = "0.3.0-dev"
 
 _SHELL = (
     "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
@@ -43,8 +44,11 @@ class State:
         self.lock = threading.Lock()
         self.conn = connect(settings.db_path)
         migrate(self.conn)
-        self.bonds = load_instruments(settings.instruments_file)
+        instruments = load_instruments(settings.instruments_file)
+        self.bonds = [i for i in instruments if isinstance(i, FixedRateBond)]
+        self.funds = [i for i in instruments if isinstance(i, FundShare)]
         self.curves: dict = {}
+        self.navs: dict = {}
         self.valuations: list[dict] = []
         self.last_refresh: datetime | None = None
         self.started_at = datetime.now(timezone.utc)
@@ -56,6 +60,7 @@ class State:
         with self.lock:
             now = datetime.now(timezone.utc)
             self.curves = load_curves(self.conn, self.settings, now)
+            self.navs = load_navs(self.conn, self.funds)
             self.valuations = value_all(
                 self.conn, self.bonds, self.curves, self.settle_date(), self.settings, now
             )
@@ -90,6 +95,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "last_refresh": s.last_refresh.isoformat() if s.last_refresh else None,
             "curves": [curve_view(c, now, settings.max_curve_age_hours) for c in s.curves.values()],
             "instruments": s.valuations,
+            "funds": [fund_view(f, s.navs.get(f.id), now) for f in s.funds],
             "events": recent_events(s.conn, limit=100),
         }
 

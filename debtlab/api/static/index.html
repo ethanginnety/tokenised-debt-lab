@@ -14,6 +14,7 @@
   --soft: #e9edf1;
   --s1: #1d5f8f;          /* series 1: century bond / GBP */
   --s2: #a35d12;          /* series 2: short bond / USD */
+  --s3: #5b4b9a;          /* series 3: private-credit fund */
   --warn-bg: #fff1cf;
   --warn-ink: #6e4600;
   --warn-line: #e6c375;
@@ -26,13 +27,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0e1318; --panel: #151c23; --ink: #e3e8ed; --muted: #95a2ae; --line: #29333d; --soft: #1c252e;
-    --s1: #6aaee0; --s2: #e0a35c; --warn-bg: #36290d; --warn-ink: #f1c977; --warn-line: #6b5420;
+    --s1: #6aaee0; --s2: #e0a35c; --s3: #ab9ce8; --warn-bg: #36290d; --warn-ink: #f1c977; --warn-line: #6b5420;
     --good: #6cc48f; --bad: #ef8080; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0e1318; --panel: #151c23; --ink: #e3e8ed; --muted: #95a2ae; --line: #29333d; --soft: #1c252e;
-  --s1: #6aaee0; --s2: #e0a35c; --warn-bg: #36290d; --warn-ink: #f1c977; --warn-line: #6b5420;
+  --s1: #6aaee0; --s2: #e0a35c; --s3: #ab9ce8; --warn-bg: #36290d; --warn-ink: #f1c977; --warn-line: #6b5420;
   --good: #6cc48f; --bad: #ef8080; color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -128,9 +129,9 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
 <div class="wrap" id="app">
   <header class="top">
     <div>
-      <p class="label">Milestone 2 complete · bond pricing on official curves</p>
+      <p class="label">Milestone 3 in progress · instruments and ledger</p>
       <h1>Tokenised Debt Lab</h1>
-      <p class="sub">A prototype marketplace for simulated tokenised debt. This page shows the pricing engine: what each bond is worth, how sensitive it is to rates, and where every number comes from.</p>
+      <p class="sub">A prototype marketplace for simulated tokenised debt. This page shows the three simulated instruments: what each bond is worth, how sensitive it is to rates, what the private-credit fund reports, and where every number comes from.</p>
     </div>
     <div class="chips" id="chips"></div>
   </header>
@@ -286,14 +287,14 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
 
     // bond panels
     const wrap = document.getElementById("bonds");
-    wrap.replaceChildren(...bonds.map((b, i) => bondPanel(b, i)));
+    wrap.replaceChildren(...bonds.map((b, i) => bondPanel(b, i)), ...(d.funds || []).map(fundPanel));
 
     shocksTable(bonds);
     longEndTables(bonds);
     pyChart(bonds);
     curveChart(d.curves, bonds);
     curvesTable(d.curves);
-    assumptions(bonds, d.curves);
+    assumptions([...bonds, ...(d.funds || [])], d.curves);
     auditLog(d.events);
     document.getElementById("footer").textContent =
       `Version ${d.version} · data mode ${d.data_mode} · page generated ${when(d.generated_at)}. Educational prototype: simulated instruments only. Nothing here is a real security, an offer, or a public-blockchain asset.`;
@@ -341,6 +342,43 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
         document.createTextNode(" of this bond's value comes from payments beyond the longest point on its curve, where the rate is extrapolated rather than observed.")));
     }
     card.append(gate(b));
+    return card;
+  }
+  // Instrument C: no curve, no yield. Its only number is a NAV the manager reported, with an age.
+  function fundPanel(f) {
+    const t = f.terms;
+    const card = el("article", { class: "bond", style: "--series: var(--s3)" });
+    card.append(
+      el("div", { class: "head" },
+        el("span", { class: "label", text: t.id + " · " + t.currency + " · fund share" }),
+        el("h3", { text: t.name }),
+        el("p", { class: "desc", text: t.description })),
+      el("div", { class: "terms" },
+        termItem("NAV reported", t.nav_frequency),
+        termItem("Stale after", t.nav_stale_after_days + " days"),
+        termItem("Coupon", "none"),
+        termItem("Maturity", "none")),
+    );
+    if (f.nav_status === "missing") {
+      card.append(el("p", { class: "empty", text: f.message }), gate(f));
+      return card;
+    }
+    const stale = f.nav_status === "stale";
+    card.append(
+      el("div", { class: "price-row" },
+        el("div", {}, el("div", { class: "label", text: "Reported NAV" }),
+          el("div", { class: "big" }, fmt(f.nav_per_share, 4), el("small", { text: "per share" }))),
+        el("div", {}, el("div", { class: "label", text: "NAV age" }),
+          el("div", { class: "big" + (stale ? " neg" : "") }, f.nav_age_days + " days"))),
+      el("div", { class: "kv" },
+        kv("Values portfolio at", f.nav_as_of),
+        kv("Reported on", f.nav_reported_at.slice(0, 10)),
+        kv("Days since reported", String(f.days_since_reported)),
+        kv("NAV status", f.nav_status),
+        kv("Source", f.nav_source)),
+      el("p", { class: "muted small", text: "A reported NAV is the manager's appraisal of loans that rarely trade, as of a past date. It is not a price anyone has agreed to pay, so nothing here quotes or trades off it. The secondary-market price, the discount to NAV and redeemable liquidity arrive in Milestone 5." }),
+      gate(f),
+    );
     return card;
   }
   const termItem = (k, v) => el("span", {}, k + " ", el("b", { text: v }));

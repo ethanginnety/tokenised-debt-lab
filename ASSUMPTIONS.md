@@ -11,6 +11,10 @@ Every modelling or technical choice made without explicit instruction. Each one 
 | Century bond spread | 95 bp over gilts | Plausible for a very highly rated issuer at a very long tenor. **Not observed.** |
 | Century bond day count | ACT/ACT (ICMA) | Standard for sterling bonds. |
 | Short bond | Single-A US corporate, 4.50% semi-annual, 30/360, 17 Feb 2026 to 17 Feb 2029, 110 bp spread | A generic contrast case. All values assumed. |
+| Private-credit fund share | `PCF-USD-SIM`, US dollar. NAV 10.2417 per share as of 30 Sep 2026, reported 24 Oct 2026 16:00 UTC. All invented. | Gives instrument C a realistic shape: a monthly NAV published a few weeks late. |
+| NAV staleness | Stale once the NAV's as-of date is more than 45 days old (monthly cycle plus a reporting lag of about two weeks). Age is counted from the as-of date, not the report date, because that is how old the valuation is. | Configurable per fund (`nav_stale_after_days`). |
+| NAV and quoting | A reported NAV never allows quoting or trading. | The brief: NAV is not an executable price. A secondary-market price arrives in M5. |
+| Latest NAV | The report with the latest as-of date; a later restatement of the same date replaces it. | |
 
 ## Pricing
 
