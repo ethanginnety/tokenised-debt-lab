@@ -18,7 +18,10 @@ from typing import Callable
 
 import httpx
 
+from dataclasses import replace
+
 from debtlab.marketdata.models import ILLUSTRATIVE, OFFICIAL_DAILY, CurveSnapshot
+from debtlab.pricing.bootstrap import bootstrap_semiannual_par
 from debtlab.pricing.curve import curve_from_percent, tenor_to_years
 
 
@@ -96,7 +99,22 @@ def parse_treasury_csv(text: str, fetched_at: datetime, url: str = "") -> CurveS
         rate_type="par",
         observation_date=obs_date,
         fetched_at=fetched_at,
-        notes="Par yields used directly as discount rates until the bootstrap lands (M2).",
+        notes="Raw par yields as published.",
+    )
+
+
+def to_zero_snapshot(snap: CurveSnapshot) -> CurveSnapshot:
+    """Bootstrap a par snapshot into zero rates; other snapshots pass through."""
+    if snap.rate_type != "par":
+        return snap
+    return replace(
+        snap,
+        curve=bootstrap_semiannual_par(snap.curve),
+        rate_type="zero_bootstrapped",
+        notes=(
+            "Zero rates bootstrapped from the published par yields "
+            "(semi-annual, par yields interpolated linearly)."
+        ),
     )
 
 
@@ -104,7 +122,7 @@ def fetch_treasury(now: datetime | None = None) -> CurveSnapshot:
     now = now or datetime.now(timezone.utc)
     url = TREASURY_URL.format(year=now.year)
     text = with_retries(lambda: _get(url))
-    return parse_treasury_csv(text, now, url)
+    return to_zero_snapshot(parse_treasury_csv(text, now, url))
 
 
 # ------------------------------------------------------------ ECB

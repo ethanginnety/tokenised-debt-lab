@@ -19,7 +19,7 @@ from debtlab.instruments import load_instruments
 from debtlab.service import curve_view, load_curves, value_all
 
 STATIC = Path(__file__).resolve().parent / "static"
-VERSION = "0.1.0-m1"
+VERSION = "0.2.0-dev"
 
 _SHELL = (
     "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"

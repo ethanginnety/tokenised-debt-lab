@@ -27,6 +27,9 @@ class YieldCurve:
     points: tuple[tuple[Decimal, Decimal], ...]  # (tenor in years, rate)
     extrapolation: str = "flat"
     shift: Decimal = field(default=Decimal(0))
+    # How the rates compound when turned into discount factors: 2 = semi-annual.
+    # None means "use the bond's own coupon frequency" (the M1 behaviour).
+    compounding: int | None = None
 
     def __post_init__(self) -> None:
         if len(self.points) < 2:
@@ -36,6 +39,8 @@ class YieldCurve:
             raise ValueError("curve tenors must be strictly increasing")
         if self.extrapolation != "flat":
             raise ValueError("only flat extrapolation is implemented")
+        if self.compounding is not None and self.compounding not in (1, 2, 4, 12):
+            raise ValueError(f"unsupported compounding {self.compounding}")
 
     @property
     def longest_tenor(self) -> Decimal:
@@ -55,6 +60,9 @@ class YieldCurve:
                     break
         return rate + self.shift
 
+    def compounding_for(self, bond_frequency: int) -> int:
+        return self.compounding or bond_frequency
+
     def shifted(self, shift_bp: object) -> "YieldCurve":
         """Same curve moved up or down in parallel by `shift_bp` basis points."""
         return YieldCurve(
@@ -62,6 +70,7 @@ class YieldCurve:
             points=self.points,
             extrapolation=self.extrapolation,
             shift=self.shift + bp(shift_bp),
+            compounding=self.compounding,
         )
 
 

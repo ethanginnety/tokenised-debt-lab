@@ -7,7 +7,7 @@ Likelihood and impact are rated Low, Medium or High.
 | R1 | Illustrative numbers mistaken for market data | Honesty | M | H | Banner, chips and "illustrative" status everywhere; risk gate blocks quoting on them; online mode never uses them. | Mitigated (M1) |
 | R2 | Pricing convention error gives wrong prices | Financial | M | H | Independent QuantLib tests; hand checks (par bond, annuity formula). | Mitigated for M1 bonds |
 | R3 | Source format changes or misparsed data | Data | M | H | Parsers raise rather than guess; fallback to last valid curve flagged by age; verify on first online run. | Open until M2 |
-| R4 | Par yields used as zero rates | Financial | H | M | Documented; bootstrap in M2. | Open |
+| R4 | Par yields used as zero rates | Financial | H | M | Bootstrap to zero rates, checked against QuantLib. | Mitigated (0.2.0) |
 | R5 | Century bond value sensitive to extrapolation rule | Financial | H | M | Share of value beyond the curve shown on the dashboard; sensitivity table in M2. | Partly mitigated |
 | R6 | Stale data drives trading | Financial | M | H | `risk_increasing_allowed()` gate; must be enforced in the execution layer (M4, M8). | Gate built; enforcement M4 |
 | R7 | Duplicate coupon payment or order | Financial | M | H | Idempotency keys (proven for valuation events); extend to payments (M3) and orders (M4). | Pattern in place |

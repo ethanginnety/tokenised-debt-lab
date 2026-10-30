@@ -16,7 +16,8 @@ Every modelling or technical choice made without explicit instruction. Each one 
 
 | Item | Assumption |
 |---|---|
-| Curve rates | Treated as zero rates compounded at each bond's coupon frequency. In online mode, US Treasury **par** yields are used directly until the M2 bootstrap; that's a known approximation. |
+| Curve rates | Each curve states its compounding where known. US Treasury: par yields bootstrapped to **semi-annual zero rates**. ECB: spot rates, compounding still to be confirmed (treated at the bond's coupon frequency for now). Illustrative curves: the bond's coupon frequency. |
+| Treasury bootstrap | Semi-annual grid out to 30 years; par yields linearly interpolated between published maturities; at 6 months and shorter, zero = par (no intermediate coupons). Grid times are exact half-years, while the pricer measures time as ACT/365F, a difference of a few days at most. |
 | Interpolation | Linear between curve points. |
 | Long end | **Flat extrapolation** beyond the curve's last tenor. For the century bond about 4% of value (on the illustrative curve) depends on this. |
 | Discounting time | ACT/365F years from settlement to payment date. |

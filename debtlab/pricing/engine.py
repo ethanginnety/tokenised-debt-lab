@@ -42,10 +42,12 @@ def dirty_price_from_curve(
     """Present value of all remaining payments, per 100 face.
 
     Each payment at time t (years, ACT/365F from settlement to payment date) is
-    discounted at r = zero(t) + spread, compounded at the coupon frequency:
+    discounted at r = zero(t) + spread, compounded f times a year:
         DF = (1 + r / f) ** (-f * t)
+    where f is the curve's own compounding if it states one, else the bond's
+    coupon frequency.
     """
-    f = D(bond.frequency)
+    f = D(curve.compounding_for(bond.frequency))
     spread = bond.credit_spread + bp(spread_shift_bp)
     pv = ZERO
     for p in bond.remaining_periods(settle):
@@ -233,7 +235,7 @@ def value_bond(
     eff_conv = (down + up - 2 * dirty) / (dirty * dy * dy)
 
     # How much of today's value depends on extrapolated rates?
-    f = D(bond.frequency)
+    f = D(curve.compounding_for(bond.frequency))
     beyond = ZERO
     total = ZERO
     for p in bond.remaining_periods(settle):

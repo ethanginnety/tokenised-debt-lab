@@ -49,6 +49,7 @@ class CurveSnapshot:
             {
                 "currency": self.curve.currency,
                 "points": [[str(t), str(r)] for t, r in self.curve.points],
+                "compounding": self.curve.compounding,
                 "source": self.source,
                 "source_url": self.source_url,
                 "kind": self.kind,
@@ -64,7 +65,7 @@ class CurveSnapshot:
         d = json.loads(text)
         points = tuple((D(t), D(r)) for t, r in d["points"])
         return cls(
-            curve=YieldCurve(d["currency"], points),
+            curve=YieldCurve(d["currency"], points, compounding=d.get("compounding")),
             source=d["source"],
             source_url=d["source_url"],
             kind=d["kind"],
