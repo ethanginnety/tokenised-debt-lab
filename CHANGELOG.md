@@ -3,6 +3,8 @@
 ## 0.1.1 — 30 Oct 2026
 
 - Fixed: on Windows the dashboard showed garbled characters (`Â·`, `âˆ’`) because files were read with the operating system's default encoding. Every file read and write now uses UTF-8 explicitly, and a new test fails if any doesn't. Found by Ethan running it on Windows.
+- Fixed: US Treasury downloads timed out. Measured on Ethan's machine: plain requests took ~17s (over the 15s limit), browser-like requests 0.4s. Requests now send a browser User-Agent and allow 30s.
+- Verified on real data (30 Oct 2026, Ethan's machine): the ECB adapter loaded the 29 Oct euro AAA curve (11 tenors); the Treasury CSV format matches the parser (latest row 10/29/2026, 10Y 4.98%, 30Y 5.32%).
 - The app now answers browser favicon requests with an empty response instead of a 404.
 
 ## 0.1.0-m1 — 29 Oct 2026
