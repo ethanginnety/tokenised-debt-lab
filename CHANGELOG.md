@@ -2,7 +2,9 @@
 
 ## 0.2.0-dev — 30 Oct 2026
 
-Milestone 2, steps 1–2.
+Milestone 2.
+
+- **Long-end extrapolation sensitivity (M2 step 5).** Curves can now extrapolate with a flat *forward* rate (from the last segment or a chosen window) as well as a flat zero rate, and can move the long-run forward up or down. Each bond that extends past its curve gets a table: seven rules, the rate each gives at maturity, the clean price, and the change against the current rule. Shown in the API (`long_end`) and on the dashboard. On the real 29 Oct gilt curve the century bond ranges from 89.56 (forward 6.33%) to 94.11 (forward 3.28%) around today's 90.62: a 5-point spread from a choice no market observes. Prices, IDs and the stored audit trail are unchanged; the table is information only. Flat-forward discount factors match QuantLib's log-linear extrapolation to 1e-14.
 
 - **Par-to-zero bootstrap.** US Treasury par yields are now converted into zero rates (semi-annual grid, par yields interpolated linearly) before pricing. Matches QuantLib's bootstrapper to 1e-12, and every par bond reprices to par. On the real 29 Oct curve the 20-year zero rate is 18 bp above the par yield; the 3-year bond's price moved from 97.2944 to 97.2803.
 - Curves now carry their own compounding convention (the bootstrapped Treasury curve is semi-annual). Curves that don't state one behave as before.
@@ -13,7 +15,7 @@ Milestone 2, steps 1–2.
 - `save_fixtures.py` also saves the raw BoE zip. New dependency: `openpyxl`.
 - `scripts/probe_treasury.py` kept as a diagnostic for download problems; `scripts/probe_boe.py` (Ethan's probe of the BoE file layout) added alongside it.
 - **First real BoE run (30 Oct, Ethan's machine).** `save_fixtures.py` saved all three sources; the BoE zip parsed to the 29 Oct curve with 80 maturities (0.5–40Y; 10Y 5.28%, 20Y 5.74%, 40Y 5.33%). In online mode the century bond is priced from it: clean 90.6201, yield 6.62%, modified duration 14.55, DV01 0.1369, 8.3% of value beyond 40 years. All hand-checked.
-- Fixed a test gap: saved BoE downloads were never parsed by a test. `test_real_boe_file` now checks every saved zip (continuous zero rates, unbroken half-year grid, sane levels). The three real fixtures from 30 Oct are committed so these tests run on any clone.
+- The three real fixtures from 30 Oct are committed, so the real-file tests run on any clone. `test_real_boe_file` now also checks the saved BoE curve is continuous with an unbroken half-year grid.
 
 ## 0.1.1 — 30 Oct 2026
 

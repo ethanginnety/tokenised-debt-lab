@@ -5,7 +5,7 @@ A milestone is done only when its tests pass and its behaviour has been demonstr
 | # | Milestone | Status | Done when |
 |---|---|---|---|
 | M1 | Pricing slice | **Done** (29 Oct 2026) | App runs; century and short bonds priced; tests pass against QuantLib; dashboard shows prices, risk, shocks, assumptions; audit log records valuations. |
-| M2 | Real curves | **In progress** (steps 1–4 done) | US, EUR and GBP adapters verified against real downloads; Treasury par-to-zero bootstrap; staleness gating; long-end extrapolation sensitivity shown. |
+| M2 | Real curves | **Built; awaiting dashboard check** (30 Oct 2026) | US, EUR and GBP adapters verified against real downloads; Treasury par-to-zero bootstrap; staleness gating; long-end extrapolation sensitivity shown. |
 | M3 | Instruments and ledger | Planned | Three instruments; simulated holder ledger; coupons, maturity and default with idempotent payments. |
 | M4 | Market maker (simulation) | Planned | Quotes with full records; limits, pause and kill switch; simulated fills with adverse selection; P&L split. |
 | M5 | Private credit depth | Planned | Withdrawal windows, caps, queue and gates; NAV vs secondary price; discount tests. |
@@ -25,4 +25,6 @@ A milestone is done only when its tests pass and its behaviour has been demonstr
 2. ~~Bootstrap Treasury par yields to zero rates~~ (done 30 Oct; matches QuantLib to 1e-12).
 3. ~~Build the Bank of England gilt adapter~~ (built 30 Oct from Ethan's probe of the real file; verified on the real 29 Oct file, 30 Oct).
 4. ~~Confirm compounding conventions~~ (BoE confirmed continuous; ECB labelled continuous, to confirm in its technical notes).
-5. Add an extrapolation sensitivity table (flat vs. alternative long-end rules) for the century bond.
+5. ~~Add an extrapolation sensitivity table~~ (done 30 Oct: seven rules, API and dashboard; dashboard rendering to be confirmed by Ethan in a browser).
+
+Open M2 item: read the ECB technical notes to confirm its spot rates are continuously compounded (currently taken from the data portal's label).

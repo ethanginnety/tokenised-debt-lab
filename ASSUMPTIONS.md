@@ -21,7 +21,8 @@ Every modelling or technical choice made without explicit instruction. Each one 
 | Gilt curve | BoE nominal spot curve, 0.5–40 years every 6 months; the latest day with at least 20 maturities is used. Beyond 40 years the rate is held flat. |
 | Treasury bootstrap | Semi-annual grid out to 30 years; par yields linearly interpolated between published maturities; at 6 months and shorter, zero = par (no intermediate coupons). Grid times are exact half-years, while the pricer measures time as ACT/365F, a difference of a few days at most. |
 | Interpolation | Linear between curve points. |
-| Long end | **Flat extrapolation** beyond the curve's last tenor. For the century bond on a 40-year gilt curve, about 8% of value depends on this. |
+| Long end | **Flat extrapolation** of the zero rate beyond the curve's last tenor (the price used everywhere). For the century bond on a 40-year gilt curve, about 8% of value depends on this. |
+| Long-end sensitivity | Shown, not used for pricing. Every rule holds the forward rate constant past the last tenor and differs only in its level: the 40Y zero rate (current rule); the last-segment forward (39.5–40Y); the 30–40Y average forward; and the 40Y zero rate ±50/±100 bp. The offsets move the *forward*, not the zero rate, so the curve joins smoothly; a zero-rate jump at 40Y would re-discount a 40.5-year payment over its whole life and overstate the effect. On the real 29 Oct gilt curve the long end falls, so its forwards (3.28%, 4.20%) sit well below the 40Y zero rate (5.33%) and give prices 1.8–3.8% higher. The last-segment forward rests on two neighbouring points of the BoE's fitted curve and is noisy. |
 | Discounting time | ACT/365F years from settlement to payment date. |
 | Yield, duration, convexity | Street convention: periods counted with the bond's day count, compounded at coupon frequency. Matches QuantLib. |
 | Payment dates | Rolled to the next weekday. Bank holidays are not modelled yet. |

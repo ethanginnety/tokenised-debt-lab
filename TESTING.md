@@ -22,11 +22,14 @@ QuantLib is a test-only dependency, used as an independent check on the pricing 
 | Storage and recovery | Migrations apply once; idempotent events; events survive a reopened database; last valid official curve used when the source fails, flagged stale; no curve invented when none stored. |
 | Bootstrap | Flat par curve gives the same flat zero curve; two-step hand example; every par bond on the real 29 Oct curve reprices to par (1e-24); real curve shape; matches QuantLib `PiecewiseLogLinearDiscount` to 1e-12; Treasury snapshots come out bootstrapped. |
 | Real downloads | Every saved Treasury, ECB and BoE file parses and has sane levels; Treasury bootstraps cleanly; BoE is continuous with an unbroken half-year grid. Fixtures from 30 Oct are committed. |
+| Long-end extrapolation | Flat-forward hand example (continuous) and constant forward on a semi-annual curve; flat zero equals flat forward at the last zero rate; long-run forward shift joins smoothly with published points untouched; parallel shifts keep the rule; bad settings raise; flat-forward discount factors match QuantLib `DiscountCurve` (log-linear) extrapolation to 1e-14 on all 60 payments past 40Y; sensitivity table: base row is today's price, price falls as the long-run forward rises, no table when the curve covers the bond, works on illustrative curves. |
 | Gilts and compounding | Workbook built to the real BoE layout: latest day used, blank cells skipped, sparse day falls back, bad zips and empty months raise; continuous discount factors exact; continuous curve pricing matches QuantLib to 1e-10; century bond prices off a gilt curve with sensible duration and extrapolated share. |
 | Portability | Every file read/write in the code and tests states UTF-8 (a Windows-only bug otherwise). |
 | API | Offline end to end (health, overview, events, refresh without duplicate valuations, dashboard page); online mode with all sources down leaves bonds unpriced; snapshot export escapes script tags. |
 
 ## Latest results
+
+**30 Oct 2026 (long-end sensitivity): 62 passed, 0 skipped**, 1 warning (Starlette, not project code). Live API in online mode returned the 7-row table for the century bond off the real 29 Oct gilt curve, and none for the short bond; base price and curve ID unchanged. Hand check: +100 bp row, rate at maturity (5.327% × 40 + 6.327% × 59.48)/99.48 = 5.925% ✓. **Not yet checked:** the dashboard table in a real browser (no JavaScript engine in this environment).
 
 **30 Oct 2026 (first real BoE run, Ethan's Windows machine, Python 3.14.6): 53 passed, 0 skipped**, 1 warning (Starlette test client deprecation, not project code). `save_fixtures.py` saved Treasury (14 maturities), ECB (11) and BoE (80).
 

@@ -147,6 +147,14 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     <div class="panel tbl-wrap"><table id="shocks"></table></div>
   </section>
 
+  <section class="block" id="longEndBlock" hidden>
+    <div class="block-head">
+      <h2>How much the price depends on the long-end rule</h2>
+      <p>No government curve reaches 100 years, so rates past its last point are a modelling choice, not an observation. Each rule below holds the forward rate constant beyond that point; only its level differs. Every published rate is identical across rows, so the spread of prices is pure model risk.</p>
+    </div>
+    <div id="longEnd"></div>
+  </section>
+
   <section class="charts">
     <div class="panel">
       <h2>Price change for a parallel yield move</h2>
@@ -281,6 +289,7 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     wrap.replaceChildren(...bonds.map((b, i) => bondPanel(b, i)));
 
     shocksTable(bonds);
+    longEndTables(bonds);
     pyChart(bonds);
     curveChart(d.curves, bonds);
     curvesTable(d.curves);
@@ -359,6 +368,27 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
       return tr;
     });
     tbl.replaceChildren(el("thead", {}, head), el("tbody", {}, ...rows));
+  }
+
+  function longEndTables(bonds) {
+    const withTable = bonds.filter((b) => b.status === "ok" && b.long_end && b.long_end.length);
+    document.getElementById("longEndBlock").hidden = !withTable.length;
+    document.getElementById("longEnd").replaceChildren(...withTable.map((b) => {
+      const head = el("tr", {},
+        el("th", { text: "Rule" }), el("th", { text: "Beyond the curve" }),
+        el("th", { class: "num", text: "Rate at maturity" }), el("th", { class: "num", text: "Clean price" }),
+        el("th", { class: "num", text: "Change" }), el("th", { class: "num", text: "Change %" }));
+      const rows = b.long_end.map((c, k) => el("tr", {},
+        el("td", { text: c.name }),
+        el("td", { class: "muted", text: c.rule }),
+        el("td", { class: "num", text: fmt(c.rate_at_maturity_pct, 3) + "%" }),
+        el("td", { class: "num", text: fmt(c.clean_price, 4) }),
+        el("td", { class: "num " + (k === 0 ? "" : Number(c.change) < 0 ? "neg" : "pos"), text: k === 0 ? "base" : signed(c.change, 4) }),
+        el("td", { class: "num " + (k === 0 ? "" : Number(c.change_pct) < 0 ? "neg" : "pos"), text: k === 0 ? "" : signed(c.change_pct, 2) + "%" })));
+      return el("div", { class: "panel tbl-wrap" },
+        el("table", {}, el("caption", { text: b.terms.name.replace(/ \(model\)$/, "") + ": " + fmt(b.beyond_curve_share_pct, 1) + "% of value lies past the curve" }),
+          el("thead", {}, head), el("tbody", {}, ...rows)));
+    }));
   }
 
   function niceTicks(lo, hi, n) {

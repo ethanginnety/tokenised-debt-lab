@@ -144,6 +144,16 @@ def value_all(
                 }
                 for s in v.shocks
             ],
+            "long_end": [
+                {
+                    "name": c.name, "rule": c.rule,
+                    "rate_at_maturity_pct": str(q(c.rate_at_maturity * 100, 4)),
+                    "clean_price": str(q(c.clean_price)),
+                    "change": str(q(c.change)),
+                    "change_pct": str(q(c.change_pct, 4)),
+                }
+                for c in v.long_end
+            ],
             "price_yield_profile": [
                 {"ytm_pct": str(q(y * 100, 4)), "clean_price": str(q(p, 4))}
                 for y, p in price_yield_profile(b, v.ytm, settle)

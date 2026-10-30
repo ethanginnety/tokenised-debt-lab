@@ -158,7 +158,11 @@ REAL = sorted((ROOT / "tests" / "fixtures" / "real").glob("boe_*.zip"))
 @pytest.mark.parametrize("path", REAL, ids=lambda p: p.name)
 def test_real_boe_file(path):
     snap = parse_boe_zip(path.read_bytes(), NOW)
+    assert snap.rate_type == "zero"
+    assert snap.curve.compounding == CONTINUOUS
     assert len(snap.curve.points) >= 60
     assert snap.curve.longest_tenor == D(40)
+    tenors = [t for t, _ in snap.curve.points]
+    assert all(b - a == D("0.5") for a, b in zip(tenors, tenors[1:]))  # no gaps on the real file
     for _, r in snap.curve.points:
         assert D("-0.01") < r < D("0.15")

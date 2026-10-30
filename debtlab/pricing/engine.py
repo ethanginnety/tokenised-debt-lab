@@ -14,7 +14,7 @@ All prices returned here are per 100 of face value, the market convention.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 
@@ -193,6 +193,72 @@ class Shock:
 
 
 @dataclass(frozen=True)
+class LongEndCase:
+    name: str
+    rule: str  # how rates beyond the curve's last tenor are set, in words
+    rate_at_maturity: Decimal  # benchmark zero rate the rule gives at maturity
+    clean_price: Decimal
+    change: Decimal  # vs the current rule, per 100 face
+    change_pct: Decimal  # vs the current rule, % of its clean price
+
+
+# Every rule holds the forward rate constant beyond the curve's last tenor; they
+# differ only in its level. (name, extrapolation, years before the last tenor
+# the forward is measured from (None = last segment), shift to that forward in bp)
+LONG_END_RULES: tuple[tuple[str, str, int | None, int], ...] = (
+    ("Flat zero rate (current rule)", "flat", None, 0),
+    ("Flat forward, last segment", "flat_forward", None, 0),
+    ("Flat forward, last 10 years", "flat_forward", 10, 0),
+    ("Long-run forward −100 bp", "flat", None, -100),
+    ("Long-run forward −50 bp", "flat", None, -50),
+    ("Long-run forward +50 bp", "flat", None, 50),
+    ("Long-run forward +100 bp", "flat", None, 100),
+)
+
+
+def _yrs(t: Decimal) -> str:
+    return format(t.normalize(), "f")  # 40.0 -> "40", 39.5 -> "39.5"
+
+
+def long_end_sensitivity(
+    bond: FixedRateBond, curve: YieldCurve, settle: date
+) -> tuple[LongEndCase, ...]:
+    """Reprice under each long-end rule. Empty if no payment is past the curve.
+
+    Only the rule beyond the last published tenor changes; every published
+    point is the same, so the differences are pure model risk.
+    """
+    years = act_365f(settle, bond.maturity_date)
+    last = curve.longest_tenor
+    if years <= last:
+        return ()
+    # Pin "use the bond's frequency" so flat_forward knows the convention; no DF changes.
+    base = replace(curve, compounding=curve.compounding_for(bond.frequency))
+    acc = accrued_per_100(bond, settle)
+    base_clean = dirty_price_from_curve(bond, base.with_long_end("flat"), settle) - acc
+    out = []
+    for name, rule, window, shift in LONG_END_RULES:
+        start = None if window is None else last - D(window)
+        if start is not None and start < curve.points[0][0]:
+            continue
+        c = base.with_long_end(rule, forward_from=start, shift_bp=shift)
+        if rule == "flat" and not shift:
+            words = f"zero rate held at its {_yrs(last)}Y level"
+        elif rule == "flat":
+            words = f"forward beyond {_yrs(last)}Y = {_yrs(last)}Y zero rate {shift:+d} bp"
+        else:
+            span = f"{_yrs(curve.points[-2][0] if start is None else start)}–{_yrs(last)}Y"
+            words = f"forward beyond {_yrs(last)}Y held at its {span} level"
+        words += f" (forward {c.forward_at_end() * HUNDRED:.2f}%)"
+        clean = dirty_price_from_curve(bond, c, settle) - acc
+        out.append(LongEndCase(
+            name, words, c.zero_rate(years), clean, clean - base_clean,
+            (clean - base_clean) / base_clean * HUNDRED,
+        ))
+    return tuple(out)
+
+
+@dataclass(frozen=True)
 class Valuation:
     instrument_id: str
     settle: date
@@ -208,6 +274,7 @@ class Valuation:
     years_to_maturity: Decimal
     beyond_curve_share: Decimal  # share of PV from payments past the curve's last tenor
     shocks: tuple[Shock, ...]
+    long_end: tuple[LongEndCase, ...] = ()
 
 
 def value_bond(
@@ -277,6 +344,7 @@ def value_bond(
         years_to_maturity=years,
         beyond_curve_share=beyond / total if total else ZERO,
         shocks=tuple(results),
+        long_end=long_end_sensitivity(bond, curve, settle),
     )
 
 
