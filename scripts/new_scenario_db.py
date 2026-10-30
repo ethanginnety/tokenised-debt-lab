@@ -1,6 +1,9 @@
 """Create a fresh scenario database with the seeded test holders.
 
-    python scripts/new_scenario_db.py [path]      (default: data/scenario.sqlite3)
+    python scripts/new_scenario_db.py [path] [--market-maker]      (default: data/scenario.sqlite3)
+
+With --market-maker it also gets the simulated market maker's book (config/marketmaker.json):
+the market maker and the simulated market then hold units and are paid coupons like any holder.
 
 Run it again any time to start the lifecycle demo from scratch: the previous
 scenario database is moved to data/archive/, never deleted. It refuses to
@@ -25,20 +28,23 @@ from debtlab.scenario import DEFAULT_SCENARIO_DB, create_scenario_db  # noqa: E4
 
 
 def main() -> None:
-    path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SCENARIO_DB
+    args = [a for a in sys.argv[1:] if a != "--market-maker"]
+    path = Path(args[0]) if args else DEFAULT_SCENARIO_DB
     settings = Settings.from_env()
     if path.resolve() == settings.db_path.resolve():
         sys.exit(f"{path} is the app's main database (DEBTLAB_DB_PATH); choose another path")
     try:
-        archived = create_scenario_db(path, settings)
+        archived = create_scenario_db(path, settings, market_maker="--market-maker" in sys.argv[1:])
     except (ValueError, RuntimeError) as exc:
         sys.exit(f"not created: {exc}")
     if archived:
         print(f"previous scenario database archived to {archived}")
     conn = connect(path)
     holders = [p for p in ledger.parties(conn) if p["role"] == "holder"]
-    print(f"created scenario database {path}: {len(holders)} test holders")
-    for p in holders:
+    book = [p for p in ledger.parties(conn) if p["role"] in ("market_maker", "market")]
+    print(f"created scenario database {path}: {len(holders)} test holders"
+          + (", market maker's book" if book else ", no market maker (add --market-maker)"))
+    for p in holders + book:
         held = ledger.balances(conn).get(p["id"], {})
         positions = ", ".join(f"{a} {v:,f}" for a, v in sorted(held.items()))
         print(f"  {p['name']:<28} {positions}{'  [payments blocked]' if p['payments_blocked'] else ''}")

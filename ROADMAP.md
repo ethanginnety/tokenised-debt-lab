@@ -7,7 +7,7 @@ A milestone is done only when its tests pass and its behaviour has been demonstr
 | M1 | Pricing slice | **Done** (29 Oct 2026) | App runs; century and short bonds priced; tests pass against QuantLib; dashboard shows prices, risk, shocks, assumptions; audit log records valuations. |
 | M2 | Real curves | **Done** (30 Oct 2026) | US, EUR and GBP adapters verified against real downloads; Treasury par-to-zero bootstrap; staleness gating; long-end extrapolation sensitivity shown. |
 | M3 | Instruments and ledger | **Done** (30 Oct 2026) | Three instruments; simulated holder ledger; coupons, maturity and default with idempotent payments. |
-| M4 | Market maker (simulation) | Planned | Quotes with full records; limits, pause and kill switch; simulated fills with adverse selection; P&L split. |
+| M4 | Market maker (simulation) | **In progress** (plan approved 30 Oct 2026) | Quotes with full records; limits, pause and kill switch; simulated fills with adverse selection; P&L split. |
 | M5 | Private credit depth | Planned | Withdrawal windows, caps, queue and gates; NAV vs secondary price; discount tests. |
 | M6 | XRPL testnet | Planned | Bonds as labelled testnet tokens; coupon transfers on testnet; reconciliation. |
 | M7 | RLUSD/XRP read-only and paper | Planned | Verified identifiers and depth; live book monitor; several days of paper results. |
@@ -52,17 +52,31 @@ Approved by Ethan on 30 Oct 2026, with one change: lifecycle scenarios run in a 
 - The lifecycle API ran against copies of Ethan's real main and scenario databases (pages 200).
 - Ethan checked the dashboard, including the lifecycle section, in a browser and marked M3 done on 30 Oct 2026.
 
+## M4 plan
+
+Approved by Ethan on 30 Oct 2026 with his answers to five decisions and three changes (marked *Ethan*). Each step: tests first, run everything, update the docs, commit.
+
+1. ~~**Ledger trades with a cash leg; fix R15.**~~ (done 30 Oct: `ledger.trade`, R15 fixed, migration 007, book in `config/marketmaker.json`; starting values, limits, tick, sizes, fill-rate k and the century add-on weight 0.5 approved by Ethan, see ASSUMPTIONS.) Refuse any unit movement in a bond dated after its final record date, at posting (only redemptions after it). `ledger.trade()`: delivery versus payment, all or nothing, idempotent by trade id. **Quotes are clean prices; the cash leg is clean + accrued, except a bond in grace period or default, which trades flat** (*Ethan*; both cases tested). New parties: *Market maker (simulated)* and *Simulated market* (the counterparty to every client order), funded with cash from a *funding* account that may go negative in cash only (decision 1, *Ethan*: yes). The four test holders don't trade. Starting values for the book, limits, tick, minimum order size and fill-rate k proposed with this step.
+2. **Quote model** (pure functions). Fair value, shifted against inventory; half-spread = sum of recorded components: base cost, duration (DV01 × assumed intraday yield move), credit, data age, inventory imbalance, illiquidity, fees, and **long-end model risk** on the century bond: weight × half the price gap between the "long-run forward −50 bp" and "+50 bp" cases, recomputed every quote, weight configurable (decision 2, *Ethan*). The full extrapolation range is shown on the dashboard as context only. Tick and minimum order size respected; every component and reason recorded.
+3. **Limits, pause, kill switch**, persisted and versioned, every change audited, enforced by one execution-layer check before any order: inventory per instrument, portfolio exposure (market value and DV01), order size, daily loss, open orders, data age, minimum cash reserve. Exposure and daily loss **per currency, no FX** (decision 3, *Ethan*). Kill needs an explicit reset with a reason; restart tests.
+4. **Quote nothing when invalid**: illustrative, stale or missing curve; failed valuation; ledger integrity or insufficient cash/units; a limit or state; the fund share; *halted*. *Restricted* (grace period): only the inventory-reducing side, at 2× spread and ½ size (decision 4, *Ethan*: yes). Every "no quote" recorded with its reason.
+5. **Simulated market.** Seeded clock and random walk in the benchmark (labelled simulated). **Uninformed clients are price-sensitive: the probability of a fill is exp(−k × half-spread in bp), k configurable per instrument** (*Ethan*: otherwise a wider spread is free money); tested that a wider spread gets fewer uninformed fills. Informed clients see moves before the bot (adverse selection). Fees per fill; slippage when the bot unwinds. Fills posted as idempotent trades; crash-and-restart tested. Runs in the main database; a scenario run shows *restricted* and *halted*.
+6. **P&L and CLI.** **Total = spread captured + inventory MTM − fees − slippage, slippage its own line, tested to the cent** (*Ethan*). Markouts measure adverse selection. `scripts/mm.py run|status|pause|resume|kill|reset|limits`.
+7. **API, dashboard, explanation.** Read-only `/api/marketmaker` and a *Market maker* section; **controls stay in the CLI** (decision 5, *Ethan*). Labelled "Simulated: not evidence of real profitability". README worked example: the same seed with and without informed flow. Strategy, risk check and venue behind interfaces the XRPL adapters (M7, M8) will implement.
+
+Done when: tests pass, live CLI runs with figures in CHANGELOG, Ethan checks the page in a browser. Quoting needs a fresh official curve, so the live demo runs in online mode on Ethan's machine; tests use the real fixture curves with a controlled clock.
+
 ## Where we are (resume point, 30 Oct 2026)
 
 Written so a fresh session (after `/clear`) can pick up exactly here. Read PROMPT.md, this file, ASSUMPTIONS.md and CHANGELOG.md first.
 
-**M1, M2 and M3 are done.** 151 tests pass. Every step is committed; the working tree is clean.
+**M1, M2 and M3 are done.** 164 tests pass (151 at the end of M3). Every step is committed.
 
-**Next: M4, the simulated market maker. Propose a step-by-step plan to Ethan and get it approved before building**, as was done for M3. The brief's §5 is the spec: quotes with full records (fair value, bid, ask, spread in currency and bp, data timestamps, inventory, limits in force, the reason for each adjustment); spread widening with duration, credit risk, data age, inventory, illiquidity and costs; tick size and minimum order size; limits enforced in the execution layer and persisted (inventory per instrument, portfolio exposure, order size, daily loss, open orders, data age, cash reserve, pause/resume, kill switch); quote nothing when data, valuation, balances or a risk check is invalid; simulated fills, fees, slippage and adverse selection; P&L split into spread captured, inventory mark-to-market and fees, on the dashboard. Strategy and risk sit behind interfaces shared with the paper and live adapters (M7, M8). Things M4 must respect from earlier milestones:
+**Now: M4, the simulated market maker. The plan is approved (see M4 plan above); step 1 is done and committed. Now: step 2, the quote model.** The brief's §5 is the spec: quotes with full records (fair value, bid, ask, spread in currency and bp, data timestamps, inventory, limits in force, the reason for each adjustment); spread widening with duration, credit risk, data age, inventory, illiquidity and costs; tick size and minimum order size; limits enforced in the execution layer and persisted (inventory per instrument, portfolio exposure, order size, daily loss, open orders, data age, cash reserve, pause/resume, kill switch); quote nothing when data, valuation, balances or a risk check is invalid; simulated fills, fees, slippage and adverse selection; P&L split into spread captured, inventory mark-to-market and fees, on the dashboard. Strategy and risk sit behind interfaces shared with the paper and live adapters (M7, M8). Things M4 must respect from earlier milestones:
 - `risk_increasing_allowed()`: illustrative, missing or stale curves block quoting (re-applied on every read, `with_current_gate`).
 - The fund share is never quoted off its NAV (secondary price comes in M5).
 - In a scenario database, `scenario_price` gives each bond's quoting state: *normal*, *restricted* (grace period; M4 defines what that allows) or *halted* (defaulted, matured).
-- Trades need a cash leg in the ledger (transfers are free of payment today), and should refuse transfers dated after a bond's final record date, which fixes risk R15.
+- Trades have a cash leg (`ledger.trade`, M4 step 1), and no units move after a bond's final record date (R15 fixed).
 - The main database is never advanced: the market maker runs there on a performing bond.
 
 **How the lifecycle works (build on it):** `debtlab/lifecycle.py`. `require_scenario()` guards everything. Simulation date in `db_meta`, moved by `advance_simulation`. A `Payment` (kind `coupon`, `principal` or `recovery`; record date from its `scheduled_date`) is fixed by `schedule()` and paid by `pay()`, one holder per `atomic` block. `pay_due()` builds the day's work in date order: payments, then for a defaulted bond `miss_payment`, `declare_default` and the recovery (built when its step runs). `instrument_status`: performing → grace_period → defaulted, or matured. `defaults` holds the terms fixed at the trigger. `scenario_price(conn, bond, curve, date)` prices every state; `default_losses()` and `unpaid()` report. CLI: `scripts/lifecycle.py status|pay|advance DATE|default BOND [--db PATH]`. `service.lifecycle_view` reads it all for `GET /api/lifecycle`, read-only, in one read transaction.
@@ -71,6 +85,6 @@ Written so a fresh session (after `/clear`) can pick up exactly here. Read PROMP
 
 **Not confirmed in a browser:** the illustrative-rates banner's per-currency failure list in online mode (it only appears when a source fails).
 
-**Open items:** confirm the ECB compounding convention (below); risk R14, a stalled source blocking startup (M9); risk R15 (M4).
+**Open items:** confirm the ECB compounding convention (below); risk R14, a stalled source blocking startup (M9). R15 fixed in M4 step 1.
 
 Open M2 item: read the ECB technical notes to confirm its spot rates are continuously compounded (currently taken from the data portal's label).

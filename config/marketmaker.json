@@ -1,0 +1,20 @@
+{
+  "_note": "SIMULATED market maker, M4. Parties are fictional; units come from a simulated tap issue of each bond and cash from a funding account outside the simulation. Every value here is an assumption (see ASSUMPTIONS.md).",
+  "parties": {
+    "market_maker": {"id": "market-maker", "name": "Market maker (simulated)",
+                     "description": "The bot's own account: inventory and cash it quotes from."},
+    "market": {"id": "market", "name": "Simulated market (clients)",
+               "description": "The other side of every client order in the simulation."},
+    "funding": {"id": "funding", "name": "Funding (outside the simulation)",
+                "description": "Where the simulation's starting cash comes from. May go negative, in cash only."}
+  },
+  "funded_on": "2026-01-02",
+  "units": {
+    "CENTURY-GBP-2126": {"market_maker": "1000000", "market": "2000000"},
+    "SHORT-USD-2029": {"market_maker": "1000000", "market": "2000000"}
+  },
+  "cash": {
+    "GBP": {"market_maker": "1500000", "market": "5000000"},
+    "USD": {"market_maker": "1500000", "market": "5000000"}
+  }
+}

@@ -20,6 +20,7 @@ from debtlab.marketdata.models import CurveSnapshot
 from debtlab.money import D
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
+FOREIGN_KEYS_OFF = "-- foreign-keys: off"  # first line of a migration that rebuilds a referenced table
 
 
 def connect(path: Path | str) -> sqlite3.Connection:
@@ -42,9 +43,18 @@ def migrate(conn: sqlite3.Connection, migrations_dir: Path = MIGRATIONS_DIR) -> 
     for f in sorted(migrations_dir.glob("*.sql")):
         if f.name in done:
             continue
+        sql = f.read_text(encoding="utf-8")
+        # Rebuilding a table others reference (SQLite's way to change a CHECK) needs foreign
+        # keys off: the pragma only works outside a transaction, so every reference is
+        # checked before committing instead.
+        rebuild = sql.startswith(FOREIGN_KEYS_OFF)
+        if rebuild:
+            conn.execute("PRAGMA foreign_keys=OFF")
         conn.execute("BEGIN")
         try:
-            _exec_script(conn, f.read_text(encoding="utf-8"))
+            _exec_script(conn, sql)
+            if rebuild and conn.execute("PRAGMA foreign_key_check").fetchall():
+                raise sqlite3.IntegrityError(f"{f.name} left a broken reference")
             conn.execute(
                 "INSERT INTO schema_migrations(name, applied_at) VALUES (?, ?)",
                 (f.name, _now()),
@@ -53,6 +63,9 @@ def migrate(conn: sqlite3.Connection, migrations_dir: Path = MIGRATIONS_DIR) -> 
         except Exception:
             conn.execute("ROLLBACK")
             raise
+        finally:
+            if rebuild:
+                conn.execute("PRAGMA foreign_keys=ON")
         applied.append(f.name)
     return applied
 

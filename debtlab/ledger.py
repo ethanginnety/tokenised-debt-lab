@@ -7,8 +7,9 @@ Balances are never stored: a balance is the sum of the lines up to a date, so
 "who held what on the record date" is a query, and history can't be edited.
 
 Assets are currencies (cash, e.g. USD) or instrument ids (units: face amount
-for a bond, shares for a fund). Only issuers may go negative: an issuer's
-negative balance is what it has issued and owes.
+for a bond, shares for a fund). Only issuers and the funding account may go
+negative: an issuer's negative balance is what it has issued and owes, the
+funding account's is the cash brought into the simulation from outside.
 """
 
 from __future__ import annotations
@@ -24,12 +25,18 @@ from pathlib import Path
 
 from debtlab.audit.db import atomic, record_event
 from debtlab.instruments import Instrument
-from debtlab.money import D, ZERO
+from debtlab.money import D, HUNDRED, ZERO, money
 from debtlab.pricing.bond import FixedRateBond
+from debtlab.pricing.engine import accrued_per_100
 
 ISSUER_PREFIX = "issuer:"
 CASH_PLACES = 2  # cents
 UNIT_PLACES = 4  # bond face to 1/100 cent, fund shares to 1/10,000
+
+# Parties that may hold a negative balance. Everyone else (test holders, the market
+# maker, the simulated market) can never go below zero, so nobody sells short.
+MAY_GO_NEGATIVE = {"issuer", "funding"}
+TRADING_ROLES = {"holder", "market_maker", "market"}
 
 
 class LedgerError(ValueError):
@@ -41,6 +48,17 @@ class Line:
     owner: str  # party id
     asset: str  # currency or instrument id
     amount: Decimal  # positive = received, negative = paid away
+
+
+@dataclass(frozen=True)
+class Settlement:
+    txn_id: str
+    posted: bool  # False if this exact trade was already booked
+    face: Decimal
+    clean_price: Decimal  # per 100 face, as quoted
+    accrued_per_100: Decimal  # zero when the bond trades flat
+    flat: bool
+    cash: Decimal  # face x (clean + accrued) / 100, to the cent
 
 
 def issuer_id(instrument_id: str) -> str:
@@ -107,7 +125,9 @@ def post(conn: sqlite3.Connection, txn_id: str, kind: str, effective_date: date,
         if unknown:
             raise LedgerError(f"unknown party {', '.join(unknown)}")
         for ln in lines:
-            if roles[ln.owner] == "holder":
+            if roles[ln.owner] == "funding" and not is_cash(ln.asset):
+                raise LedgerError(f"{ln.owner} is a funding account; it moves cash only")
+            if roles[ln.owner] not in MAY_GO_NEGATIVE:
                 _no_back_dating(conn, ln.owner, ln.asset, effective_date)
         for asset in {ln.asset for ln in lines if not is_cash(ln.asset)}:
             _books_open(conn, asset, effective_date, kind)
@@ -122,7 +142,7 @@ def post(conn: sqlite3.Connection, txn_id: str, kind: str, effective_date: date,
             [(txn_id, ln.owner, ln.asset, _canonical(ln.amount)) for ln in lines],
         )
         # No back-dating means the all-time balance is also the balance on every later date.
-        for owner, asset in {(ln.owner, ln.asset) for ln in lines if roles[ln.owner] == "holder"}:
+        for owner, asset in {(ln.owner, ln.asset) for ln in lines if roles[ln.owner] not in MAY_GO_NEGATIVE}:
             if balance(conn, owner, asset) < 0:
                 raise LedgerError(f"{owner}'s {asset} balance would go below zero")
         record_event(conn, "ledger_posted", {**content, "id": txn_id, "memo": memo},
@@ -162,11 +182,19 @@ def _books_open(conn: sqlite3.Connection, instrument_id: str, effective: date, k
     """Once a payment is scheduled, holdings on its record date are fixed: no unit movement
     dated on or before it, or who is owed what would no longer match the ledger. Once the
     principal (or a default recovery) is scheduled, the only movement left is redeeming
-    units from holders of record."""
+    units from holders of record. Units can't move after a bond's final record date at all,
+    except to be redeemed: principal is paid to, and redeemed from, the holders on that date."""
     row = conn.execute("SELECT MAX(record_date) AS closed, MAX(kind IN ('principal', 'recovery')) AS maturing"
                        " FROM payment_events WHERE instrument_id = ?", (instrument_id,)).fetchone()
     if row["maturing"] and kind != "redemption":
         raise LedgerError(f"{instrument_id} has reached its final payment; its units can only be redeemed")
+    final = conn.execute("SELECT final_record_date FROM bond_terms WHERE instrument_id = ?",
+                         (instrument_id,)).fetchone()
+    if final and kind != "redemption" and effective.isoformat() > final["final_record_date"]:
+        raise LedgerError(
+            f"{instrument_id} units can't move after its final record date {final['final_record_date']} "
+            f"(only be redeemed); a movement can't be dated {effective.isoformat()}"
+        )
     if row["closed"] and effective.isoformat() <= row["closed"]:
         raise LedgerError(
             f"{instrument_id} holdings are fixed up to its record date {row['closed']}; "
@@ -211,14 +239,15 @@ def holdings(conn: sqlite3.Connection, asset: str, as_of: date | None = None) ->
 
 
 def check_integrity(conn: sqlite3.Connection) -> list[str]:
-    """Problems found, if any: unbalanced transactions or holders below zero."""
+    """Problems found, if any: unbalanced transactions or a party below zero that may not be."""
     problems = []
     totals: dict[tuple[str, str], Decimal] = defaultdict(Decimal)
     for r in conn.execute("SELECT txn_id, asset, amount FROM ledger_entries"):
         totals[(r["txn_id"], r["asset"])] += D(r["amount"])
     problems += [f"{t} does not balance in {a}: {v}" for (t, a), v in totals.items() if v != 0]
+    roles = {p["id"]: p["role"] for p in parties(conn)}
     for owner, assets in balances(conn).items():
-        if not owner.startswith(ISSUER_PREFIX):
+        if roles.get(owner) not in MAY_GO_NEGATIVE:
             problems += [f"{owner} is below zero in {a}: {v}" for a, v in assets.items() if v < 0]
     return problems
 
@@ -228,18 +257,50 @@ def check_integrity(conn: sqlite3.Connection) -> list[str]:
 
 def transfer(conn: sqlite3.Connection, txn_id: str, sender: str, receiver: str, asset: str,
              amount: Decimal, effective_date: date, memo: str = "") -> bool:
-    """Move units or cash from one holder to another, free of payment.
-
-    Trading with a cash leg (delivery versus payment) comes with the market maker in M4.
-    """
+    """Move units or cash from one holder to another, free of payment. A sale is a `trade`."""
     if amount <= 0:
         raise LedgerError("a transfer amount must be positive")
     if sender == receiver:
         raise LedgerError("a holder can't transfer to itself")
-    if sender.startswith(ISSUER_PREFIX) or receiver.startswith(ISSUER_PREFIX):
-        raise LedgerError("transfers are between holders; issuers move units by issuing or redeeming")
+    _trading_parties(conn, sender, receiver,
+                     "transfers are between holders; issuers move units by issuing or redeeming")
     return post(conn, txn_id, "transfer", effective_date,
                 [Line(sender, asset, -amount), Line(receiver, asset, amount)], memo)
+
+
+def trade(conn: sqlite3.Connection, txn_id: str, bond: FixedRateBond, buyer: str, seller: str,
+          face: Decimal, clean_price: Decimal, trade_date: date, memo: str = "") -> Settlement:
+    """Delivery versus payment: units to the buyer and cash to the seller in one transaction.
+
+    Quotes are clean prices. The buyer pays clean plus accrued interest, except on a bond
+    in grace period or default, which trades flat: the price already includes the claim to
+    the missed coupon. Settles on the trade date (no T+1 yet). Idempotent by `txn_id`.
+    """
+    if face <= 0 or clean_price <= 0:
+        raise LedgerError("a trade needs a positive face amount and price")
+    if buyer == seller:
+        raise LedgerError("a party can't trade with itself")
+    _trading_parties(conn, buyer, seller, "trades are between holders, the market maker and the market")
+    flat = _trades_flat(conn, bond.id)
+    accrued = ZERO if flat else accrued_per_100(bond, trade_date)
+    cash = money(face * (clean_price + accrued) / HUNDRED)
+    posted = post(conn, txn_id, "trade", trade_date, [
+        Line(seller, bond.id, -face), Line(buyer, bond.id, face),
+        Line(buyer, bond.currency, -cash), Line(seller, bond.currency, cash),
+    ], memo)
+    return Settlement(txn_id, posted, face, clean_price, accrued, flat, cash)
+
+
+def _trading_parties(conn: sqlite3.Connection, a: str, b: str, message: str) -> None:
+    roles = _roles(conn, {a, b})
+    if any(roles.get(p, "holder") not in TRADING_ROLES for p in (a, b)):  # unknown parties: post() names them
+        raise LedgerError(message)
+
+
+def _trades_flat(conn: sqlite3.Connection, instrument_id: str) -> bool:
+    """A bond in grace period or default trades without accrued interest (see lifecycle)."""
+    row = conn.execute("SELECT status FROM instrument_status WHERE instrument_id = ?", (instrument_id,)).fetchone()
+    return row is not None and row["status"] in ("grace_period", "defaulted")
 
 
 # ---------------------------------------------------------------- seeding
@@ -264,6 +325,7 @@ def seed(conn: sqlite3.Connection, config: HoldersConfig, instruments: list[Inst
     by_id = {i.id: i for i in instruments}
     posted = 0
     with atomic(conn):
+        record_bond_terms(conn, instruments)
         for h in config.holders:
             add_party(conn, h["id"], h["name"], "holder", h.get("description", ""),
                       bool(h.get("payments_blocked", False)))
@@ -284,3 +346,16 @@ def seed(conn: sqlite3.Connection, config: HoldersConfig, instruments: list[Inst
             posted += post(conn, f"issue:{inst.id}", "issue", issued_on, lines,
                            memo=f"Starting positions in {inst.id} (simulated issuance)")
     return posted
+
+
+def record_bond_terms(conn: sqlite3.Connection, instruments: list[Instrument]) -> None:
+    """Store each bond's final record date, which the ledger enforces (see `_books_open`)."""
+    now = datetime.now(timezone.utc).isoformat()
+    for bond in (i for i in instruments if isinstance(i, FixedRateBond)):
+        final = bond.record_date(bond.maturity_date)  # counted from the scheduled date, before any roll
+        conn.execute(
+            "INSERT INTO bond_terms(instrument_id, final_record_date, updated_at) VALUES (?, ?, ?)"
+            " ON CONFLICT(instrument_id) DO UPDATE SET final_record_date = excluded.final_record_date,"
+            " updated_at = excluded.updated_at WHERE final_record_date != excluded.final_record_date",
+            (bond.id, final.isoformat(), now),
+        )

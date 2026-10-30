@@ -321,8 +321,24 @@ def test_matured_units_can_only_be_redeemed(conn):
         ledger.transfer(conn, "t-after", "dana", "alder", SHORT.id, D(1), date(2029, 3, 1))
 
 
-def test_units_moved_after_final_record_date_block_redemption(conn):
-    # Final record date is 2 Feb 2029 (15 days before the scheduled 17 Feb). A sale on 10 Feb leaves Alder unable to hand back the units it is paid for.
+def test_units_cant_move_after_final_record_date(conn):
+    # Risk R15, fixed in M4 step 1. The final record date is 2 Feb 2029 (15 days before the
+    # scheduled 17 Feb). A sale on 3 Feb is refused when posted, so principal runs on the holders of record.
+    with pytest.raises(LedgerError, match="can't move after its final record date 2029-02-02"):
+        ledger.transfer(conn, "t-feb", "alder", "birch", SHORT.id, D(1_000_000), date(2029, 2, 3))
+    ledger.transfer(conn, "t-rec", "alder", "birch", SHORT.id, D(1_000_000), date(2029, 2, 2))  # on it is fine
+    lifecycle.advance_simulation(conn, AFTER_MATURITY)
+    lifecycle.pay_due(conn, BONDS)
+    assert lifecycle.instrument_status(conn, SHORT.id)["status"] == "matured"
+    principal = entitlements(conn, "principal:SHORT-USD-2029:2029-02-19")
+    assert (D(principal["alder"]["units"]), D(principal["birch"]["units"])) == (D(3_000_000), D(4_000_000))
+    assert ledger.holdings(conn, SHORT.id) == {"dana": D(1_000_000)}  # on hold: still owed, still outstanding
+
+
+def test_redemption_guard_still_holds_without_bond_terms(conn):
+    # Defence in depth: if the ledger's check were missing, scheduling principal still refuses.
+    # A sale on 10 Feb leaves Alder unable to hand back the units it is paid for.
+    conn.execute("DELETE FROM bond_terms")
     ledger.transfer(conn, "t-feb", "alder", "birch", SHORT.id, D(1_000_000), date(2029, 2, 10))
     lifecycle.advance_simulation(conn, AFTER_MATURITY)
     with pytest.raises(LifecycleError, match="moved after its final record date 2029-02-02"):

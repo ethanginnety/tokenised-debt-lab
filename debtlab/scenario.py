@@ -16,13 +16,19 @@ from debtlab import ledger, lifecycle
 from debtlab.audit.db import connect, get_db_role, migrate, record_event, set_db_role
 from debtlab.config import ROOT, Settings
 from debtlab.instruments import load_instruments
+from debtlab.marketmaker.book import load_book_config, seed_book
 
 DEFAULT_SCENARIO_DB = ROOT / "data" / "scenario.sqlite3"
 SQLITE_SIDE_FILES = ("-wal", "-shm")  # WAL-mode companions that belong with the main file
 
 
-def create_scenario_db(path: Path, settings: Settings, now: datetime | None = None) -> Path | None:
-    """Create a fresh, seeded scenario database at `path`.
+def create_scenario_db(path: Path, settings: Settings, now: datetime | None = None,
+                       market_maker: bool = False) -> Path | None:
+    """Create a fresh, seeded scenario database at `path`, with the market maker's book if asked.
+
+    Without it the test holders are the only holders of record, so lifecycle figures
+    are those of M3; with it the market maker and the simulated market hold units too
+    and are paid like any holder.
 
     If one already exists it is archived first; returns the archive path, or None.
     Refuses to touch any existing database not marked 'scenario'.
@@ -37,9 +43,11 @@ def create_scenario_db(path: Path, settings: Settings, now: datetime | None = No
         set_db_role(conn, "scenario")
         instruments = load_instruments(settings.instruments_file)
         posted = ledger.seed(conn, ledger.load_holders_config(settings.holders_file), instruments)
+        if market_maker:
+            posted += seed_book(conn, load_book_config(settings.marketmaker_file), instruments)
         lifecycle.start_simulation(conn, now.date())  # the simulation starts today and only moves forward
         record_event(conn, "scenario_created", {
-            "path": str(path), "seed_transactions": posted,
+            "path": str(path), "seed_transactions": posted, "market_maker": market_maker,
             "archived_previous": str(archived) if archived else None,
         }, idempotency_key="scenario_created")
     finally:
