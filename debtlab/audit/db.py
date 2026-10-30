@@ -7,8 +7,11 @@ at the deployment milestone (M9).
 
 from __future__ import annotations
 
+import itertools
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -56,10 +59,50 @@ def migrate(conn: sqlite3.Connection, migrations_dir: Path = MIGRATIONS_DIR) -> 
 
 def _exec_script(conn: sqlite3.Connection, sql: str) -> None:
     # executescript() would commit our open transaction, so run statements one by one.
-    for stmt in (s.strip() for s in sql.split(";")):
-        lines = [ln for ln in stmt.splitlines() if not ln.strip().startswith("--")]
-        if "".join(lines).strip():
+    # Comments are stripped first so a ';' inside one can't split a statement.
+    # (Our migrations put no '--' or ';' inside string literals.)
+    code = "\n".join(ln.split("--", 1)[0] for ln in sql.splitlines())
+    for stmt in (s.strip() for s in code.split(";")):
+        if stmt:
             conn.execute(stmt)
+
+
+_savepoints = itertools.count()
+
+
+@contextmanager
+def atomic(conn: sqlite3.Connection) -> Iterator[None]:
+    """All-or-nothing block. Nests safely (SQLite savepoints), so a function that
+    writes atomically can be called inside a larger atomic block."""
+    name = f"sp{next(_savepoints)}"
+    conn.execute(f"SAVEPOINT {name}")
+    try:
+        yield
+    except BaseException:
+        conn.execute(f"ROLLBACK TO {name}")
+        conn.execute(f"RELEASE {name}")
+        raise
+    conn.execute(f"RELEASE {name}")
+
+
+DB_ROLES = ("main", "scenario")
+
+
+def get_db_role(conn: sqlite3.Connection) -> str | None:
+    """'main' or 'scenario' (None for a database nobody has claimed yet)."""
+    row = conn.execute("SELECT value FROM db_meta WHERE key = 'role'").fetchone()
+    return row["value"] if row else None
+
+
+def set_db_role(conn: sqlite3.Connection, role: str) -> None:
+    """Mark what the database is for. Set once: a main database never becomes a scenario."""
+    if role not in DB_ROLES:
+        raise ValueError(f"database role must be one of {DB_ROLES}")
+    current = get_db_role(conn)
+    if current is None:
+        conn.execute("INSERT INTO db_meta(key, value) VALUES ('role', ?)", (role,))
+    elif current != role:
+        raise ValueError(f"this is already a {current} database; it can't become {role}")
 
 
 def _now() -> str:

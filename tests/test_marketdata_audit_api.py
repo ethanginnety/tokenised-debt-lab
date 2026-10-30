@@ -308,3 +308,11 @@ def test_export_snapshot_arguments(argv, out, full):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod.parse_args(argv) == (Path(out), full)
+
+
+def test_semicolon_in_a_migration_comment_is_harmless(tmp_path):
+    (tmp_path / "001_x.sql").write_text(
+        "-- a comment; with a semicolon\nCREATE TABLE t (\n  a TEXT -- also; here\n);\n", encoding="utf-8")
+    conn = connect(":memory:")
+    assert migrate(conn, tmp_path) == ["001_x.sql"]
+    conn.execute("INSERT INTO t(a) VALUES ('ok')")

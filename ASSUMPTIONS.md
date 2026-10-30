@@ -16,6 +16,19 @@ Every modelling or technical choice made without explicit instruction. Each one 
 | NAV and quoting | A reported NAV never allows quoting or trading. | The brief: NAV is not an executable price. A secondary-market price arrives in M5. |
 | Latest NAV | The report with the latest as-of date; a later restatement of the same date replaces it. | |
 
+## Ledger
+
+| Item | Assumption | Why |
+|---|---|---|
+| Test holders | Alder Pension Fund, Birch Family Office, Cedar Insurance, Dana Retail, all fictional and labelled "(test)". Short bond $10m face (4/3/2/1m), century bond £5m (2/1.5/1.5m; Dana holds none), fund 100,000 shares (40/25/25/10k). | A few holders of different sizes are enough to check per-holder sums. |
+| Payments blocked | Dana has a compliance hold: amounts owed to it will be recorded as unpaid, not paid (M3 step 3). | Gives "unpaid amounts" a concrete case outside default. |
+| Starting positions | Created by an issuance transaction dated the bond's issue date (the fund: 2 Jan 2026). No cash changes hands at issue; holders start with no cash. | The lifecycle only needs units; cash arrives through payments. |
+| Units | Bonds in face amount of their currency; fund in shares. Cash to 2 decimal places, units to 4. | |
+| Issuer accounts | Only issuers may go negative; an issuer's balance is minus what it has issued (units) or paid out (cash). Holders can never go below zero. | Standard double entry; no short selling in a holder ledger. |
+| No back-dating | A holder's movement can't be dated before an earlier movement in the same account. | Keeps every past balance, and so every record date, fixed once later activity exists. |
+| Transfers | Between holders only, free of payment. Trading with a cash leg comes with the market maker (M4). | |
+| Main database | Seeded with the same holders on start, but its simulation date is never advanced. | The market maker (M4) needs a performing short bond. |
+
 ## Pricing
 
 | Item | Assumption |

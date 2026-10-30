@@ -1,0 +1,17 @@
+{
+  "_note": "FICTIONAL test holders for the simulated ledger. None is a real person or organisation. Bond positions are face amounts in the bond's currency; fund positions are shares.",
+  "holders": [
+    {"id": "alder", "name": "Alder Pension Fund (test)", "description": "Large institutional holder."},
+    {"id": "birch", "name": "Birch Family Office (test)", "description": "Mid-sized private investor."},
+    {"id": "cedar", "name": "Cedar Insurance (test)", "description": "Insurer holding bonds to match long liabilities."},
+    {"id": "dana", "name": "Dana Retail (test)", "description": "Small holder whose payments are on a compliance hold, so amounts owed to it are recorded as unpaid.", "payments_blocked": true}
+  ],
+  "positions": [
+    {"instrument": "SHORT-USD-2029", "issued_on": "2026-02-17",
+     "holdings": {"alder": "4000000", "birch": "3000000", "cedar": "2000000", "dana": "1000000"}},
+    {"instrument": "CENTURY-GBP-2126", "issued_on": "2026-03-30",
+     "holdings": {"alder": "2000000", "birch": "1500000", "cedar": "1500000"}},
+    {"instrument": "PCF-USD-SIM", "issued_on": "2026-01-02",
+     "holdings": {"alder": "40000", "birch": "25000", "cedar": "25000", "dana": "10000"}}
+  ]
+}

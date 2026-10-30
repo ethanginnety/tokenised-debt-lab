@@ -271,6 +271,8 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     chips.replaceChildren(
       el("span", { class: "chip sim", text: "SIMULATION" }),
       el("span", { class: "chip " + (illustrative ? "warn" : "ok"), text: illustrative ? "Illustrative rates" : "Official daily rates" }),
+      ...(d.database ? [el("span", { class: "chip" + (d.database.role === "scenario" ? " warn" : ""), title: d.database.path,
+        text: (d.database.role === "scenario" ? "SCENARIO database · " : "Main database · ") + d.database.path })] : []),
       el("span", { class: "chip", text: "Settles " + d.settle }),
       el("span", { class: "chip", text: (live ? "Updated " : "Snapshot ") + when(d.last_refresh || d.generated_at) }),
     );
@@ -297,7 +299,7 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     assumptions([...bonds, ...(d.funds || [])], d.curves);
     auditLog(d.events);
     document.getElementById("footer").textContent =
-      `Version ${d.version} · data mode ${d.data_mode} · page generated ${when(d.generated_at)}. Educational prototype: simulated instruments only. Nothing here is a real security, an offer, or a public-blockchain asset.`;
+      `Version ${d.version} · data mode ${d.data_mode} · ${d.database ? d.database.role + " database " + d.database.path + " · " : ""}page generated ${when(d.generated_at)}. Educational prototype: simulated instruments only. Nothing here is a real security, an offer, or a public-blockchain asset.`;
   }
 
   function bondPanel(b, i) {

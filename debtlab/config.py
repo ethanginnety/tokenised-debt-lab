@@ -19,6 +19,7 @@ class Settings:
     instruments_file: Path
     host: str
     port: int
+    holders_file: Path = ROOT / "config" / "holders.json"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -36,4 +37,5 @@ class Settings:
             ),
             host=os.getenv("DEBTLAB_HOST", "127.0.0.1"),
             port=int(os.getenv("DEBTLAB_PORT", "8000")),
+            holders_file=Path(os.getenv("DEBTLAB_HOLDERS", str(ROOT / "config" / "holders.json"))),
         )

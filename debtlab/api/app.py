@@ -14,8 +14,9 @@ from pathlib import Path
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, Response
 
-from debtlab.audit.db import connect, migrate, record_event, recent_events
-from debtlab.config import Settings
+from debtlab import ledger
+from debtlab.audit.db import connect, get_db_role, migrate, record_event, recent_events, set_db_role
+from debtlab.config import ROOT, Settings
 from debtlab.instruments import FundShare, load_instruments
 from debtlab.pricing.bond import FixedRateBond
 from debtlab.service import curve_view, fund_view, load_curves, load_navs, value_all, with_current_gate
@@ -43,6 +44,13 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _display_path(path: Path) -> str:
+    try:
+        return Path(path).resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 class State:
     def __init__(self, settings: Settings, clock: Callable[[], datetime] = utc_now) -> None:
         self.settings = settings
@@ -50,7 +58,12 @@ class State:
         self.lock = threading.Lock()
         self.conn = connect(settings.db_path)
         migrate(self.conn)
+        if get_db_role(self.conn) is None:
+            set_db_role(self.conn, "main")  # scenario databases are only made by scripts/new_scenario_db.py
+        self.db_role = get_db_role(self.conn)
         instruments = load_instruments(settings.instruments_file)
+        # Test holders and their starting positions (idempotent). Main is seeded too but never advanced.
+        ledger.seed(self.conn, ledger.load_holders_config(settings.holders_file), instruments)
         self.bonds = [i for i in instruments if isinstance(i, FixedRateBond)]
         self.funds = [i for i in instruments if isinstance(i, FundShare)]
         self.curves: dict = {}
@@ -96,6 +109,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], datetime] =
             "generated_at": now.isoformat(),
             "version": VERSION,
             "mode": "simulation",
+            "database": {"role": s.db_role, "path": _display_path(settings.db_path)},
             "data_mode": settings.data_mode,
             "settle": s.settle_date().isoformat(),
             "last_refresh": s.last_refresh.isoformat() if s.last_refresh else None,

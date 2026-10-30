@@ -40,6 +40,18 @@ All state is in the SQLite file (`data/debtlab.sqlite3` by default). Restarting 
 
 To start completely fresh, stop the app and delete the `data/` folder. You lose the audit history.
 
+## Main and scenario databases
+
+The app's normal database (`data/debtlab.sqlite3`) is marked **main**. Lifecycle demos (advancing the simulation date, triggering the default) run only in a separate database marked **scenario**, so the main one keeps a performing short bond for the market maker. The dashboard header says which one it is reading.
+
+```powershell
+python scripts/new_scenario_db.py                       # creates data/scenario.sqlite3 with the test holders
+$env:DEBTLAB_DB_PATH = "data/scenario.sqlite3"; python -m debtlab.api
+Remove-Item Env:DEBTLAB_DB_PATH                         # back to the main database
+```
+
+Run `new_scenario_db.py` again to start the demo from scratch. Stop the app first (Windows locks open files). The previous scenario database is moved to `data/archive/`, never deleted. The script refuses to replace any database that isn't marked as a scenario.
+
 ## Share a point-in-time view
 
 ```bash
