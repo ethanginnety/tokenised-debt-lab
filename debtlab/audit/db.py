@@ -89,9 +89,10 @@ DB_ROLES = ("main", "scenario")
 
 
 def get_db_role(conn: sqlite3.Connection) -> str | None:
-    """'main' or 'scenario' (None for a database nobody has claimed yet)."""
-    row = conn.execute("SELECT value FROM db_meta WHERE key = 'role'").fetchone()
-    return row["value"] if row else None
+    """'main' or 'scenario' (None for a database nobody has claimed yet, or one made before roles)."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='db_meta'").fetchone():
+        return None  # read without migrating, so an old database isn't changed by asking
+    return get_meta(conn, "role")
 
 
 def set_db_role(conn: sqlite3.Connection, role: str) -> None:
@@ -103,6 +104,16 @@ def set_db_role(conn: sqlite3.Connection, role: str) -> None:
         conn.execute("INSERT INTO db_meta(key, value) VALUES ('role', ?)", (role,))
     elif current != role:
         raise ValueError(f"this is already a {current} database; it can't become {role}")
+
+
+def get_meta(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM db_meta WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute("INSERT INTO db_meta(key, value) VALUES (?, ?)"
+                 " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
 
 
 def _now() -> str:

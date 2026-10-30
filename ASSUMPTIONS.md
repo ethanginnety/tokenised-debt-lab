@@ -29,6 +29,20 @@ Every modelling or technical choice made without explicit instruction. Each one 
 | Transfers | Between holders only, free of payment. Trading with a cash leg comes with the market maker (M4). | |
 | Main database | Seeded with the same holders on start, but its simulation date is never advanced. | The market maker (M4) needs a performing short bond. |
 
+## Lifecycle (scenario database only)
+
+| Item | Assumption | Why |
+|---|---|---|
+| Simulation date | Starts on the day the scenario database is created, stored in `db_meta`, only moves forward, advanced by hand. Same ledger plus same date gives the same result. | Deterministic, repeatable demos. |
+| Record date | Short USD bond: 15 calendar days before payment. Century GBP bond: 1 business day before (weekends only; no bank holidays). Per instrument in `config/instruments.json`. Holders at the end of the record date are paid. | Common US corporate and UK/CREST conventions. |
+| Books close at the record date | Once a payment is scheduled, the ledger refuses movements in that bond dated on or before its record date. | Otherwise a back-dated transfer could change who "should" have been paid after the fact. |
+| Entitlement | Units × coupon per 100 ÷ 100, rounded to cents per holder (banker's rounding). The exact total minus the rounded total is stored as the rounding residue. | Cash settles in cents; the residue makes rounding visible. |
+| Payment date in the ledger | A coupon's ledger transaction is dated its scheduled payment date (after the weekend roll), even if the run happens later. | The coupon belongs to that date; late payment of an old coupon isn't modelled yet. |
+| Due coupons | Every coupon whose payment date is on or before the simulation date, oldest first. The final coupon is included; principal comes with maturity (step 4). | |
+| Blocked holder | Dana's entitlement is recorded as *unpaid (payments blocked)* when the coupon is scheduled; nothing is posted. The coupon's status is then *partly paid*. A hold can't be lifted yet. | Gives "unpaid amounts" a concrete case outside default. |
+| Payment status | *scheduled* → *in progress* → *paid* (all holders) or *partly paid* (some still unpaid). *Missed* is reserved for the default scenario (step 5). | |
+| Instrument status table | Deferred to step 4 (maturity), the first step that changes an instrument's status. The approved plan listed it in migration 004. | No unused table. |
+
 ## Pricing
 
 | Item | Assumption |
@@ -52,7 +66,7 @@ Every modelling or technical choice made without explicit instruction. Each one 
 
 | Item | Assumption |
 |---|---|
-| Source failures | Any failure loading a currency's curve (download, parse, bootstrap) is recorded with its type and falls back to that currency's last stored official curve; other currencies load normally. |
+| Source failures | Any failure loading a currency's curve (download, parse, bootstrap) is recorded with its type and falls back to that currency's last stored official curve; other currencies load normally. The dashboard banner lists each failure from the last refresh. In offline mode no source is contacted, and the banner says offline mode was chosen rather than that anything failed. |
 | Bonds outside their life | A bond is not priced before its issue date or on/after maturity; it shows "not priced" with the reason and the other bonds are unaffected. |
 | Freshness | A daily curve becomes **stale after 96 hours**, measured from midnight UTC on its observation date. That allows a weekend plus one late publication. |
 | Illustrative GBP curve | 10Y and 30Y set near levels reported in the press on 14 Oct 2026 (10Y about 5.4%, 30Y about 6%). Every other point is invented for shape. |

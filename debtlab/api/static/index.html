@@ -278,14 +278,22 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     );
     if (live) { const b = el("button", { type: "button", text: "Refresh prices" }); b.addEventListener("click", () => refresh(b)); chips.append(b); }
 
+    // Say why: offline mode is a choice; a failed source is something that happened.
     const banner = document.getElementById("banner");
-    if (illustrative) {
-      banner.hidden = false;
-      banner.replaceChildren(
-        el("strong", { text: "Illustrative rates: not market data." }),
-        el("span", { text: "The prices below are real calculations on made-up government curves, because this copy was run where official data sources weren't reachable. Run it in online mode on your own machine to price from official data." }),
-      );
-    } else banner.hidden = true;
+    const failures = d.source_failures || [];
+    const notes = [];
+    if (illustrative) notes.push(
+      el("strong", { text: "Illustrative rates: not market data." }),
+      el("span", { text: d.data_mode === "offline"
+        ? "The prices below are real calculations on made-up government curves, because the app is running in offline mode, as chosen in its settings (DEBTLAB_DATA_MODE=offline). Set DEBTLAB_DATA_MODE=online to price from official daily data."
+        : "The prices below are real calculations on made-up government curves." }));
+    if (failures.length) notes.push(
+      el("strong", { text: "Official data couldn't be loaded for " + failures.map((f) => f.currency).join(", ") + " on the last refresh." }),
+      ...failures.map((f) => el("span", { text: f.currency + ": " + f.error_type + " (" + f.error + "). " + (f.fallback_observation_date
+        ? "Using the last stored official curve, observed " + f.fallback_observation_date + "; its age is shown below."
+        : "No official curve is stored, so bonds on this curve aren't priced.") })));
+    banner.hidden = !notes.length;
+    banner.replaceChildren(...notes);
 
     // bond panels
     const wrap = document.getElementById("bonds");

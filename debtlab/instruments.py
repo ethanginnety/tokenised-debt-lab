@@ -102,6 +102,8 @@ def _bond(item: dict) -> FixedRateBond:
         credit_spread=bp(item["credit_spread_bp"]),
         description=item.get("description", ""),
         assumptions=tuple(item.get("assumptions", [])),
+        record_days=int(item.get("record_date", {}).get("days_before", 1)),
+        record_day_basis=item.get("record_date", {}).get("basis", "business"),
     )
 
 

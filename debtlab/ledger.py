@@ -109,6 +109,8 @@ def post(conn: sqlite3.Connection, txn_id: str, kind: str, effective_date: date,
         for ln in lines:
             if roles[ln.owner] == "holder":
                 _no_back_dating(conn, ln.owner, ln.asset, effective_date)
+        for asset in {ln.asset for ln in lines if not is_cash(ln.asset)}:
+            _books_open(conn, asset, effective_date)
 
         conn.execute(
             "INSERT INTO ledger_txns(id, kind, effective_date, fingerprint, memo, created_at)"
@@ -153,6 +155,18 @@ def _no_back_dating(conn: sqlite3.Connection, owner: str, asset: str, effective:
         raise LedgerError(
             f"{owner}'s {asset} account already has a movement on {row['latest']}; "
             f"a new one can't be dated before it ({effective.isoformat()})"
+        )
+
+
+def _books_open(conn: sqlite3.Connection, instrument_id: str, effective: date) -> None:
+    """Once a payment is scheduled, holdings on its record date are fixed: no unit movement
+    dated on or before it, or who is owed what would no longer match the ledger."""
+    row = conn.execute("SELECT MAX(record_date) AS closed FROM payment_events WHERE instrument_id = ?",
+                       (instrument_id,)).fetchone()
+    if row["closed"] and effective.isoformat() <= row["closed"]:
+        raise LedgerError(
+            f"{instrument_id} holdings are fixed up to its record date {row['closed']}; "
+            f"a movement can't be dated {effective.isoformat()}"
         )
 
 

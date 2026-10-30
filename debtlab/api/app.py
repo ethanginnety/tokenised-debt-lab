@@ -67,6 +67,7 @@ class State:
         self.bonds = [i for i in instruments if isinstance(i, FixedRateBond)]
         self.funds = [i for i in instruments if isinstance(i, FundShare)]
         self.curves: dict = {}
+        self.source_failures: list[dict] = []  # official sources that failed on the last refresh
         self.navs: dict = {}
         self.valuations: list[dict] = []
         self.last_refresh: datetime | None = None
@@ -78,7 +79,9 @@ class State:
     def refresh(self) -> None:
         with self.lock:
             now = self.clock()
-            self.curves = load_curves(self.conn, self.settings, now)
+            failures: list[dict] = []
+            self.curves = load_curves(self.conn, self.settings, now, failures)
+            self.source_failures = failures
             self.navs = load_navs(self.conn, self.funds)
             self.valuations = value_all(
                 self.conn, self.bonds, self.curves, self.settle_date(), self.settings, now
@@ -114,6 +117,7 @@ def create_app(settings: Settings | None = None, clock: Callable[[], datetime] =
             "settle": s.settle_date().isoformat(),
             "last_refresh": s.last_refresh.isoformat() if s.last_refresh else None,
             "curves": [curve_view(c, now, settings.max_curve_age_hours) for c in s.curves.values()],
+            "source_failures": s.source_failures,
             "instruments": with_current_gate(s.valuations, s.curves, now, settings.max_curve_age_hours),
             "funds": [fund_view(f, s.navs.get(f.id), now) for f in s.funds],
             "events": recent_events(s.conn, limit=100),

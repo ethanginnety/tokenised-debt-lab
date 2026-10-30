@@ -12,7 +12,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from debtlab import ledger
+from debtlab import ledger, lifecycle
 from debtlab.audit.db import connect, get_db_role, migrate, record_event, set_db_role
 from debtlab.config import ROOT, Settings
 from debtlab.instruments import load_instruments
@@ -37,6 +37,7 @@ def create_scenario_db(path: Path, settings: Settings, now: datetime | None = No
         set_db_role(conn, "scenario")
         instruments = load_instruments(settings.instruments_file)
         posted = ledger.seed(conn, ledger.load_holders_config(settings.holders_file), instruments)
+        lifecycle.start_simulation(conn, now.date())  # the simulation starts today and only moves forward
         record_event(conn, "scenario_created", {
             "path": str(path), "seed_transactions": posted,
             "archived_previous": str(archived) if archived else None,
@@ -49,8 +50,7 @@ def create_scenario_db(path: Path, settings: Settings, now: datetime | None = No
 def _archive(path: Path, now: datetime) -> Path:
     conn = connect(path)
     try:  # read the role without changing the file: a database with no role table isn't a scenario
-        has_meta = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='db_meta'").fetchone()
-        role = get_db_role(conn) if has_meta else None
+        role = get_db_role(conn)
     finally:
         conn.close()
     if role != "scenario":

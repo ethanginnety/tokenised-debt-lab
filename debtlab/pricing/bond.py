@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from debtlab.money import D
@@ -12,9 +12,12 @@ from debtlab.pricing.dates import (
     SUPPORTED_DAY_COUNTS,
     accrual_fraction,
     add_months,
+    business_days_before,
     coupon_schedule,
     following,
 )
+
+RECORD_DAY_BASES = ("business", "calendar")
 
 
 @dataclass(frozen=True)
@@ -51,12 +54,22 @@ class FixedRateBond:
     credit_spread: Decimal  # fraction over the benchmark, an ASSUMPTION
     description: str = ""
     assumptions: tuple[str, ...] = field(default_factory=tuple)
+    # Record date: holders at the end of this day are paid. Counted back from the payment date.
+    record_days: int = 1
+    record_day_basis: str = "business"  # "business" or "calendar"
 
     def __post_init__(self) -> None:
         if self.day_count not in SUPPORTED_DAY_COUNTS:
             raise ValueError(f"unsupported day count {self.day_count}")
         if self.face <= 0:
             raise ValueError("face value must be positive")
+        if self.record_day_basis not in RECORD_DAY_BASES or self.record_days < 1:
+            raise ValueError("record date must be at least 1 business or calendar day before payment")
+
+    def record_date(self, pay_date: date) -> date:
+        if self.record_day_basis == "business":
+            return business_days_before(pay_date, self.record_days)
+        return pay_date - timedelta(days=self.record_days)
 
     def periods(self) -> list[Period]:
         dates = coupon_schedule(self.issue_date, self.maturity_date, self.frequency)

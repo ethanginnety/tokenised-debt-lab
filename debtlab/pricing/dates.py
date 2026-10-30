@@ -52,6 +52,15 @@ def following(d: date) -> date:
     return d
 
 
+def business_days_before(d: date, n: int) -> date:
+    """The business day `n` business days before `d` (weekends skipped)."""
+    while n > 0:
+        d -= timedelta(days=1)
+        if is_business_day(d):
+            n -= 1
+    return d
+
+
 def coupon_schedule(issue: date, maturity: date, frequency: int) -> list[date]:
     """Accrual dates from issue to maturity, generated backwards from maturity.
 

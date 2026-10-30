@@ -15,11 +15,13 @@
       "day_count": "ACT/ACT-ICMA",
       "benchmark": "GBP",
       "credit_spread_bp": "95",
+      "record_date": {"days_before": 1, "basis": "business"},
       "assumptions": [
         "Coupon 6.00% paid annually: assumed. The real tranche's coupon and payment frequency were not available in sources checked.",
         "Issue date 30 Mar 2026: assumed from reporting dated 31 Mar 2026.",
         "Credit spread 95 bp over gilts: assumed for a very highly rated issuer at a 100-year tenor. Not observed.",
-        "No gilt curve reaches 100 years, so rates beyond the curve's last point are held flat."
+        "No gilt curve reaches 100 years, so rates beyond the curve's last point are held flat.",
+        "Record date 1 business day before each payment, as is usual for sterling bonds settled in CREST: assumed."
       ]
     },
     {
@@ -36,9 +38,11 @@
       "day_count": "30/360",
       "benchmark": "USD",
       "credit_spread_bp": "110",
+      "record_date": {"days_before": 15, "basis": "calendar"},
       "assumptions": [
         "Issuer, single-A rating and 4.50% semi-annual coupon: assumed.",
-        "Credit spread 110 bp over Treasuries: assumed for a single-A three-year bond. Not observed."
+        "Credit spread 110 bp over Treasuries: assumed for a single-A three-year bond. Not observed.",
+        "Record date 15 calendar days before each payment, a common US corporate convention: assumed."
       ]
     },
     {

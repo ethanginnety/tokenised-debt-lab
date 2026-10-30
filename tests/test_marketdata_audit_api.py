@@ -149,6 +149,7 @@ def test_api_offline_end_to_end(tmp_path):
         # Illustrative curves compound at each bond's own frequency.
         assert [century["curve_compounding"], ids["SHORT-USD-2029"]["curve_compounding"]] == [1, 2]
         assert all(cv["kind"] == "illustrative" for cv in o["curves"])
+        assert o["data_mode"] == "offline" and o["source_failures"] == []  # offline by choice, nothing failed
         kinds = {e["kind"] for e in o["events"]}
         assert {"app_started", "curve_loaded", "valuation"} <= kinds
         # Refreshing on identical data and date does not duplicate valuation events.
@@ -170,6 +171,17 @@ def test_online_without_gbp_source_leaves_century_unpriced(tmp_path, monkeypatch
         o = c.get("/api/overview").json()
         assert all(i["status"] == "no_data" for i in o["instruments"])
         assert o["curves"] == []
+        failures = {f["currency"]: f for f in o["source_failures"]}
+        assert set(failures) == {"USD", "GBP"}
+        assert failures["GBP"] == {"currency": "GBP", "error_type": "MarketDataError", "error": "unreachable",
+                                   "fallback_observation_date": None}
+
+
+def test_banner_separates_offline_choice_from_source_failures():
+    page = (Path(__file__).parent.parent / "debtlab" / "api" / "static" / "index.html").read_text(encoding="utf-8")
+    assert "weren't reachable" not in page  # offline mode is a choice, not an outage
+    assert "running in offline mode, as chosen in its settings" in page
+    assert "source_failures" in page and "couldn't be loaded for" in page
 
 
 def test_snapshot_export_escapes_script_tags():

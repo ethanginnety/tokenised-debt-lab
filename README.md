@@ -94,13 +94,14 @@ debtlab/
   service.py            loads curves, values instruments, records events
   ledger.py             double-entry holder ledger: balances as of a date, transfers, seeding
   scenario.py           creates fresh scenario databases for lifecycle demos
+  lifecycle.py          simulation date, record dates, idempotent coupon payments (scenario only)
   instruments.py        loads config/instruments.json
   api/                  FastAPI app and the dashboard page
 config/instruments.json simulated instruments and their assumptions
 config/holders.json     fictional test holders and their starting positions
 migrations/             database schema
 tests/                  automated tests (QuantLib used as an independent reference)
-scripts/                test runner, snapshot export, new_scenario_db.py
+scripts/                test runner, snapshot export, new_scenario_db.py, lifecycle.py
 ```
 
 ## Documentation

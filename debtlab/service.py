@@ -23,11 +23,13 @@ from debtlab.pricing.engine import price_yield_profile, value_bond
 
 
 def load_curves(
-    conn: sqlite3.Connection, settings: Settings, now: datetime | None = None
+    conn: sqlite3.Connection, settings: Settings, now: datetime | None = None,
+    failures: list[dict] | None = None,
 ) -> dict[str, CurveSnapshot]:
     """Offline: illustrative curves. Online: official sources, else last stored.
 
-    Online mode never falls back to illustrative data.
+    Online mode never falls back to illustrative data. Each source that fails is
+    appended to `failures` (if given), so the dashboard can say what went wrong.
     """
     now = now or datetime.now(timezone.utc)
     curves: dict[str, CurveSnapshot] = {}
@@ -56,6 +58,10 @@ def load_curves(
                 # Last valid observation, flagged by its age. Stored par curves
                 # (from before the bootstrap existed) are converted on the way out.
                 curves[ccy] = to_zero_snapshot(previous)
+            if failures is not None:
+                failures.append({"currency": ccy, "error_type": type(exc).__name__, "error": str(exc),
+                                 "fallback_observation_date":
+                                     previous.observation_date.isoformat() if previous else None})
     return curves
 
 
