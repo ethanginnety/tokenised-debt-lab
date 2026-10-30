@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — 30 Oct 2026
+
+- **Dashboard redesign (visual only).** Navy sidebar with section links (Overview, Bonds, Fund, Lifecycle, Risk, Curves, Data sources, Audit log) that highlight while scrolling and become a top menu on phones; a slim status bar; key-figure tiles; status pills; long explanations moved behind "i" buttons and expandable rows; Manrope for text, IBM Plex Mono for figures; a blue palette in light and dark; charts with faint gridlines, a crosshair tooltip and labels at the line ends. Same API fields, figures and calculations; all tests still pass. The curve chart's tooltip snaps to published tenors and shows the held-flat rate past a curve's end; it never interpolates. Checked in a browser by Ethan. Warning colour then changed from amber to orange (banners, warning chips and pills, notes, the due marker on the default timeline).
+
 ## 0.3.0-dev — 30 Oct 2026
 
 Milestone 3 (complete). Marked done by Ethan on 30 Oct 2026 after checking the dashboard in a browser.

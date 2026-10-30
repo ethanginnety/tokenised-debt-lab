@@ -2,244 +2,452 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: a fixed-income desk sheet. Status strip, then one panel per bond, then rate-risk charts, then provenance and the audit trail. */
+/* Layout: navy sidebar with section links, slim status bar, then numbers first:
+   key-figure tiles, one panel per instrument, lifecycle, risk, curves, sources, audit.
+   Long explanations sit behind the small "i" buttons. Spacing on an 8px grid. */
 :root {
-  --bg: #f2f4f6;
-  --panel: #ffffff;
-  --ink: #17212b;
-  --muted: #5a6773;
-  --line: #d8dee4;
-  --soft: #e9edf1;
-  --s1: #1d5f8f;          /* series 1: century bond / GBP */
-  --s2: #a35d12;          /* series 2: short bond / USD */
-  --s3: #5b4b9a;          /* series 3: private-credit fund */
-  --warn-bg: #fff1cf;
-  --warn-ink: #6e4600;
-  --warn-line: #e6c375;
-  --good: #23704a;
-  --bad: #a83232;
-  --font-display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
-  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bg: #F4F7FB;
+  --panel: #FFFFFF;
+  --ink: #0B1B2E;
+  --muted: #5B6B7F;
+  --line: #E2E8F0;
+  --accent: #1F5EFF;
+  --tint: #EAF0FF;
+  --navy: #0B2545;
+  --pos: #0E9F6E;
+  --neg: #D64545;
+  --warn: #EA580C;          /* warning: dots, bars, borders */
+  --warn-ink: #C2410C;      /* warning text: 4.7:1 on the tint (#EA580C would be 3.2:1) */
+  --warn-tint: #FFF1E8;
+  --warn-line: #FDBA8C;
+  --soft: #F7F9FC;          /* row hover, sub-panels */
+  --grid: #EDF1F6;          /* chart gridlines */
+  --tip: #0B1B2E;           /* chart tooltip */
+  --s1: #1F5EFF;            /* series 1: century bond / GBP */
+  --s2: #7B8BA3;            /* series 2: short bond / USD */
+  --shadow: 0 1px 2px rgba(11, 27, 46, 0.04), 0 2px 8px rgba(11, 27, 46, 0.03);
+  --font-ui: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --side-w: 232px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e1318; --panel: #151c23; --ink: #e3e8ed; --muted: #95a2ae; --line: #29333d; --soft: #1c252e;
-    --s1: #6aaee0; --s2: #e0a35c; --s3: #ab9ce8; --warn-bg: #36290d; --warn-ink: #f1c977; --warn-line: #6b5420;
-    --good: #6cc48f; --bad: #ef8080; color-scheme: dark;
+    --bg: #070F1C; --panel: #0E1A2C; --ink: #E6EDF7; --muted: #8A9BB2; --line: #1C2A40;
+    --accent: #4C8DFF; --tint: #12234A; --pos: #34D399; --neg: #F87171; --warn: #FB923C;
+    --warn-ink: #FB923C; --warn-tint: #2A1608; --warn-line: #7C2D12;
+    --soft: #112036; --grid: #16243A; --tip: #22344F; --s1: #4C8DFF; --s2: #A3B3C9;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3); color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0e1318; --panel: #151c23; --ink: #e3e8ed; --muted: #95a2ae; --line: #29333d; --soft: #1c252e;
-  --s1: #6aaee0; --s2: #e0a35c; --s3: #ab9ce8; --warn-bg: #36290d; --warn-ink: #f1c977; --warn-line: #6b5420;
-  --good: #6cc48f; --bad: #ef8080; color-scheme: dark;
+  --bg: #070F1C; --panel: #0E1A2C; --ink: #E6EDF7; --muted: #8A9BB2; --line: #1C2A40;
+  --accent: #4C8DFF; --tint: #12234A; --pos: #34D399; --neg: #F87171; --warn: #FB923C;
+    --warn-ink: #FB923C; --warn-tint: #2A1608; --warn-line: #7C2D12;
+  --soft: #112036; --grid: #16243A; --tip: #22344F; --s1: #4C8DFF; --s2: #A3B3C9;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3); color-scheme: dark;
 }
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
-  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
-  margin: 0;
+  background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5;
+  margin: 0; -webkit-font-smoothing: antialiased; overflow-x: clip;
 }
-.wrap {
-  max-width: 1180px; margin-inline: auto;
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 24px 48px;
-  display: flex; flex-direction: column; gap: 28px;
-}
-h1, h2, h3 { text-wrap: balance; margin: 0; }
-h1 { font-family: var(--font-display); font-weight: 500; font-size: 1.9rem; letter-spacing: -0.01em; }
-h2 { font-size: 1.05rem; font-weight: 600; }
-h3 { font-family: var(--font-display); font-weight: 500; font-size: 1.3rem; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 15px; font-weight: 600; }
+h3 { font-size: 15px; font-weight: 600; }
 p { margin: 0; }
-.num, td.num, .data { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.num, td.num, .data, .big { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
-.small { font-size: 0.82rem; }
-.label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
+.small { font-size: 12px; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.neg { color: var(--neg); }
+.pos { color: var(--pos); }
+a { color: var(--accent); }
 
-header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
-header.top .sub { color: var(--muted); max-width: 62ch; margin-top: 4px; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.chip { font-size: 0.75rem; font-weight: 500; letter-spacing: 0.04em; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); white-space: nowrap; }
-.chip.sim { border-color: var(--s1); color: var(--s1); }
-.chip.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-line); }
-.chip.ok { color: var(--good); border-color: var(--good); }
-.chip.bad { color: var(--bad); border-color: var(--bad); }
-button { font: inherit; font-size: 0.85rem; font-weight: 500; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
-button:hover { border-color: var(--muted); }
-button:focus-visible, select:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+/* ---------------------------------------------------------------- shell */
+.side {
+  position: fixed; inset: 0 auto 0 0; width: var(--side-w); z-index: 20;
+  background: var(--navy); color: #C9D6EA;
+  display: flex; flex-direction: column; gap: 24px;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+}
+.brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 14px; letter-spacing: -0.005em; padding-inline: 8px; }
+.brand .mark { width: 28px; height: 28px; border-radius: 8px; background: #1F5EFF; display: grid; place-items: center; font-size: 11px; letter-spacing: 0.02em; flex: none; }
+.nav { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.nav a {
+  display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px;
+  color: #A9B9D0; text-decoration: none; font-weight: 500; font-size: 13px; position: relative;
+}
+.nav a::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; opacity: 0.45; flex: none; }
+.nav a:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+.nav a[aria-current="true"] { color: #fff; background: rgba(76, 141, 255, 0.16); }
+.nav a[aria-current="true"]::before { background: #4C8DFF; opacity: 1; }
+.nav a:focus-visible { outline: 2px solid #4C8DFF; outline-offset: 1px; }
+.side-foot { margin-top: auto; padding-inline: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #8195B3; }
+.side-foot .label { color: #8195B3; }
 
-.banner { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
-.banner strong { font-weight: 600; }
+.main { margin-left: var(--side-w); min-width: 0; }
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) 10px 24px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.chips, .top-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.top-meta { gap: 8px 16px; }
+.meta { display: inline-flex; align-items: baseline; gap: 6px; font-size: 12px; white-space: nowrap; }
+.content {
+  max-width: 1280px;
+  padding-inline: 24px max(24px, env(safe-area-inset-right, 0px));
+  padding-block: 24px calc(48px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 40px;
+}
 
-.bonds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 20px; }
-.bond { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; border-top: 3px solid var(--series); }
-.bond .head { display: flex; flex-direction: column; gap: 4px; }
-.bond .desc { color: var(--muted); font-size: 0.88rem; max-width: 65ch; }
-.terms { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.82rem; color: var(--muted); }
-.terms b { color: var(--ink); font-weight: 500; font-family: var(--font-data); }
-.price-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 28px; }
-.big { font-family: var(--font-data); font-size: 2.3rem; font-weight: 500; line-height: 1.1; letter-spacing: -0.02em; }
-.big small { font-size: 0.9rem; color: var(--muted); font-weight: 400; margin-left: 6px; letter-spacing: 0; }
-.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 12px 16px; }
-.kv div { display: flex; flex-direction: column; gap: 2px; }
-.kv .v { font-family: var(--font-data); font-size: 1.02rem; font-variant-numeric: tabular-nums; }
-.gate { font-size: 0.84rem; padding: 8px 12px; border-radius: 6px; background: var(--soft); display: flex; gap: 8px; align-items: baseline; }
-.gate .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); flex: none; transform: translateY(-1px); }
-.gate.open .dot { background: var(--good); }
-.extrap { font-size: 0.84rem; color: var(--muted); }
-.extrap b { color: var(--ink); font-family: var(--font-data); font-weight: 500; }
+/* ---------------------------------------------------------------- controls */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; line-height: 1;
+  padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex: none; }
+.chip.sim { background: var(--accent); border-color: var(--accent); color: #fff; letter-spacing: 0.1em; }
+.chip.ok .dot { background: var(--pos); }
+.chip.warn { color: var(--warn-ink); border-color: var(--warn-line); background: var(--warn-tint); }
+.chip.warn .dot { background: var(--warn); }
+.chip.db { max-width: 26rem; display: inline-block; }
+.chip.db .dot { display: inline-block; margin-right: 6px; vertical-align: 1px; }
 
-.tbl-wrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
-th { text-align: left; font-weight: 500; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { padding: 7px 10px; border-bottom: 1px solid var(--soft); vertical-align: top; }
-td.num, th.num { text-align: right; white-space: nowrap; }
-.neg { color: var(--bad); }
-.pos { color: var(--good); }
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; line-height: 1;
+  padding: 4px 8px; border-radius: 999px; white-space: nowrap;
+  background: var(--soft); color: var(--muted); border: 1px solid var(--line);
+}
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.pill.ok { color: var(--pos); background: color-mix(in srgb, var(--pos) 10%, var(--panel)); border-color: color-mix(in srgb, var(--pos) 25%, transparent); }
+.pill.bad { color: var(--neg); background: color-mix(in srgb, var(--neg) 10%, var(--panel)); border-color: color-mix(in srgb, var(--neg) 25%, transparent); }
+.pill.warn { color: var(--warn-ink); background: var(--warn-tint); border-color: var(--warn-line); }
+.pill.warn::before { background: var(--warn); }
+.pill.accent { color: var(--accent); background: var(--tint); border-color: transparent; }
 
-section.block { display: flex; flex-direction: column; gap: 14px; }
-.block-head { display: flex; flex-direction: column; gap: 4px; }
-.block-head p { color: var(--muted); font-size: 0.9rem; max-width: 72ch; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
-.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 20px; }
-.chart { position: relative; width: 100%; }
-.chart svg { display: block; width: 100%; height: auto; }
-.chart text { font-family: var(--font-data); font-size: 11px; fill: var(--muted); }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
-.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
-.readout { font-family: var(--font-data); font-size: 0.8rem; color: var(--muted); min-height: 1.4em; margin-top: 6px; }
+button {
+  font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 8px;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer;
+}
+button:hover { filter: brightness(1.08); }
+button:disabled { opacity: 0.6; cursor: progress; }
+button:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.link { padding: 2px 0; border: none; background: none; color: var(--accent); font-size: 12px; font-weight: 600; }
+button.link:hover { filter: none; text-decoration: underline; }
+select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
 
-.explain { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 16px; }
-.explain .panel p { font-size: 0.88rem; color: var(--muted); margin-top: 6px; }
-#assumptions { display: flex; flex-direction: column; gap: 14px; }
-ul.assume { margin: 6px 0 0; padding-left: 18px; font-size: 0.86rem; display: flex; flex-direction: column; gap: 4px; }
-.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 20px; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
-select { font: inherit; font-size: 0.85rem; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
-.log-wrap { max-height: 26rem; overflow: auto; }
-.log-wrap th { position: sticky; top: 0; background: var(--panel); }
-.payload { font-family: var(--font-data); font-size: 0.75rem; color: var(--muted); word-break: break-word; }
-.empty { color: var(--muted); font-size: 0.9rem; padding: 12px 0; }
-.life-bonds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 20px; }
-.life-bond { display: flex; flex-direction: column; gap: 14px; border-top: 3px solid var(--series); }
-.life-bond .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
-.life-bond .basis { font-size: 0.84rem; color: var(--muted); }
-.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem; }
-.timeline li { display: grid; grid-template-columns: 6.5rem 1fr auto; gap: 10px; align-items: baseline; }
-.timeline .mark { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 2px solid var(--muted); margin-right: 6px; transform: translateY(1px); }
-.timeline li.done .mark { background: var(--ink); border-color: var(--ink); }
-.timeline li.due .mark { border-color: var(--warn-ink); background: var(--warn-bg); }
+/* info button: an explanation one click away instead of on screen */
+details.info { position: relative; display: inline-block; vertical-align: middle; }
+details.info > summary {
+  list-style: none; cursor: pointer; width: 16px; height: 16px; border-radius: 50%;
+  display: grid; place-items: center; font: 600 10px/1 var(--font-data); font-style: italic;
+  color: var(--muted); border: 1px solid var(--line); background: var(--panel); user-select: none;
+}
+details.info > summary::-webkit-details-marker { display: none; }
+details.info > summary:hover, details.info[open] > summary { color: var(--accent); border-color: var(--accent); background: var(--tint); }
+details.info .pop {
+  position: absolute; z-index: 30; top: calc(100% + 8px); left: -8px; width: min(340px, 78vw);
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(11, 27, 46, 0.14); padding: 12px 16px;
+  font: 400 13px/1.55 var(--font-ui); text-transform: none; letter-spacing: 0;
+  display: flex; flex-direction: column; gap: 8px; text-align: left; white-space: normal;
+}
+details.info.end .pop { left: auto; right: -8px; }
+details.info .pop b { font-weight: 600; }
+
+/* ---------------------------------------------------------------- sections */
+section.sec { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 72px; }
+.sec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.sec-head .t { display: flex; align-items: center; gap: 8px; }
+.page-head { display: flex; flex-direction: column; gap: 4px; }
+.page-head .t { display: flex; align-items: center; gap: 8px; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); padding: 16px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.panel-head .t { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.panel.flush { padding: 0; }
+.panel.flush .panel-head { padding: 16px 16px 0; margin-bottom: 8px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 16px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+
+.banner {
+  border: 1px solid var(--warn-line); border-left: 3px solid var(--warn);
+  background: var(--warn-tint); color: var(--ink);
+  border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; font-size: 13px;
+}
+.banner strong { font-weight: 700; color: var(--warn-ink); }
+
+/* overview tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14.5rem), 1fr)); gap: 16px; }
+.tile {
+  display: flex; flex-direction: column; gap: 4px; padding: 16px; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); min-width: 0;
+}
+a.tile:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tile-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .big { margin-top: 8px; }
+.tile-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; }
+.tile-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.tile-rows > div { display: grid; grid-template-columns: 3rem 1fr auto; align-items: center; gap: 8px; font-size: 13px; }
+.sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+
+.big { font-size: 28px; font-weight: 500; line-height: 1.1; letter-spacing: -0.02em; white-space: nowrap; }
+.big small { font-family: var(--font-ui); font-size: 12px; color: var(--muted); font-weight: 500; margin-left: 6px; letter-spacing: 0; }
+
+/* instrument panels */
+.inst { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 80px; }
+.inst-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+.inst-head .id { display: flex; align-items: center; gap: 8px; }
+.inst-head h3 { margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.quote { display: flex; flex-wrap: wrap; gap: 8px 40px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.quote > div { display: flex; flex-direction: column; gap: 4px; }
+.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 16px 16px; margin: 0; }
+.kv > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kv dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.kv dd { margin: 0; font-family: var(--font-data); font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.terms {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+}
+.terms > div { background: var(--soft); padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.terms dt { font-size: 11px; color: var(--muted); font-weight: 600; }
+.terms dd { margin: 0; font-family: var(--font-data); font-size: 12px; font-variant-numeric: tabular-nums; }
+.gate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.note { font-size: 12px; color: var(--muted); padding: 8px 12px; border-radius: 8px; background: var(--soft); }
+.note.warn { color: var(--ink); background: var(--warn-tint); border-left: 3px solid var(--warn); }
+.empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+/* ---------------------------------------------------------------- tables */
+.tbl-wrap { overflow: auto; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13px; }
+caption { text-align: left; font-weight: 600; font-size: 13px; padding: 0 0 8px; }
+th {
+  text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  position: sticky; top: 0; background: var(--panel); z-index: 1;
+}
+td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tbody tr:last-child > td { border-bottom: none; }
+tbody tr:hover > td { background: var(--soft); }
+td.num, th.num { text-align: right; white-space: nowrap; font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+th.num { font-family: var(--font-ui); }
+td.num { font-size: 12.5px; }
+.panel.flush table th:first-child, .panel.flush table td:first-child { padding-left: 16px; }
+.panel.flush table th:last-child, .panel.flush table td:last-child { padding-right: 16px; }
+tr.detail > td { background: var(--soft); padding: 8px 16px 16px; }
+tr.detail:hover > td { background: var(--soft); }
+tr.detail table { font-size: 12px; }
+tr.detail th { background: var(--soft); position: static; }
+.cell-sub { font-size: 12px; color: var(--muted); }
+.log-wrap { max-height: 28rem; }
+.payload {
+  font-family: var(--font-data); font-size: 11.5px; color: var(--muted); word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; max-width: 60ch;
+}
+.payload.open { display: block; }
+
+/* lifecycle */
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; font-size: 13px; }
+.timeline li { display: grid; grid-template-columns: 7.5rem 1fr auto; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.timeline li:last-child { border-bottom: none; }
+.timeline .mark { width: 8px; height: 8px; border-radius: 50%; display: inline-block; border: 2px solid var(--muted); margin-right: 8px; }
+.timeline li.done .mark { background: var(--accent); border-color: var(--accent); }
+.timeline li.due .mark { border-color: var(--warn); background: var(--warn-tint); }
 .timeline li.upcoming { color: var(--muted); }
-button.link { padding: 0 6px; border: none; background: none; color: var(--s1); font-size: 0.8rem; }
-tr.detail > td { background: var(--soft); }
-tr.detail table { font-size: 0.8rem; }
-.lifeoff { color: var(--muted); font-size: 0.9rem; }
-footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); padding-top: 14px; }
-@media (prefers-reduced-motion: no-preference) { button { transition: border-color .15s; } }
+.subhead { display: flex; align-items: center; gap: 8px; }
+
+/* charts */
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.chart text { font-family: var(--font-data); font-size: 11px; fill: var(--muted); }
+.chart text.dl { font-family: var(--font-ui); font-size: 12px; font-weight: 700; }
+.chart text.zone { font-family: var(--font-ui); font-size: 11px; }
+.tip {
+  position: absolute; top: 8px; pointer-events: none; z-index: 5;
+  background: var(--tip); color: #F1F5FB; border-radius: 6px; padding: 8px 10px;
+  font: 500 11.5px/1.5 var(--font-data); font-variant-numeric: tabular-nums;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); white-space: nowrap;
+}
+.tip .h { color: #A9B9D0; margin-bottom: 2px; }
+.tip .r { display: flex; align-items: center; gap: 8px; }
+.tip .r b { font-weight: 600; margin-left: auto; padding-left: 12px; }
+.hint { font-size: 12px; color: var(--muted); }
+
+/* assumptions as expandable rows */
+details.row { border-bottom: 1px solid var(--line); }
+details.row:last-child { border-bottom: none; }
+details.row > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
+details.row > summary::-webkit-details-marker { display: none; }
+details.row > summary::before { content: "›"; color: var(--muted); font-weight: 700; transition: transform .15s; display: inline-block; width: 8px; }
+details.row[open] > summary::before { transform: rotate(90deg); }
+details.row > summary:hover { background: var(--soft); }
+details.row > summary .count { margin-left: auto; font-family: var(--font-data); font-size: 12px; color: var(--muted); font-weight: 500; }
+ul.assume { margin: 0; padding: 0 16px 16px 40px; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+
+footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 16px; }
+
+/* ---------------------------------------------------------------- phones: sidebar becomes a top menu */
+@media (max-width: 900px) {
+  .side {
+    position: sticky; top: 0; inset: auto; width: auto; flex-direction: row; align-items: center; gap: 8px 16px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px; flex-wrap: wrap;
+  }
+  .brand { padding: 0; }
+  .nav { flex-direction: row; overflow-x: auto; flex: 1 1 100%; gap: 4px; scrollbar-width: none; margin-inline: -4px; }
+  .nav a { white-space: nowrap; padding: 6px 10px; }
+  .nav a::before { display: none; }
+  .side-foot { display: none; }
+  .main { margin-left: 0; }
+  .topbar { position: static; padding-inline: 16px; backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg); }
+  .content { padding-inline: 16px; gap: 32px; }
+  section.sec, .inst { scroll-margin-top: 112px; }
+  .chip.db { max-width: 100%; }
+}
+@media (prefers-reduced-motion: no-preference) { button, a.tile, .nav a { transition: background-color .15s, border-color .15s, color .15s, filter .15s; } }
 </style>
 
-<div class="wrap" id="app">
-  <header class="top">
-    <div>
-      <p class="label">Milestone 3 complete · instruments and ledger</p>
-      <h1>Tokenised Debt Lab</h1>
-      <p class="sub">A prototype marketplace for simulated tokenised debt. This page shows the three simulated instruments: what each bond is worth, how sensitive it is to rates, what the private-credit fund reports, and where every number comes from.</p>
-    </div>
+<nav class="side" aria-label="Sections">
+  <div class="brand"><span class="mark">TD</span><span>Tokenised Debt Lab</span></div>
+  <ul class="nav" id="nav">
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#bonds">Bonds</a></li>
+    <li><a href="#fund">Fund</a></li>
+    <li><a href="#lifecycle">Lifecycle</a></li>
+    <li><a href="#risk">Risk</a></li>
+    <li><a href="#curves-sec">Curves</a></li>
+    <li><a href="#sources">Data sources</a></li>
+    <li><a href="#audit">Audit log</a></li>
+  </ul>
+  <div class="side-foot"><span class="label">Milestone 3 complete</span><span>Instruments and ledger</span></div>
+</nav>
+
+<div class="main" id="app">
+  <header class="topbar">
     <div class="chips" id="chips"></div>
+    <div class="top-meta" id="topMeta"></div>
   </header>
 
-  <div class="banner" id="banner" hidden></div>
+  <div class="content">
+    <div class="banner" id="banner" hidden></div>
 
-  <section class="bonds" id="bonds" aria-label="Instruments"></section>
-
-  <section class="block" id="lifecycle" aria-label="Lifecycle scenario">
-    <div class="block-head">
-      <h2>Lifecycle scenario</h2>
-      <p id="lifeIntro">Coupons, maturity and the default scenario, as recorded in this database.</p>
-    </div>
-    <div id="lifeBody"></div>
-  </section>
-
-  <section class="block">
-    <div class="block-head">
-      <h2>What a rate move does to each bond</h2>
-      <p>Each bond is repriced in full after every shock. The duration-plus-convexity estimate sits beside it, so you can see where the quick approximation stops working.</p>
-    </div>
-    <div class="panel tbl-wrap"><table id="shocks"></table></div>
-  </section>
-
-  <section class="block" id="longEndBlock" hidden>
-    <div class="block-head">
-      <h2>How much the price depends on the long-end rule</h2>
-      <p>No government curve reaches 100 years, so rates past its last point are a modelling choice, not an observation. Each rule below holds the forward rate constant beyond that point; only its level differs. Every published rate is identical across rows, so the spread of prices is pure model risk.</p>
-    </div>
-    <div id="longEnd"></div>
-  </section>
-
-  <section class="charts">
-    <div class="panel">
-      <h2>Price change for a parallel yield move</h2>
-      <p class="muted small">Clean price change against a change in each bond's own yield. The curvature is convexity.</p>
-      <div class="chart" id="pyChart"></div>
-      <div class="legend" id="pyLegend"></div>
-      <div class="readout" id="pyReadout">Hover the chart to read values.</div>
-    </div>
-    <div class="panel">
-      <h2>Benchmark curves</h2>
-      <p class="muted small">Government zero rates used for discounting, out to 100 years. Past the last real tenor the rate is held flat.</p>
-      <div class="chart" id="curveChart"></div>
-      <div class="legend" id="curveLegend"></div>
-    </div>
-  </section>
-
-  <section class="explain" aria-label="How to read this page">
-    <div class="panel">
-      <h2>Why prices fall when yields rise</h2>
-      <p>A bond's payments are fixed. Its price is what those payments are worth today, discounted at current rates. Higher rates shrink every future payment's value, and the further away a payment is, the more it shrinks. That is why the 100-year bond moves so much more than the 3-year one.</p>
-    </div>
-    <div class="panel">
-      <h2>Duration in one line</h2>
-      <p>Modified duration is the approximate % price change for a 1 percentage point yield move. A duration of 14 means a 1 point rise in yield costs roughly 14% of the price. Convexity is the correction for the fact that this relationship curves.</p>
-    </div>
-    <div class="panel">
-      <h2>Clean and dirty price</h2>
-      <p>The dirty price is what a buyer actually pays: the bond's value including interest built up since the last coupon. The clean price strips that accrued interest out, so it doesn't jump on coupon dates. Bonds are quoted clean.</p>
-    </div>
-  </section>
-
-  <section class="split">
-    <div class="block">
-      <div class="block-head">
-        <h2>Where the rates come from</h2>
-        <p>Each curve's source, observation date, age and status. Official sources publish once a day, so none of this is a live tick.</p>
+    <section class="sec" id="overview" aria-label="Overview">
+      <div class="page-head">
+        <p class="label">Milestone 3 complete · instruments and ledger</p>
+        <div class="t"><h1>Overview</h1>
+          <details class="info"><summary aria-label="About this page">i</summary><div class="pop">A prototype marketplace for simulated tokenised debt. This page shows the three simulated instruments: what each bond is worth, how sensitive it is to rates, what the private-credit fund reports, and where every number comes from.</div></details>
+        </div>
       </div>
-      <div class="panel tbl-wrap"><table id="curves"></table></div>
-    </div>
-    <div class="block">
-      <div class="block-head">
-        <h2>Assumptions</h2>
-        <p>Modelling choices behind each bond. None of these is observed market data.</p>
-      </div>
-      <div class="panel" id="assumptions"></div>
-    </div>
-  </section>
+      <div class="tiles" id="tiles"></div>
+    </section>
 
-  <section class="block">
-    <div class="toolbar">
-      <div class="block-head">
-        <h2>Audit log</h2>
-        <p>Every material action, newest first. Repeat valuations on the same data and date are recorded once.</p>
-      </div>
-      <label class="small muted">Show
-        <select id="logFilter"><option value="">all events</option></select>
-      </label>
-    </div>
-    <div class="panel log-wrap"><table id="log"></table></div>
-  </section>
+    <section class="sec" id="bonds" aria-label="Bonds">
+      <div class="sec-head"><div class="t"><h2>Bonds</h2>
+        <details class="info"><summary aria-label="Clean and dirty price">i</summary><div class="pop"><b>Clean and dirty price</b><span>The dirty price is what a buyer actually pays: the bond's value including interest built up since the last coupon. The clean price strips that accrued interest out, so it doesn't jump on coupon dates. Bonds are quoted clean.</span></div></details>
+      </div></div>
+      <div class="grid2" id="bondList"></div>
+    </section>
 
-  <footer id="footer">Educational prototype. Simulated instruments only; nothing here is a real security, an offer, or a public-blockchain asset.</footer>
+    <section class="sec" id="fund" aria-label="Fund">
+      <div class="sec-head"><div class="t"><h2>Fund</h2></div></div>
+      <div class="grid2" id="fundList"></div>
+    </section>
+
+    <section class="sec" id="lifecycle" aria-label="Lifecycle scenario">
+      <div class="sec-head">
+        <div class="t"><h2>Lifecycle scenario</h2>
+          <details class="info"><summary aria-label="About the lifecycle scenario">i</summary><div class="pop" id="lifeIntro">Coupons, maturity and the default scenario, as recorded in this database.</div></details>
+        </div>
+        <div class="pills" id="lifeMeta"></div>
+      </div>
+      <div class="stack" id="lifeBody"></div>
+    </section>
+
+    <section class="sec" id="risk" aria-label="Risk">
+      <div class="sec-head"><div class="t"><h2>Risk</h2></div></div>
+      <div class="panel flush">
+        <div class="panel-head"><div class="t">What a rate move does to each bond
+          <details class="info"><summary aria-label="About the shock table">i</summary><div class="pop">
+            <span>Each bond is repriced in full after every shock. The duration-plus-convexity estimate sits beside it, so you can see where the quick approximation stops working.</span>
+            <b>Duration in one line</b>
+            <span>Modified duration is the approximate % price change for a 1 percentage point yield move. A duration of 14 means a 1 point rise in yield costs roughly 14% of the price. Convexity is the correction for the fact that this relationship curves.</span>
+          </div></details></div></div>
+        <div class="tbl-wrap"><table id="shocks"></table></div>
+      </div>
+      <div class="stack" id="longEndBlock" hidden>
+        <div class="subhead"><span class="label">How much the price depends on the long-end rule</span>
+          <details class="info"><summary aria-label="About the long-end rule">i</summary><div class="pop">No government curve reaches 100 years, so rates past its last point are a modelling choice, not an observation. Each rule below holds the forward rate constant beyond that point; only its level differs. Every published rate is identical across rows, so the spread of prices is pure model risk.</div></details>
+        </div>
+        <div class="stack" id="longEnd"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div class="t">Price change for a parallel yield move
+          <details class="info"><summary aria-label="About this chart">i</summary><div class="pop">
+            <span>Clean price change against a change in each bond's own yield. The curvature is convexity.</span>
+            <b>Why prices fall when yields rise</b>
+            <span>A bond's payments are fixed. Its price is what those payments are worth today, discounted at current rates. Higher rates shrink every future payment's value, and the further away a payment is, the more it shrinks. That is why the 100-year bond moves so much more than the 3-year one.</span>
+          </div></details></div>
+          <span class="hint">Hover to read values</span></div>
+        <div class="chart" id="pyChart"></div>
+      </div>
+    </section>
+
+    <section class="sec" id="curves-sec" aria-label="Curves">
+      <div class="sec-head"><div class="t"><h2>Curves</h2></div></div>
+      <div class="panel">
+        <div class="panel-head"><div class="t">Benchmark curves
+          <details class="info"><summary aria-label="About this chart">i</summary><div class="pop">
+            <span>Government zero rates used for discounting, out to 100 years. Past the last real tenor the rate is held flat.</span>
+            <span>Dotted verticals mark each bond's maturity.</span>
+          </div></details></div>
+          <span class="hint">Hover to read values</span></div>
+        <div class="chart" id="curveChart"></div>
+      </div>
+    </section>
+
+    <section class="sec" id="sources" aria-label="Data sources">
+      <div class="sec-head"><div class="t"><h2>Data sources</h2></div></div>
+      <div class="grid2">
+        <div class="panel flush">
+          <div class="panel-head"><div class="t">Where the rates come from
+            <details class="info"><summary aria-label="About the sources">i</summary><div class="pop">Each curve's source, observation date, age and status. Official sources publish once a day, so none of this is a live tick.</div></details></div></div>
+          <div class="tbl-wrap"><table id="curves"></table></div>
+        </div>
+        <div class="panel flush">
+          <div class="panel-head"><div class="t">Assumptions
+            <details class="info"><summary aria-label="About the assumptions">i</summary><div class="pop">Modelling choices behind each bond. None of these is observed market data.</div></details></div></div>
+          <div id="assumptions"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sec" id="audit" aria-label="Audit log">
+      <div class="sec-head">
+        <div class="t"><h2>Audit log</h2>
+          <details class="info"><summary aria-label="About the audit log">i</summary><div class="pop">Every material action, newest first. Repeat valuations on the same data and date are recorded once.</div></details>
+        </div>
+        <label class="small muted">Show
+          <select id="logFilter"><option value="">all events</option></select>
+        </label>
+      </div>
+      <div class="panel flush tbl-wrap log-wrap"><table id="log"></table></div>
+    </section>
+
+    <footer id="footer">Educational prototype. Simulated instruments only; nothing here is a real security, an offer, or a public-blockchain asset.</footer>
+  </div>
 </div>
 
 <script>
@@ -251,7 +459,7 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     for (const [k, v] of Object.entries(attrs)) {
       if (k === "class") n.className = v; else if (k === "text") n.textContent = v; else n.setAttribute(k, v);
     }
-    for (const k of kids) if (k != null) n.append(k);
+    for (const k of kids.flat()) if (k != null) n.append(k);
     return n;
   };
   const fmt = (x, dp) => Number(x).toLocaleString("en-GB", { minimumFractionDigits: dp, maximumFractionDigits: dp });
@@ -259,6 +467,13 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
   const when = (iso) => new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC";
   const SVGNS = "http://www.w3.org/2000/svg";
   const sv = (tag, attrs = {}) => { const n = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
+  // A small "i" button holding an explanation; `end` opens it leftwards for right-hand placements.
+  const info = (label, parts, end) => el("details", { class: "info" + (end ? " end" : "") },
+    el("summary", { "aria-label": label, title: label }, "i"),
+    el("div", { class: "pop" }, ...[].concat(parts).map((p) => typeof p === "string" ? el("span", { text: p }) : p)));
+  const pill = (cls, text) => el("span", { class: "pill " + cls, text });
+  const kv = (k, v, cls) => el("div", {}, el("dt", { text: k }), el("dd", { class: cls || "", text: v }));
+  const shortName = (name) => name.replace(/ \(model\)$/, "");
 
   let DATA = null;
   let LIFE = null;  // /api/lifecycle, fetched only when reading a scenario database
@@ -295,19 +510,23 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
   function render() {
     const d = DATA;
     const bonds = d.instruments;
+    const funds = d.funds || [];
     const illustrative = d.curves.some((c) => c.kind === "illustrative");
 
-    // chips
-    const chips = document.getElementById("chips");
-    chips.replaceChildren(
+    // top bar: mode chips left, dates and refresh right
+    const scenario = d.database && d.database.role === "scenario";
+    document.getElementById("chips").replaceChildren(
       el("span", { class: "chip sim", text: "SIMULATION" }),
-      el("span", { class: "chip " + (illustrative ? "warn" : "ok"), text: illustrative ? "Illustrative rates" : "Official daily rates" }),
-      ...(d.database ? [el("span", { class: "chip" + (d.database.role === "scenario" ? " warn" : ""), title: d.database.path,
-        text: (d.database.role === "scenario" ? "SCENARIO database · " : "Main database · ") + d.database.path })] : []),
-      el("span", { class: "chip", text: "Settles " + d.settle }),
-      el("span", { class: "chip", text: (live ? "Updated " : "Snapshot ") + when(d.last_refresh || d.generated_at) }),
+      el("span", { class: "chip " + (illustrative ? "warn" : "ok") }, el("i", { class: "dot" }), illustrative ? "Illustrative rates" : "Official daily rates"),
+      d.database ? el("span", { class: "chip db" + (scenario ? " warn" : ""), title: d.database.path }, el("i", { class: "dot" }),
+        (scenario ? "SCENARIO database · " : "Main database · ") + d.database.path) : null,
     );
-    if (live) { const b = el("button", { type: "button", text: "Refresh prices" }); b.addEventListener("click", () => refresh(b)); chips.append(b); }
+    const meta = document.getElementById("topMeta");
+    meta.replaceChildren(
+      el("span", { class: "meta" }, el("span", { class: "label", text: "Settles" }), el("span", { class: "num", text: d.settle })),
+      el("span", { class: "meta" }, el("span", { class: "label", text: live ? "Updated" : "Snapshot" }), el("span", { class: "num", text: when(d.last_refresh || d.generated_at) })),
+    );
+    if (live) { const b = el("button", { type: "button", text: "Refresh prices" }); b.addEventListener("click", () => refresh(b)); meta.append(b); }
 
     // Say why: offline mode is a choice; a failed source is something that happened.
     const banner = document.getElementById("banner");
@@ -326,9 +545,10 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     banner.hidden = !notes.length;
     banner.replaceChildren(...notes);
 
-    // bond panels
-    const wrap = document.getElementById("bonds");
-    wrap.replaceChildren(...bonds.map((b, i) => bondPanel(b, i)), ...(d.funds || []).map(fundPanel));
+    overviewTiles(bonds, funds, d.curves);
+    document.getElementById("bondList").replaceChildren(...bonds.map((b, i) => bondPanel(b, i)));
+    document.getElementById("fundList").replaceChildren(...(funds.length ? funds.map(fundPanel)
+      : [el("div", { class: "panel empty", text: "No fund share in this database." })]));
 
     lifecycleSection(d.lifecycle, LIFE);
     shocksTable(bonds);
@@ -336,102 +556,140 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     pyChart(bonds);
     curveChart(d.curves, bonds);
     curvesTable(d.curves);
-    assumptions([...bonds, ...(d.funds || [])], d.curves);
+    assumptions([...bonds, ...funds], d.curves);
     auditLog(d.events);
     document.getElementById("footer").textContent =
       `Version ${d.version} · data mode ${d.data_mode} · ${d.database ? d.database.role + " database " + d.database.path + " · " : ""}page generated ${when(d.generated_at)}. Educational prototype: simulated instruments only. Nothing here is a real security, an offer, or a public-blockchain asset.`;
+    spy();
   }
 
+  // ---------------------------------------------------------------- overview tiles
+  function overviewTiles(bonds, funds, curves) {
+    const tiles = bonds.map((b, i) => {
+      const ok = b.status === "ok";
+      return el("a", { class: "tile", href: "#inst-" + b.terms.id },
+        el("div", { class: "tile-head" },
+          el("span", { class: "label" }, el("i", { class: "sw", style: `background:var(${SERIES[i % 2]}); margin-right:6px` }), b.terms.id),
+          gatePill(b)),
+        el("div", { class: "tile-name", text: shortName(b.terms.name) }),
+        el("div", { class: "big" }, ok ? fmt(b.fair_clean, 4) : "–", el("small", { text: "clean" })),
+        ok ? el("div", { class: "tile-sub" }, el("span", { class: "label", text: "Yield" }), el("span", { class: "num", text: fmt(b.ytm_pct, 3) + "%" }))
+          : el("div", { class: "tile-sub muted small", text: b.message }));
+    });
+    funds.forEach((f) => {
+      const missing = f.nav_status === "missing";
+      tiles.push(el("a", { class: "tile", href: "#inst-" + f.terms.id },
+        el("div", { class: "tile-head" }, el("span", { class: "label", text: f.terms.id }), navPill(f.nav_status)),
+        el("div", { class: "tile-name", text: shortName(f.terms.name) }),
+        el("div", { class: "big" }, missing ? "–" : fmt(f.nav_per_share, 4), el("small", { text: "NAV" })),
+        missing ? el("div", { class: "tile-sub muted small", text: f.message })
+          : el("div", { class: "tile-sub" }, el("span", { class: "label", text: "NAV age" }),
+            el("span", { class: "num" + (f.nav_status === "stale" ? " neg" : ""), text: f.nav_age_days + " days" }))));
+    });
+    tiles.push(el("a", { class: "tile", href: "#sources" },
+      el("div", { class: "tile-head" }, el("span", { class: "label", text: "Curve freshness" })),
+      curves.length ? el("div", { class: "tile-rows" }, ...curves.map((c) => el("div", {},
+        el("span", { class: "num", text: c.currency }), el("span", {}, curveStatus(c.status)),
+        el("span", { class: "num muted", text: fmt(c.age_hours, 0) + " h" }))))
+        : el("div", { class: "tile-sub muted small", text: "No curves loaded." })));
+    document.getElementById("tiles").replaceChildren(...tiles);
+  }
+  const curveStatus = (s) => pill(s === "fresh" ? "ok" : s === "stale" ? "bad" : "warn", s);
+  const navPill = (s) => pill(s === "fresh" ? "ok" : s === "stale" ? "bad" : "warn", s);
+  const gatePill = (b) => pill(b.trading_allowed ? "ok" : "bad", b.trading_allowed ? "Quoting allowed" : "Quoting blocked");
+  function gate(b) {
+    return el("div", { class: "gate" }, gatePill(b),
+      el("span", { text: b.trading_allowed ? "on this data." : b.trading_gate_reason + "." }));
+  }
+
+  // ---------------------------------------------------------------- bond and fund panels
   function bondPanel(b, i) {
     const t = b.terms;
-    const card = el("article", { class: "bond", style: `--series: var(${SERIES[i % 2]})` });
     const freq = { 1: "annual", 2: "semi-annual", 4: "quarterly", 12: "monthly" }[t.frequency] || t.frequency + "×/yr";
-    card.append(
-      el("div", { class: "head" },
-        el("span", { class: "label", text: t.id + " · " + t.currency }),
-        el("h3", { text: t.name }),
-        el("p", { class: "desc", text: t.description })),
-      el("div", { class: "terms" },
-        termItem("Coupon", fmt(t.coupon_pct, 3) + "% " + freq),
-        termItem("Matures", t.maturity_date),
-        termItem("Day count", t.day_count),
-        termItem("Spread (assumed)", fmt(t.credit_spread_bp, 0) + " bp over " + t.benchmark + " govts")),
-    );
-    if (b.status !== "ok") {
-      card.append(el("p", { class: "empty", text: b.message }));
-      card.append(gate(b));
-      return card;
-    }
-    card.append(
-      el("div", { class: "price-row" },
-        el("div", {}, el("div", { class: "label", text: "Fair value, clean" }),
-          el("div", { class: "big" }, fmt(b.fair_clean, 4), el("small", { text: "per 100 face" }))),
-        el("div", {}, el("div", { class: "label", text: "Yield to maturity" }),
-          el("div", { class: "big" }, fmt(b.ytm_pct, 3) + "%"))),
-      el("div", { class: "kv" },
-        kv("Dirty price", fmt(b.fair_dirty, 4)),
-        kv("Accrued interest", fmt(b.accrued, 4)),
-        kv("Modified duration", fmt(b.modified_duration, 2)),
-        kv("Effective duration", fmt(b.effective_duration, 2)),
-        kv("Convexity", fmt(b.convexity, 1)),
-        kv("DV01 (per 100)", fmt(b.dv01, 4)),
-        kv("Years to maturity", fmt(b.years_to_maturity, 1)),
-        kv("Payments left", String(b.cash_flows_remaining))),
-      durationNote(b),
-    );
-    if (Number(b.beyond_curve_share_pct) > 0) {
-      card.append(el("p", { class: "extrap" }, el("b", { text: fmt(b.beyond_curve_share_pct, 1) + "%" }),
-        document.createTextNode(" of this bond's value comes from payments beyond the longest point on its curve, where the rate is extrapolated rather than observed.")));
-    }
-    card.append(gate(b));
+    const ok = b.status === "ok";
     const life = DATA.lifecycle && DATA.lifecycle.enabled ? DATA.lifecycle.statuses[t.id] : null;
-    if (life && life !== "performing") card.append(el("p", { class: "gate" },
-      el("span", { text: "In this scenario the bond is " + STATUS_TEXT[life] + " as of the simulation date " + DATA.lifecycle.simulation_date
-        + ". The figures above are today's, as if it were still performing; see the lifecycle section below." })));
+    const explain = [t.description];
+    if (ok) explain.push(durationNote(b));
+    const card = el("article", { class: "panel inst", id: "inst-" + t.id },
+      el("div", { class: "inst-head" },
+        el("div", {},
+          el("div", { class: "id" }, el("i", { class: "sw", style: `background:var(${SERIES[i % 2]})` }), el("span", { class: "label", text: t.id + " · " + t.currency })),
+          el("h3", {}, t.name, info("About this bond", explain))),
+        el("div", { class: "pills" }, gatePill(b), life ? statusPill(life) : null)),
+    );
+    if (!ok) {
+      card.append(el("p", { class: "empty", text: b.message }));
+    } else {
+      const past = Number(b.beyond_curve_share_pct) > 0;
+      card.append(
+        el("div", { class: "quote" },
+          el("div", {}, el("span", { class: "label", text: "Fair value, clean" }),
+            el("span", { class: "big" }, fmt(b.fair_clean, 4), el("small", { text: "per 100 face" }))),
+          el("div", {}, el("span", { class: "label", text: "Yield to maturity" }),
+            el("span", { class: "big", text: fmt(b.ytm_pct, 3) + "%" }))),
+        el("dl", { class: "kv" },
+          kv("Dirty price", fmt(b.fair_dirty, 4)),
+          kv("Accrued interest", fmt(b.accrued, 4)),
+          kv("Modified duration", fmt(b.modified_duration, 2)),
+          kv("Effective duration", fmt(b.effective_duration, 2)),
+          kv("Convexity", fmt(b.convexity, 1)),
+          kv("DV01 (per 100)", fmt(b.dv01, 4)),
+          kv("Years to maturity", fmt(b.years_to_maturity, 1)),
+          kv("Payments left", String(b.cash_flows_remaining)),
+          past ? el("div", {}, el("dt", {}, "Beyond the curve ",
+            info("Value beyond the curve", fmt(b.beyond_curve_share_pct, 1) + "% of this bond's value comes from payments beyond the longest point on its curve, where the rate is extrapolated rather than observed.", true)),
+            el("dd", { text: fmt(b.beyond_curve_share_pct, 1) + "%" })) : null),
+      );
+    }
+    card.append(
+      el("dl", { class: "terms" },
+        kv("Coupon", fmt(t.coupon_pct, 3) + "% " + freq),
+        kv("Matures", t.maturity_date),
+        kv("Day count", t.day_count),
+        kv("Spread (assumed)", fmt(t.credit_spread_bp, 0) + " bp over " + t.benchmark + " govts")),
+      gate(b));
+    if (life && life !== "performing") card.append(el("p", { class: "note warn",
+      text: "In this scenario the bond is " + STATUS_TEXT[life] + " as of the simulation date " + DATA.lifecycle.simulation_date
+        + ". The figures above are today's, as if it were still performing; see the lifecycle section below." }));
     return card;
   }
   // Instrument C: no curve, no yield. Its only number is a NAV the manager reported, with an age.
   function fundPanel(f) {
     const t = f.terms;
-    const card = el("article", { class: "bond", style: "--series: var(--s3)" });
-    card.append(
-      el("div", { class: "head" },
-        el("span", { class: "label", text: t.id + " · " + t.currency + " · fund share" }),
-        el("h3", { text: t.name }),
-        el("p", { class: "desc", text: t.description })),
-      el("div", { class: "terms" },
-        termItem("NAV reported", t.nav_frequency),
-        termItem("Stale after", t.nav_stale_after_days + " days"),
-        termItem("Coupon", "none"),
-        termItem("Maturity", "none")),
+    const card = el("article", { class: "panel inst", id: "inst-" + t.id },
+      el("div", { class: "inst-head" },
+        el("div", {},
+          el("span", { class: "label", text: t.id + " · " + t.currency + " · fund share" }),
+          el("h3", {}, t.name, info("About this fund", [t.description,
+            "A reported NAV is the manager's appraisal of loans that rarely trade, as of a past date. It is not a price anyone has agreed to pay, so nothing here quotes or trades off it. The secondary-market price, the discount to NAV and redeemable liquidity arrive in Milestone 5."]))),
+        el("div", { class: "pills" }, gatePill(f), navPill(f.nav_status))),
     );
     if (f.nav_status === "missing") {
-      card.append(el("p", { class: "empty", text: f.message }), gate(f));
-      return card;
+      card.append(el("p", { class: "empty", text: f.message }));
+    } else {
+      const stale = f.nav_status === "stale";
+      card.append(
+        el("div", { class: "quote" },
+          el("div", {}, el("span", { class: "label", text: "Reported NAV" }),
+            el("span", { class: "big" }, fmt(f.nav_per_share, 4), el("small", { text: "per share" }))),
+          el("div", {}, el("span", { class: "label", text: "NAV age" }),
+            el("span", { class: "big" + (stale ? " neg" : ""), text: f.nav_age_days + " days" }))),
+        el("dl", { class: "kv" },
+          kv("Values portfolio at", f.nav_as_of),
+          kv("Reported on", f.nav_reported_at.slice(0, 10)),
+          kv("Days since reported", String(f.days_since_reported)),
+          kv("NAV status", f.nav_status),
+          kv("Source", f.nav_source)),
+      );
     }
-    const stale = f.nav_status === "stale";
     card.append(
-      el("div", { class: "price-row" },
-        el("div", {}, el("div", { class: "label", text: "Reported NAV" }),
-          el("div", { class: "big" }, fmt(f.nav_per_share, 4), el("small", { text: "per share" }))),
-        el("div", {}, el("div", { class: "label", text: "NAV age" }),
-          el("div", { class: "big" + (stale ? " neg" : "") }, f.nav_age_days + " days"))),
-      el("div", { class: "kv" },
-        kv("Values portfolio at", f.nav_as_of),
-        kv("Reported on", f.nav_reported_at.slice(0, 10)),
-        kv("Days since reported", String(f.days_since_reported)),
-        kv("NAV status", f.nav_status),
-        kv("Source", f.nav_source)),
-      el("p", { class: "muted small", text: "A reported NAV is the manager's appraisal of loans that rarely trade, as of a past date. It is not a price anyone has agreed to pay, so nothing here quotes or trades off it. The secondary-market price, the discount to NAV and redeemable liquidity arrive in Milestone 5." }),
-      gate(f),
-    );
+      el("dl", { class: "terms" },
+        kv("NAV reported", t.nav_frequency),
+        kv("Stale after", t.nav_stale_after_days + " days"),
+        kv("Coupon", "none"),
+        kv("Maturity", "none")),
+      gate(f));
     return card;
-  }
-  const termItem = (k, v) => el("span", {}, k + " ", el("b", { text: v }));
-  const kv = (k, v) => el("div", {}, el("span", { class: "label", text: k }), el("span", { class: "v", text: v }));
-  function gate(b) {
-    return el("div", { class: "gate" + (b.trading_allowed ? " open" : "") }, el("span", { class: "dot" }),
-      el("span", { text: b.trading_allowed ? "Quoting allowed on this data." : "Quoting blocked: " + b.trading_gate_reason + "." }));
   }
 
   // Modified duration is per unit of the bond's yield, compounded at its coupon
@@ -446,7 +704,7 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
       text += `On a continuous curve effective duration is close to Macaulay duration, about ${factor} times modified, so the gap reflects the convention, not extra risk.`;
     }
     else text += "Different conventions, so the two differ slightly.";
-    return el("p", { class: "muted small", text });
+    return el("span", { class: "muted", text });
   }
 
   // ---------------------------------------------------------------- lifecycle (read-only)
@@ -455,75 +713,92 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
   const PAY_CHIP = { paid: "ok", partly_paid: "warn", missed: "bad", scheduled: "", in_progress: "warn" };
   const ENT_CHIP = { paid: "ok", unpaid: "warn", written_off: "", due: "" };
   const QUOTING = { normal: "no lifecycle restriction (the data gate in the bond panel still applies)", restricted: "restricted: coupon missed, bond in its grace period", halted: "halted" };
-  const chip = (cls, text) => el("span", { class: "chip " + cls, text });
+  const QUOTING_CHIP = { normal: "ok", restricted: "warn", halted: "bad" };
+  const chip = (cls, text) => pill(cls, text);
+  const statusPill = (s) => { const [cls, label] = STATUS_CHIP[s] || ["", s]; return pill(cls, label); };
   const words = (s) => s.replace(/_/g, " ");
   const money = (ccy, x) => ccy + " " + fmt(x, 2);
-  const shortName = (name) => name.replace(/ \(model\)$/, "");
 
   function lifecycleSection(summary, life) {
-    const body = document.getElementById("lifeBody"), intro = document.getElementById("lifeIntro");
+    const body = document.getElementById("lifeBody"), intro = document.getElementById("lifeIntro"), meta = document.getElementById("lifeMeta");
+    meta.replaceChildren();
     if (!summary || !summary.enabled) {
       intro.textContent = "Coupons, maturity and the default scenario run only in a separate scenario database.";
-      body.replaceChildren(el("div", { class: "panel lifeoff", text: (summary && summary.reason) || "Lifecycle not available." }));
+      body.replaceChildren(el("div", { class: "panel empty", text: (summary && summary.reason) || "Lifecycle not available." }));
       return;
     }
     if (!life || life.error) {
-      body.replaceChildren(el("div", { class: "panel lifeoff", text: "Couldn't load the lifecycle" + (life ? ": " + life.error : " (not in this snapshot).") }));
+      body.replaceChildren(el("div", { class: "panel empty", text: "Couldn't load the lifecycle" + (life ? ": " + life.error : " (not in this snapshot).") }));
       return;
     }
     intro.textContent = "Simulation date " + life.simulation_date + ". " + life.price_note
       + " Read-only: the simulation date is moved, and the default triggered, with scripts/lifecycle.py; reload the page to see a change.";
+    meta.replaceChildren(el("span", { class: "meta" }, el("span", { class: "label", text: "Simulation date" }), el("span", { class: "num", text: life.simulation_date })));
     const names = Object.fromEntries(life.holders.map((h) => [h.id, h.name]));
     body.replaceChildren(
-      el("div", { class: "life-bonds" }, ...life.bonds.map((b, i) => lifeBondPanel(b, i, names))),
+      el("div", { class: "grid2" }, ...life.bonds.map((b, i) => lifeBondPanel(b, i, names))),
       lifeBlock("Payments", "Every coupon, principal and recovery payment fixed so far, oldest first. Who is owed is fixed at the end of the record date; open a row to see each holder.", paymentsTable(life.payments, names)),
-      el("div", { class: "split" },
+      el("div", { class: "grid2" },
         lifeBlock("Holders", "Positions (face amount, or fund shares) and cash, from the double-entry ledger.", holdersTable(life.holders)),
         lifeBlock("Owed and unpaid", "Amounts a holder is entitled to but hasn't been paid: a compliance hold, or a missed payment not yet settled by a recovery.", owedTable(life.owed, life.owed_items, names))),
-      el("p", { class: "muted small", text: "Ledger integrity: " + (life.integrity.length ? life.integrity.join("; ") : "every transaction balances and no holder is below zero.") }),
+      el("div", { class: "gate" }, pill(life.integrity.length ? "bad" : "ok", "Ledger integrity"),
+        el("span", { text: life.integrity.length ? life.integrity.join("; ") : "every transaction balances and no holder is below zero." })),
     );
   }
-  const lifeBlock = (title, text, content) => el("div", { class: "block" },
-    el("div", { class: "block-head" }, el("h2", { text: title }), el("p", { text })), el("div", { class: "panel tbl-wrap" }, content));
+  const lifeBlock = (title, text, content) => el("div", { class: "panel flush" },
+    el("div", { class: "panel-head" }, el("div", { class: "t" }, title, info("About " + title.toLowerCase(), text))),
+    el("div", { class: "tbl-wrap" }, content));
 
   function lifeBondPanel(b, i, names) {
-    const [cls, label] = STATUS_CHIP[b.status] || ["", b.status];
+    const [, label] = STATUS_CHIP[b.status] || ["", b.status];
     const p = b.price;
-    const card = el("article", { class: "panel life-bond", style: `--series: var(${SERIES[i % 2]})` },
-      el("div", { class: "row" }, el("h3", { text: shortName(b.name) }), chip(cls, label)),
-      el("p", { class: "muted small", text: b.id + (b.since ? " · " + label.toLowerCase() + " since " + b.since : "") + (b.reason ? " · " + b.reason : "") }));
+    const card = el("article", { class: "panel inst" },
+      el("div", { class: "inst-head" },
+        el("div", {},
+          el("div", { class: "id" }, el("i", { class: "sw", style: `background:var(${SERIES[i % 2]})` }),
+            el("span", { class: "label", text: b.id + (b.since ? " · " + label.toLowerCase() + " since " + b.since : "") })),
+          el("h3", { text: shortName(b.name) })),
+        el("div", { class: "pills" }, statusPill(b.status))));
+    if (b.reason) card.append(el("p", { class: "note", text: b.reason }));
     const today = b.today && b.today.status === "ok" ? b.today : null;
     if (p.basis === "none") {
       card.append(el("p", { class: "empty", text: "No scenario price: " + p.message + "." }),
-        el("div", { class: "kv" }, kv("Units outstanding", fmt(b.units_outstanding, 0))));
+        el("dl", { class: "kv" }, kv("Units outstanding", fmt(b.units_outstanding, 0))));
     } else {
       const illustrative = p.curve && p.curve.kind === "illustrative";
       card.append(
-        el("div", { class: "price-row" },
-          el("div", {}, el("div", { class: "label", text: "Scenario price, " + p.on }),
-            el("div", { class: "big" }, fmt(p.clean, 4), el("small", { text: p.flat ? "trades flat" : "clean" }))),
-          el("div", {}, el("div", { class: "label", text: today ? "Today's price, " + today.settle : "Today's price" }),
-            el("div", { class: "big muted" }, today ? fmt(today.clean, 4) : "–", el("small", { text: "clean" })))),
-        el("div", { class: "kv" },
+        el("div", { class: "quote" },
+          el("div", {}, el("span", { class: "label" }, "Scenario price, " + p.on + " ",
+              info("Pricing basis", "Basis: " + p.basis + ". Curve: " + (p.curve ? p.curve.currency + " "
+                + (illustrative ? "ILLUSTRATIVE, not market data" : p.curve.source + ", observed " + p.curve.observation_date) : "none") + ", held constant.")),
+            el("span", { class: "big" }, fmt(p.clean, 4), el("small", { text: p.flat ? "trades flat" : "clean" }))),
+          el("div", {}, el("span", { class: "label", text: today ? "Today's price, " + today.settle : "Today's price" }),
+            el("span", { class: "big muted" }, today ? fmt(today.clean, 4) : "–", el("small", { text: "clean" })))),
+        el("dl", { class: "kv" },
           kv("Dirty", fmt(p.dirty, 4)),
           kv("Accrued", p.flat ? "none (flat)" : fmt(p.accrued, 4)),
           kv("Spread", fmt(p.spread_bp, 0) + " bp"),
-          kv("Units outstanding", fmt(b.units_outstanding, 0))),
-        el("p", { class: "basis", text: "Basis: " + p.basis + ". Curve: " + (p.curve ? p.curve.currency + " "
-          + (illustrative ? "ILLUSTRATIVE, not market data" : p.curve.source + ", observed " + p.curve.observation_date) : "none") + ", held constant." }));
+          kv("Units outstanding", fmt(b.units_outstanding, 0))));
     }
-    card.append(el("div", { class: "gate" + (p.quoting === "normal" ? " open" : "") }, el("span", { class: "dot" }),
-      el("span", { text: "Lifecycle quoting: " + (QUOTING[p.quoting] || p.quoting) + "." })));
+    card.append(el("div", { class: "gate" }, pill(QUOTING_CHIP[p.quoting] || "", "Lifecycle quoting"),
+      el("span", { text: (QUOTING[p.quoting] || p.quoting) + "." })));
     if (b.default) card.append(defaultBlock(b.default, b.currency, names));
     return card;
   }
 
   function defaultBlock(d, ccy, names) {
-    const box = el("div", { class: "block" },
-      el("div", { class: "label", text: "Default scenario" }),
-      el("p", { class: "muted small", text: `Claim ${fmt(d.claim_per_100, 2)} per 100 (face plus the missed coupon). Recovery ${d.recovery_rate_pct}% of it, ${fmt(d.recovery_per_100, 2)} per 100, ${d.recovery_delay_months} months after declaration. Distressed spread ${fmt(d.distressed_spread_bp, 0)} bp. All assumed, and fixed when the scenario was triggered on ${d.triggered_on}.` }),
+    const box = el("div", { class: "stack" },
+      el("div", { class: "subhead" }, el("span", { class: "label", text: "Default scenario" }),
+        info("About the default terms", `All assumed, and fixed when the scenario was triggered on ${d.triggered_on}. The claim is face plus the missed coupon; the recovery is a share of it, paid after a delay.`)),
+      el("dl", { class: "terms" },
+        kv("Claim per 100", fmt(d.claim_per_100, 2)),
+        kv("Recovery rate", d.recovery_rate_pct + "%"),
+        kv("Recovery per 100", fmt(d.recovery_per_100, 2)),
+        kv("Recovery delay", d.recovery_delay_months + " months"),
+        kv("Distressed spread", fmt(d.distressed_spread_bp, 0) + " bp"),
+        kv("Triggered on", d.triggered_on)),
       el("ol", { class: "timeline" }, ...d.timeline.map((s) => el("li", { class: s.state },
-        el("span", { class: "num" }, el("span", { class: "mark" }), document.createTextNode(s.date)),
+        el("span", { class: "num" }, el("span", { class: "mark" }), s.date),
         el("span", { text: s.label }),
         el("span", { class: "small muted", text: s.state === "due" ? "due: run lifecycle.py pay" : s.state })))));
     if (!d.losses.length) {
@@ -542,7 +817,7 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
   }
 
   function paymentsTable(payments, names) {
-    if (!payments.length) return el("p", { class: "empty", text: "No payments yet. Move the simulation date with: python scripts/lifecycle.py advance YYYY-MM-DD" });
+    if (!payments.length) return el("p", { class: "empty", style: "padding: 0 16px 16px", text: "No payments yet. Move the simulation date with: python scripts/lifecycle.py advance YYYY-MM-DD" });
     const rows = payments.flatMap((p) => {
       const detail = el("tr", { class: "detail" }, el("td", { colspan: "7" }, el("table", {},
         el("thead", {}, el("tr", {}, ...["Holder", "Units at record date", "Due", "Paid", "Status", "Reason"].map((h, k) => el("th", { class: k && k < 4 ? "num" : "", text: h })))),
@@ -581,29 +856,30 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     return el("table", {},
       el("thead", {}, el("tr", {}, el("th", { text: "Holder" }), ...assets.map((a) => el("th", { class: "num", text: a })), ...ccys.map((c) => el("th", { class: "num", text: c + " cash" })))),
       el("tbody", {}, ...holders.map((h) => el("tr", {},
-        el("td", {}, el("div", { text: h.name }), h.payments_blocked ? el("div", { class: "small muted", text: "payments on compliance hold" }) : null),
+        el("td", {}, el("div", { text: h.name }), h.payments_blocked ? el("div", { class: "cell-sub", text: "payments on compliance hold" }) : null),
         ...assets.map((a) => el("td", { class: "num", text: h.positions[a] ? fmt(h.positions[a], 0) : "–" })),
         ...ccys.map((c) => el("td", { class: "num", text: h.cash[c] ? fmt(h.cash[c], 2) : "–" }))))));
   }
 
   function owedTable(owed, items, names) {
-    if (!owed.length) return el("p", { class: "empty", text: "Nothing owed: every entitlement so far has been paid." });
+    if (!owed.length) return el("p", { class: "empty", style: "padding: 0 16px 16px", text: "Nothing owed: every entitlement so far has been paid." });
     return el("table", {},
       el("thead", {}, el("tr", {}, ...["Holder", "Owed", "Made up of"].map((h, k) => el("th", { class: k === 1 ? "num" : "", text: h })))),
       el("tbody", {}, ...owed.map((o) => el("tr", {},
         el("td", { text: names[o.holder] || o.holder }),
-        el("td", { class: "num", text: money(o.currency, o.amount) }),
-        el("td", { class: "small muted", text: items.filter((u) => u.holder === o.holder && u.currency === o.currency)
+        el("td", { class: "num neg", text: money(o.currency, o.amount) }),
+        el("td", { class: "cell-sub", text: items.filter((u) => u.holder === o.holder && u.currency === o.currency)
           .map((u) => u.kind + " " + u.instrument_id + " " + u.pay_date + ": " + fmt(u.amount_due, 2) + " (" + u.reason + ")").join("; ") })))));
   }
 
+  // ---------------------------------------------------------------- risk tables
   function shocksTable(bonds) {
     const ok = bonds.filter((b) => b.status === "ok");
     const tbl = document.getElementById("shocks");
-    if (!ok.length) { tbl.replaceChildren(el("caption", { class: "empty", text: "No bonds priced." })); return; }
+    if (!ok.length) { tbl.replaceChildren(el("caption", { class: "empty", style: "padding: 0 16px", text: "No bonds priced." })); return; }
     const head = el("tr", {}, el("th", { text: "Scenario" }));
     ok.forEach((b) => {
-      head.append(el("th", { class: "num", text: b.terms.name.replace(/ \(model\)$/, "") }));
+      head.append(el("th", { class: "num", text: shortName(b.terms.name) }));
       head.append(el("th", { class: "num", text: "Estimate" }));
     });
     const rows = ok[0].shocks.map((s, k) => {
@@ -628,17 +904,20 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
         el("th", { class: "num", text: "Change" }), el("th", { class: "num", text: "Change %" }));
       const rows = b.long_end.map((c, k) => el("tr", {},
         el("td", { text: c.name }),
-        el("td", { class: "muted", text: c.rule }),
+        el("td", { class: "cell-sub", text: c.rule }),
         el("td", { class: "num", text: fmt(c.rate_at_maturity_pct, 3) + "%" }),
         el("td", { class: "num", text: fmt(c.clean_price, 4) }),
-        el("td", { class: "num " + (k === 0 ? "" : Number(c.change) < 0 ? "neg" : "pos"), text: k === 0 ? "base" : signed(c.change, 4) }),
+        el("td", { class: "num " + (k === 0 ? "muted" : Number(c.change) < 0 ? "neg" : "pos"), text: k === 0 ? "base" : signed(c.change, 4) }),
         el("td", { class: "num " + (k === 0 ? "" : Number(c.change_pct) < 0 ? "neg" : "pos"), text: k === 0 ? "" : signed(c.change_pct, 2) + "%" })));
-      return el("div", { class: "panel tbl-wrap" },
-        el("table", {}, el("caption", { text: b.terms.name.replace(/ \(model\)$/, "") + ": " + fmt(b.beyond_curve_share_pct, 1) + "% of value lies past the curve" }),
-          el("thead", {}, head), el("tbody", {}, ...rows)));
+      return el("div", { class: "panel flush" },
+        el("div", { class: "panel-head" },
+          el("div", { class: "t", text: shortName(b.terms.name) }),
+          el("span", { class: "meta" }, el("span", { class: "num", text: fmt(b.beyond_curve_share_pct, 1) + "%" }), el("span", { class: "muted", text: "of value lies past the curve" }))),
+        el("div", { class: "tbl-wrap" }, el("table", {}, el("thead", {}, head), el("tbody", {}, ...rows))));
     }));
   }
 
+  // ---------------------------------------------------------------- charts
   function niceTicks(lo, hi, n) {
     const span = hi - lo, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
     const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n) || 10 * mag;
@@ -648,10 +927,37 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
   function frame(host, H) {
     const W = Math.max(320, host.clientWidth || 520);
     const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
-    host.replaceChildren(svg);
-    return { svg, W, H };
+    const tip = el("div", { class: "tip" }); tip.hidden = true;
+    host.replaceChildren(svg, tip);
+    return { svg, tip, W, H };
   }
-  function measure(svg, text) { const t = sv("text", {}); t.textContent = text; svg.append(t); const w = t.getComputedTextLength(); t.remove(); return w; }
+  function measure(svg, text, cls) { const t = sv("text", cls ? { class: cls } : {}); t.textContent = text; svg.append(t); const w = t.getComputedTextLength(); t.remove(); return w; }
+  const linePath = (pts, X, Y) => pts.map((p, k) => (k ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(" ");
+  // Soft vertical gradient under the main line, fading to the plot floor.
+  function areaUnder(svg, id, color, d, x0, x1, floor) {
+    const g = sv("linearGradient", { id, x1: 0, y1: 0, x2: 0, y2: 1 });
+    g.append(sv("stop", { offset: "0%", "stop-color": color, "stop-opacity": 0.2 }), sv("stop", { offset: "100%", "stop-color": color, "stop-opacity": 0 }));
+    const defs = sv("defs"); defs.append(g); svg.append(defs);
+    svg.append(sv("path", { d: `${d} L${x1.toFixed(1)} ${floor} L${x0.toFixed(1)} ${floor} Z`, fill: `url(#${id})`, stroke: "none" }));
+  }
+  // Labels at the right-hand line ends, nudged apart so they never overlap.
+  function endLabels(svg, items, x) {
+    const sorted = [...items].sort((a, b) => a.y - b.y);
+    for (let k = 1; k < sorted.length; k++) sorted[k].y = Math.max(sorted[k].y, sorted[k - 1].y + 15);
+    sorted.forEach((s) => { const t = sv("text", { class: "dl", x, y: s.y + 4, fill: s.color }); t.textContent = s.text; svg.append(t); });
+  }
+  function showTip(host, tip, svg, W, px, head, rows) {
+    tip.replaceChildren(el("div", { class: "h", text: head }), ...rows.map((r) => el("div", { class: "r" },
+      el("i", { class: "sw", style: "background:" + r.color }), el("span", { text: r.name }), el("b", { text: r.value }))));
+    tip.hidden = false;
+    const scale = svg.getBoundingClientRect().width / W, x = px * scale, w = tip.offsetWidth;
+    tip.style.left = (x + 12 + w > host.clientWidth ? x - 12 - w : x + 12) + "px";
+  }
+  function crosshair(svg, top, bottom) {
+    const rule = sv("line", { y1: top, y2: bottom, stroke: css("--muted"), "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden" });
+    svg.append(rule);
+    return rule;
+  }
 
   function pyChart(bonds) {
     const host = document.getElementById("pyChart");
@@ -661,98 +967,123 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
       const prof = b.price_yield_profile;
       const center = prof.reduce((best, p, k) => Math.abs(Number(p.ytm_pct) - Number(b.ytm_pct)) < Math.abs(Number(prof[best].ytm_pct) - Number(b.ytm_pct)) ? k : best, 0);
       const p0 = Number(prof[center].clean_price), y0 = Number(prof[center].ytm_pct);
-      return { name: b.terms.name.replace(/ \(model\)$/, ""), color: css(SERIES[i % 2]),
+      return { name: shortName(b.terms.name), color: css(SERIES[i % 2]),
         pts: prof.map((p) => [Math.round((Number(p.ytm_pct) - y0) * 100), (Number(p.clean_price) / p0 - 1) * 100]) };
     });
-    const { svg, W, H } = frame(host, 300);
+    const { svg, tip, W, H } = frame(host, 300);
     const all = series.flatMap((s) => s.pts.map((p) => p[1]));
     const yT = niceTicks(Math.min(...all), Math.max(...all), 6);
     const yMin = Math.min(yT[0], Math.min(...all)), yMax = Math.max(yT[yT.length - 1], Math.max(...all));
-    const left = Math.max(...yT.map((v) => measure(svg, signed(v, 0) + "%"))) + 12, right = 12, top = 10, bottom = 34;
+    const left = Math.max(...yT.map((v) => measure(svg, signed(v, 0) + "%"))) + 12, top = 12, bottom = 34;
+    const right = Math.min(W * 0.3, Math.max(...series.map((s) => measure(svg, s.name, "dl")))) + 16;
     const X = (v) => left + (v + 300) / 600 * (W - left - right);
     const Y = (v) => top + (yMax - v) / (yMax - yMin) * (H - top - bottom);
     yT.forEach((v) => {
-      svg.append(sv("line", { x1: left, x2: W - right, y1: Y(v), y2: Y(v), stroke: css(v === 0 ? "--muted" : "--line"), "stroke-width": 1 }));
+      svg.append(sv("line", { x1: left, x2: W - right, y1: Y(v), y2: Y(v), stroke: css(v === 0 ? "--line" : "--grid"), "stroke-width": 1 }));
       const t = sv("text", { x: left - 8, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = signed(v, 0) + "%"; svg.append(t);
     });
     [-300, -200, -100, 0, 100, 200, 300].forEach((v) => {
-      svg.append(sv("line", { x1: X(v), x2: X(v), y1: top, y2: H - bottom, stroke: css("--line"), "stroke-width": 1, "stroke-dasharray": v === 0 ? "" : "2 4" }));
-      const t = sv("text", { x: X(v), y: H - bottom + 16, "text-anchor": v === -300 ? "start" : v === 300 ? "end" : "middle" }); t.textContent = (v > 0 ? "+" : "") + v + " bp"; svg.append(t);
+      const t = sv("text", { x: X(v), y: H - bottom + 18, "text-anchor": v === -300 ? "start" : v === 300 ? "end" : "middle" }); t.textContent = (v > 0 ? "+" : "") + v + " bp"; svg.append(t);
     });
-    const xl = sv("text", { x: (left + W - right) / 2, y: H - 2, "text-anchor": "middle" }); xl.textContent = "change in yield"; svg.append(xl);
-    series.forEach((s) => {
-      svg.append(sv("path", { d: s.pts.map((p, k) => (k ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(" "), fill: "none", stroke: s.color, "stroke-width": 2.2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    const xl = sv("text", { class: "zone", x: (left + W - right) / 2, y: H - 2, "text-anchor": "middle" }); xl.textContent = "change in yield"; svg.append(xl);
+    const main = series[0];
+    areaUnder(svg, "pyFill", main.color, linePath(main.pts, X, Y), X(main.pts[0][0]), X(main.pts[main.pts.length - 1][0]), H - bottom);
+    [...series].reverse().forEach((s) => {
+      svg.append(sv("path", { d: linePath(s.pts, X, Y), fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
     });
-    const rule = sv("line", { y1: top, y2: H - bottom, stroke: css("--muted"), "stroke-width": 1, visibility: "hidden" });
-    const dots = series.map((s) => { const c = sv("circle", { r: 4, fill: s.color, visibility: "hidden" }); svg.append(c); return c; });
-    svg.append(rule);
-    const readout = document.getElementById("pyReadout");
+    endLabels(svg, series.map((s) => { const last = s.pts[s.pts.length - 1]; return { text: s.name, color: s.color, y: Y(last[1]) }; }), W - right + 8);
+    const rule = crosshair(svg, top, H - bottom);
+    const dots = series.map((s) => { const c = sv("circle", { r: 4, fill: s.color, stroke: css("--panel"), "stroke-width": 2, visibility: "hidden" }); svg.append(c); return c; });
     svg.addEventListener("pointermove", (ev) => {
       const r = svg.getBoundingClientRect(); const x = (ev.clientX - r.left) * W / r.width;
       let k = Math.round(((x - left) / (W - left - right) * 600 - 300) / 25); k = Math.max(-12, Math.min(12, k));
       const bpv = k * 25; rule.setAttribute("x1", X(bpv)); rule.setAttribute("x2", X(bpv)); rule.setAttribute("visibility", "visible");
-      const parts = [(bpv > 0 ? "+" : "") + bpv + " bp:"];
-      series.forEach((s, j) => { const p = s.pts.find((q) => q[0] === bpv); if (!p) return; dots[j].setAttribute("cx", X(p[0])); dots[j].setAttribute("cy", Y(p[1])); dots[j].setAttribute("visibility", "visible"); parts.push(s.name + " " + signed(p[1], 2) + "%"); });
-      readout.textContent = parts.join("  ");
+      const rows = [];
+      series.forEach((s, j) => { const p = s.pts.find((q) => q[0] === bpv); if (!p) return; dots[j].setAttribute("cx", X(p[0])); dots[j].setAttribute("cy", Y(p[1])); dots[j].setAttribute("visibility", "visible"); rows.push({ name: s.name, color: s.color, value: signed(p[1], 2) + "%" }); });
+      showTip(host, tip, svg, W, X(bpv), (bpv > 0 ? "+" : "") + bpv + " bp", rows);
     });
-    svg.addEventListener("pointerleave", () => { rule.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); readout.textContent = "Hover the chart to read values."; });
-    document.getElementById("pyLegend").replaceChildren(...series.map((s) => el("span", {}, el("i", { style: "background:" + s.color }), document.createTextNode(s.name))));
+    svg.addEventListener("pointerleave", () => { rule.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); tip.hidden = true; });
   }
 
   function curveChart(curves, bonds) {
     const host = document.getElementById("curveChart");
     if (!curves.length) { host.replaceChildren(el("p", { class: "empty", text: "No curves loaded." })); return; }
     const colorFor = (ccy) => { const i = bonds.findIndex((b) => b.terms.benchmark === ccy); return css(SERIES[(i < 0 ? 0 : i) % 2]); };
-    const { svg, W, H } = frame(host, 300);
+    const nameFor = (c) => c.currency + (c.kind === "illustrative" ? " (illustrative)" : "");
+    const { svg, tip, W, H } = frame(host, 300);
     const rates = curves.flatMap((c) => c.points.map((p) => Number(p.rate_pct)));
     const yT = niceTicks(Math.floor(Math.min(...rates) * 2) / 2 - 0.25, Math.ceil(Math.max(...rates) * 2) / 2 + 0.25, 5);
     const yMin = yT[0], yMax = yT[yT.length - 1];
-    const left = Math.max(...yT.map((v) => measure(svg, fmt(v, 1) + "%"))) + 12, right = 14, top = 10, bottom = 34;
+    const left = Math.max(...yT.map((v) => measure(svg, fmt(v, 1) + "%"))) + 12, top = 12, bottom = 34;
+    const right = Math.min(W * 0.3, Math.max(...curves.map((c) => measure(svg, nameFor(c), "dl")))) + 16;
     const X = (t) => left + t / 100 * (W - left - right);
     const Y = (v) => top + (yMax - v) / (yMax - yMin) * (H - top - bottom);
     const longest = Math.min(...curves.map((c) => Number(c.longest_tenor_years)));
     svg.append(sv("rect", { x: X(longest), y: top, width: X(100) - X(longest), height: H - top - bottom, fill: css("--soft") }));
-    const lab = sv("text", { x: (X(longest) + X(100)) / 2, y: top + 14, "text-anchor": "middle" }); lab.textContent = "no market data: held flat"; svg.append(lab);
+    const lab = sv("text", { class: "zone", x: (X(longest) + X(100)) / 2, y: top + 16, "text-anchor": "middle" }); lab.textContent = "no market data: held flat"; svg.append(lab);
     yT.forEach((v) => {
-      svg.append(sv("line", { x1: left, x2: W - right, y1: Y(v), y2: Y(v), stroke: css("--line"), "stroke-width": 1 }));
+      svg.append(sv("line", { x1: left, x2: W - right, y1: Y(v), y2: Y(v), stroke: css("--grid"), "stroke-width": 1 }));
       const t = sv("text", { x: left - 8, y: Y(v) + 4, "text-anchor": "end" }); t.textContent = fmt(v, 1) + "%"; svg.append(t);
     });
-    [0, 10, 20, 30, 50, 100].forEach((v) => { const t = sv("text", { x: X(v), y: H - bottom + 16, "text-anchor": v === 0 ? "start" : v === 100 ? "end" : "middle" }); t.textContent = v + "y"; svg.append(t); });
-    const xl = sv("text", { x: (left + W - right) / 2, y: H - 2, "text-anchor": "middle" }); xl.textContent = "years to payment"; svg.append(xl);
-    curves.forEach((c) => {
-      const col = colorFor(c.currency);
-      const pts = c.points.map((p) => [Number(p.tenor_years), Number(p.rate_pct)]);
-      svg.append(sv("path", { d: pts.map((p, k) => (k ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join(" "), fill: "none", stroke: col, "stroke-width": 2.2, "stroke-linejoin": "round" }));
-      const last = pts[pts.length - 1];
-      svg.append(sv("path", { d: `M${X(last[0])} ${Y(last[1])} L${X(100)} ${Y(last[1])}`, fill: "none", stroke: col, "stroke-width": 2, "stroke-dasharray": "5 4" }));
-      pts.forEach((p) => svg.append(sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 2.6, fill: col })));
+    [0, 10, 20, 30, 50, 100].forEach((v) => { const t = sv("text", { x: X(v), y: H - bottom + 18, "text-anchor": v === 0 ? "start" : v === 100 ? "end" : "middle" }); t.textContent = v + "y"; svg.append(t); });
+    const xl = sv("text", { class: "zone", x: (left + W - right) / 2, y: H - 2, "text-anchor": "middle" }); xl.textContent = "years to payment"; svg.append(xl);
+    const lines = curves.map((c) => ({ c, col: colorFor(c.currency), pts: c.points.map((p) => [Number(p.tenor_years), Number(p.rate_pct)]) }));
+    const first = lines[0], firstLast = first.pts[first.pts.length - 1];
+    areaUnder(svg, "curveFill", first.col, linePath([...first.pts, [100, firstLast[1]]], X, Y), X(first.pts[0][0]), X(100), H - bottom);
+    lines.forEach(({ c, col, pts }) => {
       bonds.filter((b) => b.terms.benchmark === c.currency && b.status === "ok").forEach((b) => {
         const t = Math.min(100, Number(b.years_to_maturity));
         svg.append(sv("line", { x1: X(t), x2: X(t), y1: top, y2: H - bottom, stroke: col, "stroke-width": 1, "stroke-dasharray": "1 3" }));
       });
     });
-    document.getElementById("curveLegend").replaceChildren(
-      ...curves.map((c) => el("span", {}, el("i", { style: "background:" + colorFor(c.currency) }), document.createTextNode(c.currency + (c.kind === "illustrative" ? " (illustrative)" : "")))),
-      el("span", { text: "Dotted verticals mark each bond's maturity." }));
+    [...lines].reverse().forEach(({ col, pts }) => {
+      svg.append(sv("path", { d: linePath(pts, X, Y), fill: "none", stroke: col, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      const last = pts[pts.length - 1];
+      svg.append(sv("path", { d: `M${X(last[0])} ${Y(last[1])} L${X(100)} ${Y(last[1])}`, fill: "none", stroke: col, "stroke-width": 2, "stroke-dasharray": "5 4", opacity: 0.7 }));
+      pts.forEach((p) => svg.append(sv("circle", { cx: X(p[0]), cy: Y(p[1]), r: 2.5, fill: col })));
+    });
+    endLabels(svg, lines.map(({ c, col, pts }) => ({ text: nameFor(c), color: col, y: Y(pts[pts.length - 1][1]) })), X(100) + 8);
+    // Hover snaps to the nearest published tenor; a curve without that tenor shows nothing, past its end the held-flat rate.
+    const tenors = [...new Set(lines.flatMap((l) => l.pts.map((p) => p[0])))].sort((a, b) => a - b);
+    const rule = crosshair(svg, top, H - bottom);
+    const dots = lines.map((l) => { const c = sv("circle", { r: 4, fill: l.col, stroke: css("--panel"), "stroke-width": 2, visibility: "hidden" }); svg.append(c); return c; });
+    svg.addEventListener("pointermove", (ev) => {
+      const r = svg.getBoundingClientRect(); const x = (ev.clientX - r.left) * W / r.width;
+      const tx = Math.max(0, Math.min(100, (x - left) / (W - left - right) * 100));
+      const t = tenors.reduce((best, v) => Math.abs(v - tx) < Math.abs(best - tx) ? v : best, tenors[0]);
+      const pastAll = tx > tenors[tenors.length - 1] + 2;
+      const at = pastAll ? Math.round(tx) : t;
+      rule.setAttribute("x1", X(at)); rule.setAttribute("x2", X(at)); rule.setAttribute("visibility", "visible");
+      const rows = [];
+      lines.forEach((l, j) => {
+        const last = l.pts[l.pts.length - 1];
+        const p = at > last[0] ? [at, last[1]] : l.pts.find((q) => q[0] === at);
+        if (!p) { dots[j].setAttribute("visibility", "hidden"); return; }
+        dots[j].setAttribute("cx", X(p[0])); dots[j].setAttribute("cy", Y(p[1])); dots[j].setAttribute("visibility", "visible");
+        rows.push({ name: l.c.currency + (at > last[0] ? " (held flat)" : ""), color: l.col, value: fmt(p[1], 3) + "%" });
+      });
+      showTip(host, tip, svg, W, X(at), fmt(at, at < 1 ? 2 : at % 1 ? 1 : 0) + "y", rows);
+    });
+    svg.addEventListener("pointerleave", () => { rule.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); tip.hidden = true; });
   }
 
+  // ---------------------------------------------------------------- sources, assumptions, audit
   function curvesTable(curves) {
     const tbl = document.getElementById("curves");
-    const statusChip = (s) => el("span", { class: "chip " + (s === "fresh" ? "ok" : s === "stale" ? "bad" : "warn"), text: s });
     tbl.replaceChildren(
-      el("thead", {}, el("tr", {}, ...["Curve", "Source", "Observed", "Age", "Status"].map((h) => el("th", { text: h })))),
+      el("thead", {}, el("tr", {}, ...["Curve", "Source", "Observed", "Age", "Status"].map((h, k) => el("th", { class: k === 2 || k === 3 ? "num" : "", text: h })))),
       el("tbody", {}, ...curves.map((c) => el("tr", {},
-        el("td", { class: "num", text: c.currency }),
-        el("td", {}, el("div", { text: c.source }), el("div", { class: "small muted", text: c.notes })),
+        el("td", { class: "num", style: "text-align:left; font-weight:600", text: c.currency }),
+        el("td", {}, el("div", { text: c.source }), el("div", { class: "cell-sub", text: c.notes })),
         el("td", { class: "num", text: c.observation_date }),
         el("td", { class: "num", text: fmt(c.age_hours, 0) + " h" }),
-        el("td", {}, statusChip(c.status))))));
+        el("td", {}, curveStatus(c.status))))));
   }
 
   function assumptions(bonds, curves) {
     const box = document.getElementById("assumptions");
-    box.replaceChildren(...bonds.map((b) => el("div", {},
-      el("div", { class: "label", text: b.terms.name }),
+    box.replaceChildren(...bonds.map((b) => el("details", { class: "row" },
+      el("summary", {}, b.terms.name, el("span", { class: "count", text: String(b.terms.assumptions.length) })),
       el("ul", { class: "assume" }, ...b.terms.assumptions.map((a) => el("li", { text: a }))))));
   }
 
@@ -765,21 +1096,58 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     const draw = () => {
       const rows = events.filter((e) => !sel.value || e.kind === sel.value);
       document.getElementById("log").replaceChildren(
-        el("thead", {}, el("tr", {}, ...["#", "Time (UTC)", "Event", "Subject", "Details"].map((h) => el("th", { text: h })))),
-        el("tbody", {}, ...(rows.length ? rows.map((e) => el("tr", {},
-          el("td", { class: "num", text: String(e.id) }),
-          el("td", { class: "num", text: e.created_at.replace("T", " ").slice(0, 19) }),
-          el("td", { text: e.kind }),
-          el("td", { class: "num", text: e.entity || "" }),
-          el("td", { class: "payload", text: JSON.stringify(e.payload) })))
+        el("thead", {}, el("tr", {}, ...["#", "Time (UTC)", "Event", "Subject", "Details"].map((h, k) => el("th", { class: k === 0 ? "num" : "", text: h })))),
+        el("tbody", {}, ...(rows.length ? rows.map((e) => {
+          const payload = el("div", { class: "payload", title: "Click to expand", text: JSON.stringify(e.payload) });
+          payload.addEventListener("click", () => payload.classList.toggle("open"));
+          return el("tr", {},
+            el("td", { class: "num muted", text: String(e.id) }),
+            el("td", { class: "num", style: "text-align:left", text: e.created_at.replace("T", " ").slice(0, 19) }),
+            el("td", {}, pill("accent", e.kind)),
+            el("td", { class: "num", style: "text-align:left", text: e.entity || "" }),
+            el("td", {}, payload));
+        })
           : [el("tr", {}, el("td", { colspan: "5", class: "empty", text: "No events of this kind." }))])));
     };
     sel.onchange = draw;
     draw();
   }
 
+  // ---------------------------------------------------------------- page behaviour
+  // Highlight the section currently under the top bar.
+  const links = [...document.querySelectorAll("#nav a")];
+  function spy() {
+    let cur = links[0];
+    for (const a of links) {
+      const s = document.querySelector(a.getAttribute("href"));
+      if (s && !s.hidden && s.getBoundingClientRect().top <= 160) cur = a;
+    }
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) cur = links[links.length - 1];
+    links.forEach((a) => a.setAttribute("aria-current", String(a === cur)));
+  }
+  window.addEventListener("scroll", spy, { passive: true });
+  // One info popover open at a time; a click elsewhere closes it.
+  document.addEventListener("click", (ev) => {
+    document.querySelectorAll("details.info[open]").forEach((d) => { if (!d.contains(ev.target)) d.open = false; });
+  });
+  // Open a popover leftwards when it would run off the right edge.
+  document.addEventListener("toggle", (ev) => {
+    const d = ev.target;
+    if (!(d instanceof HTMLDetailsElement) || !d.classList.contains("info") || !d.open) return;
+    const pop = d.querySelector(".pop");
+    if (!d.dataset.end) d.dataset.end = d.classList.contains("end") ? "1" : "0";
+    d.classList.toggle("end", d.dataset.end === "1");
+    if (pop.getBoundingClientRect().right > document.documentElement.clientWidth - 8) d.classList.add("end");
+  }, true);
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") document.querySelectorAll("details.info[open]").forEach((d) => { d.open = false; }); });
+
+  const redrawCharts = () => { if (DATA) { pyChart(DATA.instruments); curveChart(DATA.curves, DATA.instruments); } };
   let lastW = 0;
-  window.addEventListener("resize", () => { const w = document.getElementById("app").clientWidth; if (DATA && Math.abs(w - lastW) > 30) { lastW = w; pyChart(DATA.instruments); curveChart(DATA.curves, DATA.instruments); } });
+  window.addEventListener("resize", () => { const w = document.getElementById("app").clientWidth; if (DATA && Math.abs(w - lastW) > 30) { lastW = w; redrawCharts(); } spy(); });
+  // Chart colours are read from CSS at draw time, so redraw when the theme flips.
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawCharts);
+  new MutationObserver(redrawCharts).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  spy();
   load();
 })();
 </script>
