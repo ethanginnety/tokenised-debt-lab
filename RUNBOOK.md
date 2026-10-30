@@ -50,7 +50,7 @@ $env:DEBTLAB_DB_PATH = "data/scenario.sqlite3"; python -m debtlab.api
 Remove-Item Env:DEBTLAB_DB_PATH                         # back to the main database
 ```
 
-### Coupons and maturity in the scenario database
+### Coupons, maturity and default in the scenario database
 
 The scenario starts on the day it was created, and its simulation date only moves forward. Run these with the app stopped or running (SQLite allows both):
 
@@ -59,6 +59,16 @@ python scripts/lifecycle.py status              # simulation date, bond status, 
 python scripts/lifecycle.py pay                 # make every payment due by the simulation date
 python scripts/lifecycle.py advance 2027-03-30  # move the date forward, then pay what is due
 python scripts/lifecycle.py advance 2029-02-20  # past the short bond's maturity: principal paid, status matured
+```
+
+The default scenario instead (start from a fresh scenario database; maturity and default are alternatives):
+
+```powershell
+python scripts/lifecycle.py pay                          # the August 2026 coupon, paid normally
+python scripts/lifecycle.py default SHORT-USD-2029       # the next coupon (17 Feb 2027) will be missed
+python scripts/lifecycle.py advance 2027-02-17           # coupon missed, grace period, priced flat at 1,000 bp
+python scripts/lifecycle.py advance 2027-03-19           # default declared, priced at the recovery value, quoting halted
+python scripts/lifecycle.py advance 2028-03-20           # 40.90 per 100 recovered, units retired, losses per holder
 ```
 
 `pay` is always safe to repeat: if a run stops part-way, running it again pays only the holders not yet paid. Dana's amounts show as *unpaid (payments blocked)*. Add `--db PATH` for another scenario database; the script refuses a main database. A scenario database made before 30 Oct's coupon step has no simulation date: recreate it. One from the coupon step picks up the maturity table automatically.

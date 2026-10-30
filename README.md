@@ -80,6 +80,15 @@ That is the core of long-duration risk: distant payments are discounted over man
 | DV01 | Price change for a 0.01% (1 basis point) yield move. |
 | Basis point (bp) | 0.01%. 100 bp = 1 percentage point. |
 
+## What "default" means here
+
+Four different things, easy to confuse:
+
+- **Simulated default (this project).** A scenario switched on by hand in a throwaway database: the model's issuer skips a coupon, the clock runs on, and the ledger works out who is owed and loses what. No real company, contract or money is involved, and the numbers (30-day grace, 40% recovery, 12 months) are assumptions.
+- **Contractual event of default.** A trigger defined in a real bond's indenture: non-payment after a grace period, breaking a covenant, cross-default on other debt, insolvency proceedings. It gives holders (usually through a trustee, often needing a vote of a share of holders) the right to accelerate: demand face plus accrued interest now. It is a legal right, not a payment.
+- **Insolvency.** The issuer can't pay its debts as they fall due, or owes more than it owns. It usually leads to a court process (administration in the UK, Chapter 11 or 7 in the US) where creditors are paid in order of seniority, often years later. Recovery rates come from that process; 40% is a common rough figure for senior unsecured bonds, with a very wide range.
+- **A real issuer failing to pay.** What actually happens is messier than any model: missed payments may be cured within the grace period, exchanged for new bonds in a distressed exchange, or settled in a restructuring. Credit-default-swap auctions, trustee actions and court rulings decide outcomes this simulation ignores.
+
 ## Project layout
 
 ```
@@ -94,7 +103,7 @@ debtlab/
   service.py            loads curves, values instruments, records events
   ledger.py             double-entry holder ledger: balances as of a date, transfers, seeding
   scenario.py           creates fresh scenario databases for lifecycle demos
-  lifecycle.py          simulation date, record dates, idempotent coupons and maturity (scenario only)
+  lifecycle.py          simulation date, record dates, idempotent coupons, maturity and default (scenario only)
   instruments.py        loads config/instruments.json
   api/                  FastAPI app and the dashboard page
 config/instruments.json simulated instruments and their assumptions
