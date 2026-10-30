@@ -16,5 +16,28 @@
   "cash": {
     "GBP": {"market_maker": "1500000", "market": "5000000"},
     "USD": {"market_maker": "1500000", "market": "5000000"}
+  },
+  "limits": {
+    "_note": "Approved 30 Oct 2026. Persisted and enforced from M4 step 3; the quote model reads max_inventory to size and skew quotes.",
+    "max_inventory": {"CENTURY-GBP-2126": "2000000", "SHORT-USD-2029": "2000000"}
+  },
+  "quoting": {
+    "defaults": {
+      "_note": "bp of yield unless the name says price. All approved by Ethan on 30 Oct 2026.",
+      "tick": "0.01",
+      "min_order": "10000",
+      "size_step": "1000",
+      "quote_size": "100000",
+      "base_bp": "1",
+      "intraday_move_bp": "1",
+      "credit_factor": "0.005",
+      "data_age_bp_per_day": "0.5",
+      "inventory_widen_bp": "2",
+      "skew_bp": "3",
+      "illiquidity_bp": "2",
+      "fee_bp": "0.5",
+      "long_end_weight": "0.5"
+    },
+    "CENTURY-GBP-2126": {"illiquidity_bp": "10"}
   }
 }
