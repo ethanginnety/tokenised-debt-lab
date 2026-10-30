@@ -395,7 +395,10 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
     const y = name(b.terms.frequency), c = name(b.curve_compounding);
     let text = `Modified duration measures sensitivity to the yield to maturity, ${y}. Effective duration bumps the benchmark curve 1 bp, and its rates are ${c}. `;
     if (b.curve_compounding === b.terms.frequency) text += "Same convention, so the two should be close.";
-    else if (b.curve_compounding === 0) text += `On a continuous curve effective duration is close to Macaulay duration, about (1 + yield/${b.terms.frequency}) times modified, so the gap reflects the convention, not extra risk.`;
+    else if (b.curve_compounding === 0) {
+      const factor = b.terms.frequency === 1 ? "(1 + yield)" : `(1 + yield/${b.terms.frequency})`;
+      text += `On a continuous curve effective duration is close to Macaulay duration, about ${factor} times modified, so the gap reflects the convention, not extra risk.`;
+    }
     else text += "Different conventions, so the two differ slightly.";
     return el("p", { class: "muted small", text });
   }

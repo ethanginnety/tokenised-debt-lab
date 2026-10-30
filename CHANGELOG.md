@@ -8,6 +8,8 @@ Milestone 3 (in progress).
 - New table `nav_reports` (migration `002_nav_reports.sql`), append-only like curves. The configured NAV is stored once; restarts don't duplicate it or its `nav_loaded` audit event. Checked on a copy of the real main database: the migration applied once and kept all 33 existing events.
 - The API's `/api/overview` has a new `funds` list; `instruments` still holds the two bonds only.
 - The migration test now expects every file in `migrations/`, in order, instead of a hard-coded list.
+- Dashboard wording: the century bond's duration note now reads "(1 + yield)" rather than "(1 + yield/1)" for annual coupons. Spotted by Ethan.
+- Line endings: `.gitattributes` keeps LF in the repo and working copy. `save_fixtures.py` now writes the ECB JSON with LF on Windows too (it was writing CRLF, an artefact of our script, not the ECB's data); the 30 Oct ECB fixture is back to LF, its content unchanged.
 
 ## 0.2.0-dev — 30 Oct 2026
 

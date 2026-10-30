@@ -59,7 +59,7 @@ def main() -> int:
         texts = {t: with_retries(lambda t=t: _get(ECB_URL.format(tenor=t))) for t in ECB_TENORS}
         snap = parse_ecb_csv(texts, now)
         path = OUT / f"ecb_{stamp}.json"
-        path.write_text(json.dumps(texts, indent=1), encoding="utf-8")
+        path.write_text(json.dumps(texts, indent=1), encoding="utf-8", newline="")  # keep LF on Windows too
         print(f"saved {path.relative_to(ROOT)}  observation {snap.observation_date}, "
               f"{len(snap.curve.points)} maturities")
     except MarketDataError as exc:
