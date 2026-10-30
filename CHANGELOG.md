@@ -8,6 +8,15 @@ Milestone 3 (in progress).
 - New table `nav_reports` (migration `002_nav_reports.sql`), append-only like curves. The configured NAV is stored once; restarts don't duplicate it or its `nav_loaded` audit event. Checked on a copy of the real main database: the migration applied once and kept all 33 existing events.
 - The API's `/api/overview` has a new `funds` list; `instruments` still holds the two bonds only.
 - The migration test now expects every file in `migrations/`, in order, instead of a hard-coded list.
+- **Fixes from the 30 Oct code review** (ultrareview, run by Ethan):
+  - A source returning bad content (a non-numeric cell, a missing column, a corrupt workbook, a failed bootstrap) used to crash startup and Refresh, because only download errors were caught. Every failure now falls back to that currency's last stored curve, and is logged with its type.
+  - A settlement date outside a bond's life (e.g. `DEBTLAB_SETTLEMENT_DATE` before the century bond's issue) stopped the app. That bond is now shown as "not priced" with the reason; the other is priced.
+  - The quoting gate was worked out once per refresh, so a curve that went stale while the app ran kept saying "Quoting allowed". It is now re-applied on every read.
+  - Valuation audit keys now include a digest of the results, so a valuation that changes on the same curve and date (edited terms, a pricing fix) is recorded. One extra valuation event per bond appears the first time this version runs on an existing database.
+  - A NAV report that differs from a stored one with the same fund, as-of date and report time is now refused with an error, instead of silently ignored. A correction needs its own report time.
+  - Month-end bonds: the first period of a bond issued 31 Aug and maturing 31 Aug was treated as a stub and underpaid its coupon (2.95 instead of 3.00). Fixed and checked against QuantLib. None of our instruments was affected; the century bond's real-curve figures are unchanged (clean 90.6201, yield 6.6188%).
+  - The Refresh button stays usable after a failed refresh; `export_snapshot.py --full` no longer writes a file called `--full`; the curve discounting rule exists once instead of twice.
+  - Not changed: a stalled source still blocks startup (risk R14, deferred to M9); pricing re-walks the coupon schedule many times (measured 0.35s per refresh for the century bond, so not worth optimising yet).
 - Dashboard wording: the century bond's duration note now reads "(1 + yield)" rather than "(1 + yield/1)" for annual coupons. Spotted by Ethan.
 - Line endings: `.gitattributes` keeps LF in the repo and working copy. `save_fixtures.py` now writes the ECB JSON with LF on Windows too (it was writing CRLF, an artefact of our script, not the ECB's data); the 30 Oct ECB fixture is back to LF, its content unchanged.
 

@@ -119,6 +119,10 @@ QL_CASES = [
     (date(2025, 11, 12), date(2028, 11, 12), 0.045, 2, THIRTY_360, date(2026, 10, 29), 0.051),
     (date(2026, 1, 10), date(2031, 6, 10), 0.04, 2, ACT_ACT_ICMA, date(2026, 3, 2), 0.035),
     (date(2024, 2, 20), date(2054, 2, 20), 0.0475, 2, ACT_ACT_ICMA, date(2026, 12, 31), 0.058),
+    # Month-end bond: the first coupon date is clamped (31 Aug -> 28 Feb) but the period is regular.
+    # (No 30/360 month-end case: QuantLib sets those coupons by day count, 2.9667/3.05, where we
+    # pay rate/frequency as indentures do; see ASSUMPTIONS.md. The hand test below covers it.)
+    (date(2026, 8, 31), date(2029, 8, 31), 0.06, 2, ACT_ACT_ICMA, date(2026, 10, 29), 0.05),
 ]
 
 
@@ -195,6 +199,15 @@ def test_wrong_currency_curve_rejected():
     b = make_bond(date(2026, 3, 30), date(2029, 3, 30), "0.045", 2, ACT_ACT_ICMA)
     with pytest.raises(ValueError):
         engine.value_bond(b, curve_from_percent("USD", {"1Y": 4, "10Y": 4.5}), date(2026, 10, 29))
+
+
+@pytest.mark.parametrize("dc", [ACT_ACT_ICMA, THIRTY_360])
+def test_month_end_first_period_is_regular(dc):
+    """31 Aug 2026 to 28 Feb 2027 is a full regular period of a bond maturing 31 Aug: it pays 3.00, not a stub."""
+    b = make_bond(date(2026, 8, 31), date(2029, 8, 31), "0.06", 2, dc)
+    first = b.periods()[0]
+    assert (first.start, first.end) == (date(2026, 8, 31), date(2027, 2, 28))
+    assert first.regular and first.coupon == D(3)
 
 
 def test_settlement_outside_life_rejected():

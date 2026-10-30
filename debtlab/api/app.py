@@ -6,6 +6,7 @@ Run with:  python -m debtlab.api   (see README.md)
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,7 +18,7 @@ from debtlab.audit.db import connect, migrate, record_event, recent_events
 from debtlab.config import Settings
 from debtlab.instruments import FundShare, load_instruments
 from debtlab.pricing.bond import FixedRateBond
-from debtlab.service import curve_view, fund_view, load_curves, load_navs, value_all
+from debtlab.service import curve_view, fund_view, load_curves, load_navs, value_all, with_current_gate
 
 STATIC = Path(__file__).resolve().parent / "static"
 VERSION = "0.3.0-dev"
@@ -38,9 +39,14 @@ def render_page(snapshot_json: str | None = None, shell: bool = True) -> str:
     return _SHELL.format(body=body) if shell else body
 
 
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class State:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, clock: Callable[[], datetime] = utc_now) -> None:
         self.settings = settings
+        self.clock = clock  # tests substitute a fake clock
         self.lock = threading.Lock()
         self.conn = connect(settings.db_path)
         migrate(self.conn)
@@ -51,14 +57,14 @@ class State:
         self.navs: dict = {}
         self.valuations: list[dict] = []
         self.last_refresh: datetime | None = None
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = clock()
 
     def settle_date(self):
-        return self.settings.settlement_date or datetime.now(timezone.utc).date()
+        return self.settings.settlement_date or self.clock().date()
 
     def refresh(self) -> None:
         with self.lock:
-            now = datetime.now(timezone.utc)
+            now = self.clock()
             self.curves = load_curves(self.conn, self.settings, now)
             self.navs = load_navs(self.conn, self.funds)
             self.valuations = value_all(
@@ -67,12 +73,12 @@ class State:
             self.last_refresh = now
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, clock: Callable[[], datetime] = utc_now) -> FastAPI:
     settings = settings or Settings.from_env()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        state = State(settings)
+        state = State(settings, clock)
         record_event(state.conn, "app_started",
                      {"version": VERSION, "data_mode": settings.data_mode})
         state.refresh()
@@ -85,7 +91,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def overview() -> dict:
         s: State = app.state.s
-        now = datetime.now(timezone.utc)
+        now = s.clock()
         return {
             "generated_at": now.isoformat(),
             "version": VERSION,
@@ -94,7 +100,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "settle": s.settle_date().isoformat(),
             "last_refresh": s.last_refresh.isoformat() if s.last_refresh else None,
             "curves": [curve_view(c, now, settings.max_curve_age_hours) for c in s.curves.values()],
-            "instruments": s.valuations,
+            "instruments": with_current_gate(s.valuations, s.curves, now, settings.max_curve_age_hours),
             "funds": [fund_view(f, s.navs.get(f.id), now) for f in s.funds],
             "events": recent_events(s.conn, limit=100),
         }
@@ -102,7 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict:
         s: State = app.state.s
-        now = datetime.now(timezone.utc)
+        now = s.clock()
         s.conn.execute("SELECT 1").fetchone()
         return {
             "status": "ok",

@@ -61,9 +61,13 @@ class FixedRateBond:
     def periods(self) -> list[Period]:
         dates = coupon_schedule(self.issue_date, self.maturity_date, self.frequency)
         step = 12 // self.frequency
+        n = len(dates) - 1
+        # The first period's notional regular start, measured from maturity like
+        # every schedule date (not from its clamped end: 28 Feb - 6m is 28 Aug, not 31 Aug).
+        first_ref_start = add_months(self.maturity_date, -step * n)
         out: list[Period] = []
         for i, (start, end) in enumerate(zip(dates, dates[1:])):
-            ref_start = add_months(end, -step) if i == 0 else start
+            ref_start = first_ref_start if i == 0 else start
             if self.day_count == ACT_365F or ref_start != start:
                 # Day count decides the amount for stubs (and always for ACT/365F).
                 frac = accrual_fraction(

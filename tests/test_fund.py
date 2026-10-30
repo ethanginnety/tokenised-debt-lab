@@ -98,3 +98,16 @@ def test_api_lists_fund_separately_from_bonds(tmp_path):
         (f,) = o["funds"]
         assert f["terms"]["id"] == "PCF-USD-SIM" and f["nav_per_share"] == "10.2417"
         assert f["trading_allowed"] is False
+
+
+def test_conflicting_nav_report_is_refused_not_dropped():
+    """Same fund, as-of date and report time but a different NAV: a correction needs its own report time."""
+    conn = connect(":memory:")
+    migrate(conn)
+    save_nav(conn, report())
+    with pytest.raises(ValueError, match="conflicting NAV report"):
+        save_nav(conn, report(nav="10.3000"))
+    assert latest_nav(conn, "PCF-USD-SIM").nav_per_share == D("10.2417")
+    restated = report(nav="10.3000", reported="2026-10-27T09:00:00+00:00")  # a proper restatement
+    assert save_nav(conn, restated) is True
+    assert latest_nav(conn, "PCF-USD-SIM") == restated

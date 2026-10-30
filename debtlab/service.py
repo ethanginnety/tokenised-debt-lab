@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 from datetime import date, datetime, timezone
 
@@ -44,16 +46,33 @@ def load_curves(
             curves[ccy] = snap
             record_event(conn, "curve_loaded", _curve_summary(snap), entity=ccy,
                          idempotency_key=f"curve_loaded:{snap.id}")
-        except MarketDataError as exc:
+        except Exception as exc:  # noqa: BLE001 - any failure (fetch, parse, bootstrap) falls back per currency
             previous = latest_curve(conn, ccy, MARKET_KINDS)
             record_event(conn, "marketdata_error",
-                         {"error": str(exc), "fallback": previous.id if previous else None},
+                         {"error": str(exc), "error_type": type(exc).__name__,
+                          "fallback": previous.id if previous else None},
                          entity=ccy)
             if previous:
                 # Last valid observation, flagged by its age. Stored par curves
                 # (from before the bootstrap existed) are converted on the way out.
                 curves[ccy] = to_zero_snapshot(previous)
     return curves
+
+
+def with_current_gate(
+    valuations: list[dict], curves: dict[str, CurveSnapshot], now: datetime, max_age_hours: int
+) -> list[dict]:
+    """Re-apply the quoting gate at read time, so a curve that ages after a refresh blocks quoting."""
+    out = []
+    for v in valuations:
+        if v["status"] != "ok":
+            out.append(v)  # never priced, so never quotable
+            continue
+        snap = curves.get(v["terms"]["benchmark"])
+        allowed, reason = risk_increasing_allowed(snap, now, max_age_hours)
+        out.append({**v, "trading_allowed": allowed, "trading_gate_reason": reason,
+                    "curve_status": snap.status(now, max_age_hours) if snap else "missing"})
+    return out
 
 
 def _curve_summary(snap: CurveSnapshot) -> dict:
@@ -111,6 +130,15 @@ def value_all(
                         "message": f"No {b.benchmark} curve available, so the bond isn't priced.",
                         "trading_allowed": False, "trading_gate_reason": reason})
             continue
+        if not b.issue_date <= settle < b.maturity_date:
+            why = (f"not issued yet (issues {b.issue_date.isoformat()})" if settle < b.issue_date
+                   else f"matured on {b.maturity_date.isoformat()}")
+            record_event(conn, "valuation_skipped", {"reason": why, "settle": settle.isoformat()},
+                         entity=b.id, idempotency_key=f"valuation_skipped:{b.id}:{settle.isoformat()}")
+            out.append({"terms": terms, "status": "not_priced",
+                        "message": f"Not priced for settlement on {settle.isoformat()}: {why}.",
+                        "trading_allowed": False, "trading_gate_reason": why})
+            continue
         v = value_bond(b, snap.curve, settle)
         result = {
             "terms": terms,
@@ -162,12 +190,11 @@ def value_all(
                 for y, p in price_yield_profile(b, v.ytm, settle)
             ],
         }
-        record_event(
-            conn, "valuation",
-            {k: result[k] for k in ("curve_snapshot", "fair_clean", "ytm_pct", "modified_duration", "settle")},
-            entity=b.id,
-            idempotency_key=f"valuation:{b.id}:{snap.id}:{settle.isoformat()}",
-        )
+        recorded = {k: result[k] for k in ("curve_snapshot", "fair_clean", "ytm_pct", "modified_duration", "settle")}
+        # The key covers the results too: changed terms or pricing code on the same curve and date are recorded.
+        digest = hashlib.sha256(json.dumps(recorded, sort_keys=True).encode("utf-8")).hexdigest()[:8]
+        record_event(conn, "valuation", recorded, entity=b.id,
+                     idempotency_key=f"valuation:{b.id}:{snap.id}:{settle.isoformat()}:{digest}")
         out.append(result)
     return out
 

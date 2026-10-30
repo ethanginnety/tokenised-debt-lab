@@ -206,3 +206,105 @@ def test_fallback_par_curve_is_bootstrapped(tmp_path, monkeypatch):
     monkeypatch.setattr(service, "ONLINE_ADAPTERS", {"USD": fail})
     curves = load_curves(conn, s, NOW)
     assert curves["USD"].rate_type == "zero_bootstrapped" and curves["USD"].curve.compounding == 2
+
+
+# ---------------------------------------------------------------- review fixes (30 Oct 2026)
+
+
+@pytest.mark.parametrize("error", [
+    __import__("decimal").InvalidOperation("D('N/A')"),  # non-numeric cell
+    KeyError("TIME_PERIOD"),  # missing column
+    ArithmeticError("non-positive discount factor"),  # bootstrap failure
+])
+def test_any_source_failure_falls_back_and_spares_other_currencies(tmp_path, monkeypatch, error):
+    import debtlab.service as service
+
+    s = settings(tmp_path, mode="online")
+    conn = connect(s.db_path)
+    migrate(conn)
+    old = parse_treasury_csv((FIX / "treasury_sample.csv").read_text(encoding="utf-8"), NOW)
+    save_curve(conn, old)
+    gbp = adapters.illustrative_curves(NOW)["GBP"]
+
+    def broken(_now):
+        raise error
+
+    monkeypatch.setattr(service, "ONLINE_ADAPTERS", {"USD": broken, "GBP": lambda _now: gbp})
+    curves = load_curves(conn, s, NOW)
+    assert curves["USD"].id == adapters.to_zero_snapshot(old).id  # last stored curve, not a crash
+    assert curves["GBP"] is gbp  # the currency that loaded is kept
+    (err,) = recent_events(conn, kind="marketdata_error")
+    assert err["entity"] == "USD" and err["payload"]["error_type"] == type(error).__name__
+
+
+@pytest.mark.parametrize("settle, unpriced, reason", [
+    (date(2026, 3, 1), "CENTURY-GBP-2126", "not issued yet"),  # before 30 Mar 2026
+    (date(2029, 3, 1), "SHORT-USD-2029", "matured"),  # after 17 Feb 2029
+])
+def test_bond_outside_its_life_is_skipped_not_fatal(tmp_path, settle, unpriced, reason):
+    with TestClient(create_app(settings(tmp_path, settlement_date=settle))) as c:
+        ids = {i["terms"]["id"]: i for i in c.get("/api/overview").json()["instruments"]}
+        assert ids[unpriced]["status"] == "not_priced" and reason in ids[unpriced]["message"]
+        (other,) = [v for k, v in ids.items() if k != unpriced]
+        assert other["status"] == "ok"  # the other bond is still priced
+        skipped = c.get("/api/events", params={"kind": "valuation_skipped"}).json()
+        assert [e["entity"] for e in skipped] == [unpriced]
+
+
+def test_quoting_gate_is_reapplied_when_a_curve_ages(tmp_path, monkeypatch):
+    import debtlab.service as service
+
+    usd = adapters.to_zero_snapshot(
+        parse_treasury_csv((FIX / "treasury_sample.csv").read_text(encoding="utf-8"), NOW))
+
+    def down(_now):
+        raise MarketDataError("down")
+
+    monkeypatch.setattr(service, "ONLINE_ADAPTERS", {"USD": lambda _now: usd, "GBP": down})
+    clock = [NOW]  # observed 27 Oct, so 60h old: fresh
+    with TestClient(create_app(settings(tmp_path, mode="online"), clock=lambda: clock[0])) as c:
+        short = lambda: next(i for i in c.get("/api/overview").json()["instruments"]  # noqa: E731
+                             if i["terms"]["id"] == "SHORT-USD-2029")
+        assert short()["trading_allowed"] is True and short()["curve_status"] == "fresh"
+        clock[0] = NOW + timedelta(days=3)  # 132h: stale, and nobody pressed Refresh
+        later = short()
+        assert later["trading_allowed"] is False and later["curve_status"] == "stale"
+        assert "stale" in later["trading_gate_reason"]
+
+
+def test_changed_bond_terms_on_same_curve_are_recorded(tmp_path):
+    from dataclasses import replace
+
+    from debtlab.instruments import load_instruments
+    from debtlab.pricing.bond import FixedRateBond
+    from debtlab.service import value_all
+
+    s = settings(tmp_path)
+    conn = connect(s.db_path)
+    migrate(conn)
+    curves = load_curves(conn, s, NOW)
+    short = next(b for b in load_instruments(s.instruments_file)
+                 if isinstance(b, FixedRateBond) and b.currency == "USD")
+    value_all(conn, [short], curves, date(2026, 10, 29), s, NOW)
+    value_all(conn, [short], curves, date(2026, 10, 29), s, NOW)  # identical: recorded once
+    assert len(recent_events(conn, kind="valuation")) == 1
+    wider = replace(short, credit_spread=short.credit_spread + D("0.005"))  # config edited
+    value_all(conn, [wider], curves, date(2026, 10, 29), s, NOW)
+    events = recent_events(conn, kind="valuation")
+    assert len(events) == 2 and events[0]["payload"]["fair_clean"] != events[1]["payload"]["fair_clean"]
+
+
+@pytest.mark.parametrize("argv, out, full", [
+    ([], "snapshot.html", False),
+    (["--full"], "snapshot.html", True),  # used to write a file named "--full"
+    (["--full", "x.html"], "x.html", True),
+    (["x.html", "--full"], "x.html", True),
+])
+def test_export_snapshot_arguments(argv, out, full):
+    import importlib.util
+
+    path = Path(__file__).parent.parent / "scripts" / "export_snapshot.py"
+    spec = importlib.util.spec_from_file_location("export_snapshot", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.parse_args(argv) == (Path(out), full)

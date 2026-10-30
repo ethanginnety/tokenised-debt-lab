@@ -14,6 +14,7 @@ from pathlib import Path
 
 from debtlab.instruments import NavReport
 from debtlab.marketdata.models import CurveSnapshot
+from debtlab.money import D
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
 
@@ -124,7 +125,17 @@ def latest_curve(
 
 
 def save_nav(conn: sqlite3.Connection, report: NavReport) -> bool:
-    """Store a reported NAV. Returns False if this exact report is already stored."""
+    """Store a reported NAV. Returns False if this exact report is already stored.
+
+    A different NAV under the same fund, as-of date and report time is refused
+    rather than silently ignored: a correction must carry its own report time.
+    """
+    row = conn.execute("SELECT nav_per_share, source FROM nav_reports WHERE id = ?", (report.id,)).fetchone()
+    if row and (D(row["nav_per_share"]), row["source"]) != (report.nav_per_share, report.source):
+        raise ValueError(
+            f"conflicting NAV report {report.id}: stored {row['nav_per_share']} ({row['source']}), "
+            f"new {report.nav_per_share} ({report.source}); give a restatement its own reported_at"
+        )
     cur = conn.execute(
         "INSERT OR IGNORE INTO nav_reports(id, fund_id, nav_per_share, as_of, reported_at, source)"
         " VALUES (?, ?, ?, ?, ?, ?)",

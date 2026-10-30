@@ -32,12 +32,15 @@ Every modelling or technical choice made without explicit instruction. Each one 
 | Payment dates | Rolled to the next weekday. Bank holidays are not modelled yet. |
 | Accrual dates | Unadjusted (standard for bonds). |
 | Settlement | Today in UTC by default; set `DEBTLAB_SETTLEMENT_DATE` to override. No T+1/T+2 settlement lag yet. |
-| Stubs | Short first periods handled under ACT/ACT (ICMA) and 30/360. Long stubs aren't generated. |
+| Stubs | Short first periods handled under ACT/ACT (ICMA) and 30/360. Long stubs aren't generated. A first period is regular when it starts exactly one period before its end *as measured from maturity*, so a bond issued 31 Aug and maturing 31 Aug has a regular first period ending 28 Feb. |
+| Regular coupons | Every regular period pays exactly rate ÷ frequency (3.00 per 100 for 6% semi-annual), whatever the day count, as bond indentures specify. QuantLib's `FixedRateBond` on 30/360 instead sets month-end coupons by day count (2.9667, 3.05, …), so that case is not compared with QuantLib. 30/360 is bond basis with no end-of-February adjustment, so yield exponents of month-end 30/360 bonds differ from whole periods by a day or two. None of our instruments is month-end. |
 
 ## Data
 
 | Item | Assumption |
 |---|---|
+| Source failures | Any failure loading a currency's curve (download, parse, bootstrap) is recorded with its type and falls back to that currency's last stored official curve; other currencies load normally. |
+| Bonds outside their life | A bond is not priced before its issue date or on/after maturity; it shows "not priced" with the reason and the other bonds are unaffected. |
 | Freshness | A daily curve becomes **stale after 96 hours**, measured from midnight UTC on its observation date. That allows a weekend plus one late publication. |
 | Illustrative GBP curve | 10Y and 30Y set near levels reported in the press on 14 Oct 2026 (10Y about 5.4%, 30Y about 6%). Every other point is invented for shape. |
 | Illustrative USD curve | Entirely invented for a plausible shape. |

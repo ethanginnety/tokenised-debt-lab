@@ -47,14 +47,22 @@ def dirty_price_from_curve(
     where f is the curve's own compounding if it states one, else the bond's
     coupon frequency. Continuously compounded curves use DF = e^(−r·t).
     """
+    pv = sum((v for _, v in _cash_flow_pvs(bond, curve, settle, spread_shift_bp)), ZERO)
+    return _per_100(bond, pv)
+
+
+def _cash_flow_pvs(
+    bond: FixedRateBond, curve: YieldCurve, settle: date, spread_shift_bp: object = 0
+) -> list[tuple[Decimal, Decimal]]:
+    """(time in years, present value) of each remaining payment: the one discounting rule."""
     comp = curve.compounding_for(bond.frequency)
     spread = bond.credit_spread + bp(spread_shift_bp)
-    pv = ZERO
+    out = []
     for p in bond.remaining_periods(settle):
         t = act_365f(settle, p.pay_date)
         r = curve.zero_rate(t) + spread
-        pv += (p.coupon + p.principal) * discount_factor(r, t, comp)
-    return _per_100(bond, pv)
+        out.append((t, (p.coupon + p.principal) * discount_factor(r, t, comp)))
+    return out
 
 
 def accrued_per_100(bond: FixedRateBond, settle: date) -> Decimal:
@@ -302,16 +310,9 @@ def value_bond(
     eff_conv = (down + up - 2 * dirty) / (dirty * dy * dy)
 
     # How much of today's value depends on extrapolated rates?
-    comp = curve.compounding_for(bond.frequency)
-    beyond = ZERO
-    total = ZERO
-    for p in bond.remaining_periods(settle):
-        t = act_365f(settle, p.pay_date)
-        r = curve.zero_rate(t) + bond.credit_spread
-        pv = (p.coupon + p.principal) * discount_factor(r, t, comp)
-        total += pv
-        if t > curve.longest_tenor:
-            beyond += pv
+    pvs = _cash_flow_pvs(bond, curve, settle)
+    total = sum((pv for _, pv in pvs), ZERO)
+    beyond = sum((pv for t, pv in pvs if t > curve.longest_tenor), ZERO)
 
     results = []
     for name, kind, shift in shocks:
