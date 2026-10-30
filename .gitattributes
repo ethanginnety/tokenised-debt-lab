@@ -1,0 +1,13 @@
+# Text files are stored with LF line endings in the repo and checked out
+# with LF too, so Windows and other systems see identical files and git stops
+# converting (and warning about) line endings.
+* text=auto eol=lf
+
+# Raw downloads are kept byte-for-byte as the source published them.
+tests/fixtures/real/** -text
+
+# Binary files: never touched.
+*.zip binary
+*.xlsx binary
+*.sqlite3 binary
+*.png binary
