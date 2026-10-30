@@ -131,6 +131,8 @@ def value_all(
             "dv01": str(q(v.risk.dv01, 6)),
             "effective_duration": str(q(v.effective_duration, 4)),
             "effective_convexity": str(q(v.effective_convexity, 4)),
+            # How the curve's rates compound (0 = continuous): effective duration is per unit of these.
+            "curve_compounding": snap.curve.compounding_for(b.frequency),
             "cash_flows_remaining": v.cash_flows_remaining,
             "years_to_maturity": str(q(v.years_to_maturity, 2)),
             "beyond_curve_share_pct": str(q(v.beyond_curve_share * 100, 2)),

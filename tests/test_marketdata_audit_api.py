@@ -145,6 +145,8 @@ def test_api_offline_end_to_end(tmp_path):
         assert century["trading_allowed"] is False  # illustrative data never drives quoting
         assert D("10") < D(century["modified_duration"]) < D("17")
         assert D(ids["SHORT-USD-2029"]["modified_duration"]) < D(3)
+        # Illustrative curves compound at each bond's own frequency.
+        assert [century["curve_compounding"], ids["SHORT-USD-2029"]["curve_compounding"]] == [1, 2]
         assert all(cv["kind"] == "illustrative" for cv in o["curves"])
         kinds = {e["kind"] for e in o["events"]}
         assert {"app_started", "curve_loaded", "valuation"} <= kinds

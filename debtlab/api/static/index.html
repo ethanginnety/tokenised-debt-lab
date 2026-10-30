@@ -128,7 +128,7 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
 <div class="wrap" id="app">
   <header class="top">
     <div>
-      <p class="label">Milestone 2 in progress · bond pricing</p>
+      <p class="label">Milestone 2 complete · bond pricing on official curves</p>
       <h1>Tokenised Debt Lab</h1>
       <p class="sub">A prototype marketplace for simulated tokenised debt. This page shows the pricing engine: what each bond is worth, how sensitive it is to rates, and where every number comes from.</p>
     </div>
@@ -334,6 +334,7 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
         kv("DV01 (per 100)", fmt(b.dv01, 4)),
         kv("Years to maturity", fmt(b.years_to_maturity, 1)),
         kv("Payments left", String(b.cash_flows_remaining))),
+      durationNote(b),
     );
     if (Number(b.beyond_curve_share_pct) > 0) {
       card.append(el("p", { class: "extrap" }, el("b", { text: fmt(b.beyond_curve_share_pct, 1) + "%" }),
@@ -347,6 +348,18 @@ footer { color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--lin
   function gate(b) {
     return el("div", { class: "gate" + (b.trading_allowed ? " open" : "") }, el("span", { class: "dot" }),
       el("span", { text: b.trading_allowed ? "Quoting allowed on this data." : "Quoting blocked: " + b.trading_gate_reason + "." }));
+  }
+
+  // Modified duration is per unit of the bond's yield, compounded at its coupon
+  // frequency; effective duration is per unit of the curve's own rates.
+  function durationNote(b) {
+    const name = (m) => ({ 0: "continuously", 1: "annually", 2: "semi-annually", 4: "quarterly", 12: "monthly" })[m] + " compounded";
+    const y = name(b.terms.frequency), c = name(b.curve_compounding);
+    let text = `Modified duration measures sensitivity to the yield to maturity, ${y}. Effective duration bumps the benchmark curve 1 bp, and its rates are ${c}. `;
+    if (b.curve_compounding === b.terms.frequency) text += "Same convention, so the two should be close.";
+    else if (b.curve_compounding === 0) text += `On a continuous curve effective duration is close to Macaulay duration, about (1 + yield/${b.terms.frequency}) times modified, so the gap reflects the convention, not extra risk.`;
+    else text += "Different conventions, so the two differ slightly.";
+    return el("p", { class: "muted small", text });
   }
 
   function shocksTable(bonds) {

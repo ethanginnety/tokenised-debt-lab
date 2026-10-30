@@ -2,8 +2,9 @@
 
 ## 0.2.0-dev — 30 Oct 2026
 
-Milestone 2.
+Milestone 2 (complete).
 
+- Dashboard: each bond panel now says which compounding its two duration figures use. On the century bond, modified duration (14.55) is per unit of the annually compounded yield; effective duration (15.54) bumps the continuously compounded gilt curve, which makes it close to Macaulay duration (15.51). The gap is the convention, not extra risk: restated per unit of annual yield it is 14.57. Spotted by Ethan. The API reports `curve_compounding` per bond. Header now reads "Milestone 2 complete".
 - **Long-end extrapolation sensitivity (M2 step 5).** Curves can now extrapolate with a flat *forward* rate (from the last segment or a chosen window) as well as a flat zero rate, and can move the long-run forward up or down. Each bond that extends past its curve gets a table: seven rules, the rate each gives at maturity, the clean price, and the change against the current rule. Shown in the API (`long_end`) and on the dashboard. On the real 29 Oct gilt curve the century bond ranges from 89.56 (forward 6.33%) to 94.11 (forward 3.28%) around today's 90.62: a 5-point spread from a choice no market observes. Prices, IDs and the stored audit trail are unchanged; the table is information only. Flat-forward discount factors match QuantLib's log-linear extrapolation to 1e-14.
 
 - **Par-to-zero bootstrap.** US Treasury par yields are now converted into zero rates (semi-annual grid, par yields interpolated linearly) before pricing. Matches QuantLib's bootstrapper to 1e-12, and every par bond reprices to par. On the real 29 Oct curve the 20-year zero rate is 18 bp above the par yield; the 3-year bond's price moved from 97.2944 to 97.2803.
