@@ -5,6 +5,7 @@
 Writes, unchanged, exactly what each source returned:
     tests/fixtures/real/treasury_YYYY-MM-DD.csv
     tests/fixtures/real/ecb_YYYY-MM-DD.json   ({tenor: csv text})
+    tests/fixtures/real/boe_YYYY-MM-DD.zip    (Bank of England gilt curves)
 
 The tests in tests/test_real_fixtures.py then parse every saved file, so a
 change in a source's format shows up as a failing test, not a wrong price.
@@ -22,10 +23,13 @@ sys.path.insert(0, str(ROOT))
 
 from debtlab.marketdata.adapters import (  # noqa: E402
     ECB_TENORS,
+    BOE_URL,
     ECB_URL,
     TREASURY_URL,
     MarketDataError,
     _get,
+    _get_bytes,
+    parse_boe_zip,
     parse_ecb_csv,
     parse_treasury_csv,
     with_retries,
@@ -61,6 +65,17 @@ def main() -> int:
     except MarketDataError as exc:
         ok = False
         print(f"ECB FAILED: {exc}")
+
+    try:
+        content = with_retries(lambda: _get_bytes(BOE_URL))
+        snap = parse_boe_zip(content, now)
+        path = OUT / f"boe_{stamp}.zip"
+        path.write_bytes(content)
+        print(f"saved {path.relative_to(ROOT)}  observation {snap.observation_date}, "
+              f"{len(snap.curve.points)} maturities")
+    except MarketDataError as exc:
+        ok = False
+        print(f"Bank of England FAILED: {exc}")
 
     return 0 if ok else 1
 

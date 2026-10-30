@@ -11,7 +11,21 @@ import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from debtlab.money import D, bp
+from debtlab.money import ONE, D, bp
+
+CONTINUOUS = 0  # compounding code for continuously compounded rates
+
+
+def discount_factor(rate: Decimal, t: Decimal, compounding: int) -> Decimal:
+    """Value today of 1 paid in `t` years at `rate`.
+
+    Continuous:  DF = e^(−r·t)
+    f per year:  DF = (1 + r/f)^(−f·t)
+    """
+    if compounding == CONTINUOUS:
+        return (-rate * t).exp()
+    f = D(compounding)
+    return (ONE + rate / f) ** (-f * t)
 
 
 @dataclass(frozen=True)
@@ -27,8 +41,9 @@ class YieldCurve:
     points: tuple[tuple[Decimal, Decimal], ...]  # (tenor in years, rate)
     extrapolation: str = "flat"
     shift: Decimal = field(default=Decimal(0))
-    # How the rates compound when turned into discount factors: 2 = semi-annual.
-    # None means "use the bond's own coupon frequency" (the M1 behaviour).
+    # How the rates compound when turned into discount factors: 2 = semi-annual,
+    # CONTINUOUS (0) = continuously. None means "use the bond's own coupon
+    # frequency" (the M1 behaviour, kept for illustrative curves).
     compounding: int | None = None
 
     def __post_init__(self) -> None:
@@ -39,7 +54,7 @@ class YieldCurve:
             raise ValueError("curve tenors must be strictly increasing")
         if self.extrapolation != "flat":
             raise ValueError("only flat extrapolation is implemented")
-        if self.compounding is not None and self.compounding not in (1, 2, 4, 12):
+        if self.compounding is not None and self.compounding not in (CONTINUOUS, 1, 2, 4, 12):
             raise ValueError(f"unsupported compounding {self.compounding}")
 
     @property
@@ -61,7 +76,7 @@ class YieldCurve:
         return rate + self.shift
 
     def compounding_for(self, bond_frequency: int) -> int:
-        return self.compounding or bond_frequency
+        return bond_frequency if self.compounding is None else self.compounding
 
     def shifted(self, shift_bp: object) -> "YieldCurve":
         """Same curve moved up or down in parallel by `shift_bp` basis points."""

@@ -16,10 +16,12 @@ Every modelling or technical choice made without explicit instruction. Each one 
 
 | Item | Assumption |
 |---|---|
-| Curve rates | Each curve states its compounding where known. US Treasury: par yields bootstrapped to **semi-annual zero rates**. ECB: spot rates, compounding still to be confirmed (treated at the bond's coupon frequency for now). Illustrative curves: the bond's coupon frequency. |
+| Curve rates | Each curve states its compounding. US Treasury: par yields bootstrapped to **semi-annual zero rates**. Bank of England: **continuously compounded** spot rates (stated in the BoE yield-curve FAQ). ECB: treated as **continuously compounded** (the ECB data portal labels the series this way; full documentation not yet read). Illustrative curves: the bond's coupon frequency. |
+| Credit spread compounding | The spread is added to the zero rate and compounded the same way, so on gilt curves it is a continuously compounded spread. |
+| Gilt curve | BoE nominal spot curve, 0.5–40 years every 6 months; the latest day with at least 20 maturities is used. Beyond 40 years the rate is held flat. |
 | Treasury bootstrap | Semi-annual grid out to 30 years; par yields linearly interpolated between published maturities; at 6 months and shorter, zero = par (no intermediate coupons). Grid times are exact half-years, while the pricer measures time as ACT/365F, a difference of a few days at most. |
 | Interpolation | Linear between curve points. |
-| Long end | **Flat extrapolation** beyond the curve's last tenor. For the century bond about 4% of value (on the illustrative curve) depends on this. |
+| Long end | **Flat extrapolation** beyond the curve's last tenor. For the century bond on a 40-year gilt curve, about 8% of value depends on this. |
 | Discounting time | ACT/365F years from settlement to payment date. |
 | Yield, duration, convexity | Street convention: periods counted with the bond's day count, compounded at coupon frequency. Matches QuantLib. |
 | Payment dates | Rolled to the next weekday. Bank holidays are not modelled yet. |

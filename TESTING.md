@@ -22,10 +22,13 @@ QuantLib is a test-only dependency, used as an independent check on the pricing 
 | Storage and recovery | Migrations apply once; idempotent events; events survive a reopened database; last valid official curve used when the source fails, flagged stale; no curve invented when none stored. |
 | Bootstrap | Flat par curve gives the same flat zero curve; two-step hand example; every par bond on the real 29 Oct curve reprices to par (1e-24); real curve shape; matches QuantLib `PiecewiseLogLinearDiscount` to 1e-12; Treasury snapshots come out bootstrapped. |
 | Real downloads | Every saved Treasury and ECB file parses, has sane levels, and (Treasury) bootstraps cleanly. Skipped until files exist. |
+| Gilts and compounding | Workbook built to the real BoE layout: latest day used, blank cells skipped, sparse day falls back, bad zips and empty months raise; continuous discount factors exact; continuous curve pricing matches QuantLib to 1e-10; century bond prices off a gilt curve with sensible duration and extrapolated share. |
 | Portability | Every file read/write in the code and tests states UTF-8 (a Windows-only bug otherwise). |
 | API | Offline end to end (health, overview, events, refresh without duplicate valuations, dashboard page); online mode with all sources down leaves bonds unpriced; snapshot export escapes script tags. |
 
 ## Latest results
+
+**30 Oct 2026 (gilts): 49 passed, 3 skipped** (the 3 wait for real downloads).
 
 **30 Oct 2026 (0.2.0-dev): 41 passed, 2 skipped.** The skipped tests check real downloads and run once `scripts/save_fixtures.py` has saved some.
 

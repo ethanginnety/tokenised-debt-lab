@@ -23,6 +23,6 @@ A milestone is done only when its tests pass and its behaviour has been demonstr
 
 1. ~~Run the Treasury and ECB adapters on real data~~ (done 30 Oct: both work; Treasury needed a browser-like request). Save the raw responses as fixtures with `scripts/save_fixtures.py`: script built, waiting on a run from a machine with internet.
 2. ~~Bootstrap Treasury par yields to zero rates~~ (done 30 Oct; matches QuantLib to 1e-12).
-3. Build the Bank of England gilt adapter for the century bond.
-4. Confirm each source's compounding convention and convert to one internal convention.
+3. ~~Build the Bank of England gilt adapter~~ (built 30 Oct from Ethan's probe of the real file; first real run pending).
+4. ~~Confirm compounding conventions~~ (BoE confirmed continuous; ECB labelled continuous, to confirm in its technical notes).
 5. Add an extrapolation sensitivity table (flat vs. alternative long-end rules) for the century bond.

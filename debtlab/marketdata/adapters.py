@@ -13,8 +13,11 @@ from __future__ import annotations
 import csv
 import io
 import time
+import zipfile
 from datetime import date, datetime, timezone
-from typing import Callable
+from typing import Callable, TypeVar
+
+T = TypeVar("T")
 
 import httpx
 
@@ -22,14 +25,15 @@ from dataclasses import replace
 
 from debtlab.marketdata.models import ILLUSTRATIVE, OFFICIAL_DAILY, CurveSnapshot
 from debtlab.pricing.bootstrap import bootstrap_semiannual_par
-from debtlab.pricing.curve import curve_from_percent, tenor_to_years
+from debtlab.money import D
+from debtlab.pricing.curve import CONTINUOUS, YieldCurve, curve_from_percent, tenor_to_years
 
 
 class MarketDataError(RuntimeError):
     """Raised instead of ever returning made-up numbers."""
 
 
-def with_retries(fn: Callable[[], str], attempts: int = 3, base_delay: float = 1.0) -> str:
+def with_retries(fn: Callable[[], T], attempts: int = 3, base_delay: float = 1.0) -> T:
     """Call `fn`, retrying with exponential backoff (1s, 2s, 4s ...)."""
     last: Exception | None = None
     for i in range(attempts):
@@ -147,15 +151,16 @@ def parse_ecb_csv(by_tenor: dict[str, str], fetched_at: datetime) -> CurveSnapsh
         dates.add(rows[-1]["TIME_PERIOD"])
     if len(dates) != 1:
         raise MarketDataError(f"ECB tenors came from different dates: {sorted(dates)}")
+    eur = curve_from_percent("EUR", points)
     return CurveSnapshot(
-        curve=curve_from_percent("EUR", points),
+        curve=YieldCurve(eur.currency, eur.points, compounding=CONTINUOUS),
         source="ECB euro area AAA government spot curve",
         source_url=ECB_URL.format(tenor="{tenor}"),
         kind=OFFICIAL_DAILY,
         rate_type="zero",
         observation_date=date.fromisoformat(dates.pop()),
         fetched_at=fetched_at,
-        notes="ECB spot rates; compounding convention to be confirmed in M2.",
+        notes="ECB Svensson spot rates, treated as continuously compounded (per the ECB data portal's series label; to confirm).",
     )
 
 
@@ -168,9 +173,79 @@ def fetch_ecb(now: datetime | None = None) -> CurveSnapshot:
 # ------------------------------------------------------------ Bank of England
 
 
+BOE_URL = (
+    "https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/"
+    "latest-yield-curve-data.zip"
+)
+BOE_FILE = "GLC Nominal daily data current month.xlsx"
+BOE_SHEET = "4. spot curve"
+
+
+def parse_boe_zip(content: bytes, fetched_at: datetime, url: str = BOE_URL) -> CurveSnapshot:
+    """Latest day of the BoE nominal gilt spot curve (0.5y to 40y, in percent).
+
+    Layout, as downloaded 30 Oct 2026: in the zip, workbook BOE_FILE, sheet
+    BOE_SHEET. One row starts with 'years:' and lists maturities; each data row
+    starts with a date followed by spot rates. Blank cells (None or '') are
+    maturities the Bank didn't estimate that day and are skipped, never filled.
+    """
+    try:
+        import openpyxl  # imported here so the rest of the app runs without it
+    except ImportError as exc:  # pragma: no cover
+        raise MarketDataError("openpyxl is needed for the BoE curve: pip install openpyxl") from exc
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as z:
+            data = z.read(BOE_FILE)
+    except (zipfile.BadZipFile, KeyError) as exc:
+        raise MarketDataError(f"BoE zip missing {BOE_FILE!r}: {exc}") from exc
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        rows = list(wb[BOE_SHEET].iter_rows(values_only=True))
+    except KeyError as exc:
+        raise MarketDataError(f"BoE workbook missing sheet {BOE_SHEET!r}") from exc
+
+    header = next((r for r in rows if r and isinstance(r[0], str) and r[0].strip() == "years:"), None)
+    if header is None:
+        raise MarketDataError("BoE sheet has no 'years:' maturity row")
+    dated = [r for r in rows if r and isinstance(r[0], datetime)]
+    if not dated:
+        raise MarketDataError("BoE sheet has no dated rows yet (early in the month?)")
+
+    for row in reversed(dated):  # latest day that has a usable curve
+        points = []
+        for tenor, value in zip(header[1:], row[1:]):
+            if isinstance(tenor, (int, float)) and isinstance(value, (int, float)):
+                points.append((D(repr(float(tenor))), D(repr(float(value))) / D(100)))
+        if len(points) >= 20:
+            break
+    else:
+        raise MarketDataError("no BoE row has enough maturities")
+
+    return CurveSnapshot(
+        curve=YieldCurve("GBP", tuple(points), compounding=CONTINUOUS),
+        source="Bank of England nominal gilt spot curve",
+        source_url=url,
+        kind=OFFICIAL_DAILY,
+        rate_type="zero",
+        observation_date=row[0].date(),
+        fetched_at=fetched_at,
+        notes=(
+            f"Continuously compounded spot rates (BoE yield curve FAQ), "
+            f"{points[0][0]}y to {points[-1][0]}y."
+        ),
+    )
+
+
+def _get_bytes(url: str, timeout: float = 60.0) -> bytes:
+    resp = httpx.get(url, headers=HEADERS, timeout=timeout, follow_redirects=True)
+    resp.raise_for_status()
+    return resp.content
+
+
 def fetch_boe(now: datetime | None = None) -> CurveSnapshot:
-    """Gilt curves are published as spreadsheets; adapter scheduled for M2."""
-    raise MarketDataError("GBP gilt curve adapter not built yet (milestone M2)")
+    now = now or datetime.now(timezone.utc)
+    content = with_retries(lambda: _get_bytes(BOE_URL))
+    return parse_boe_zip(content, now)
 
 
 ONLINE_ADAPTERS: dict[str, Callable[[datetime], CurveSnapshot]] = {

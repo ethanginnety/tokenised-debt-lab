@@ -8,6 +8,9 @@ Milestone 2, steps 1–2.
 - Curves now carry their own compounding convention (the bootstrapped Treasury curve is semi-annual). Curves that don't state one behave as before.
 - `scripts/save_fixtures.py` saves the raw Treasury and ECB downloads into `tests/fixtures/real/`; `tests/test_real_fixtures.py` parses every saved file and skips cleanly when none exist.
 - Fixed (found by Ethan in the audit log): a re-processed curve with the same source and date reused the old ID, so the bootstrapped curve and the changed valuation were silently not recorded. Curve IDs now include a fingerprint of the content. Stored par curves used as a fallback are bootstrapped on the way out.
+- **Bank of England gilt curve.** Reads the nominal spot curve (0.5–40 years) from the BoE's daily "latest yield curve data" zip, laid out exactly as Ethan's probe showed on 30 Oct. Blank cells are skipped; an empty or sparse latest day falls back to the previous one. The century bond can now be priced from real UK rates.
+- **Continuous compounding.** The BoE states its spot rates are continuously compounded; the ECB's curve is labelled the same way. Curves can now say so, and pricing uses DF = e^(−r·t). Checked against QuantLib to 1e-10.
+- `save_fixtures.py` also saves the raw BoE zip. New dependency: `openpyxl`.
 - `scripts/probe_treasury.py` kept as a diagnostic for download problems.
 
 ## 0.1.1 — 30 Oct 2026

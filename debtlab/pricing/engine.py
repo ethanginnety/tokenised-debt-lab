@@ -20,7 +20,7 @@ from decimal import Decimal
 
 from debtlab.money import HUNDRED, ONE, ZERO, D, bp
 from debtlab.pricing.bond import FixedRateBond, Period
-from debtlab.pricing.curve import YieldCurve
+from debtlab.pricing.curve import YieldCurve, discount_factor
 from debtlab.pricing.dates import accrual_fraction, act_365f
 
 
@@ -45,15 +45,15 @@ def dirty_price_from_curve(
     discounted at r = zero(t) + spread, compounded f times a year:
         DF = (1 + r / f) ** (-f * t)
     where f is the curve's own compounding if it states one, else the bond's
-    coupon frequency.
+    coupon frequency. Continuously compounded curves use DF = e^(−r·t).
     """
-    f = D(curve.compounding_for(bond.frequency))
+    comp = curve.compounding_for(bond.frequency)
     spread = bond.credit_spread + bp(spread_shift_bp)
     pv = ZERO
     for p in bond.remaining_periods(settle):
         t = act_365f(settle, p.pay_date)
         r = curve.zero_rate(t) + spread
-        pv += (p.coupon + p.principal) * (ONE + r / f) ** (-f * t)
+        pv += (p.coupon + p.principal) * discount_factor(r, t, comp)
     return _per_100(bond, pv)
 
 
@@ -235,13 +235,13 @@ def value_bond(
     eff_conv = (down + up - 2 * dirty) / (dirty * dy * dy)
 
     # How much of today's value depends on extrapolated rates?
-    f = D(curve.compounding_for(bond.frequency))
+    comp = curve.compounding_for(bond.frequency)
     beyond = ZERO
     total = ZERO
     for p in bond.remaining_periods(settle):
         t = act_365f(settle, p.pay_date)
         r = curve.zero_rate(t) + bond.credit_spread
-        pv = (p.coupon + p.principal) * (ONE + r / f) ** (-f * t)
+        pv = (p.coupon + p.principal) * discount_factor(r, t, comp)
         total += pv
         if t > curve.longest_tenor:
             beyond += pv
