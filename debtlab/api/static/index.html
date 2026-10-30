@@ -76,6 +76,14 @@ a { color: var(--accent); }
   padding: calc(24px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
   padding-left: max(16px, env(safe-area-inset-left, 0px));
 }
+.masthead { display: flex; flex-direction: column; gap: 12px; }
+.pub {
+  display: block; padding: 0 8px 12px; border-bottom: 1px solid rgba(143, 179, 255, 0.22);
+  font-family: var(--font-ui); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; line-height: 1.2;
+  color: #8FB3FF; text-decoration: none; white-space: nowrap;
+}
+.pub:hover { color: #D6E4FF; }
+.pub:focus-visible { outline: 2px solid #4C8DFF; outline-offset: 2px; border-radius: 4px; }
 .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 14px; letter-spacing: -0.005em; padding-inline: 8px; }
 .brand .mark { width: 28px; height: 28px; border-radius: 8px; background: #1F5EFF; display: grid; place-items: center; font-size: 11px; letter-spacing: 0.02em; flex: none; }
 .nav { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -306,6 +314,8 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     position: sticky; top: 0; inset: auto; width: auto; flex-direction: row; align-items: center; gap: 8px 16px;
     padding: calc(8px + env(safe-area-inset-top, 0px)) 16px 8px; flex-wrap: wrap;
   }
+  .masthead { flex-direction: row; align-items: center; gap: 12px; min-width: 0; }
+  .pub { padding: 0 12px 0 0; border-bottom: none; border-right: 1px solid rgba(143, 179, 255, 0.22); }
   .brand { padding: 0; }
   .nav { flex-direction: row; overflow-x: auto; flex: 1 1 100%; gap: 4px; scrollbar-width: none; margin-inline: -4px; }
   .nav a { white-space: nowrap; padding: 6px 10px; }
@@ -317,11 +327,15 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
   section.sec, .inst { scroll-margin-top: 112px; }
   .chip.db { max-width: 100%; }
 }
-@media (prefers-reduced-motion: no-preference) { button, a.tile, .nav a { transition: background-color .15s, border-color .15s, color .15s, filter .15s; } }
+@media (max-width: 420px) { .brand .mark { display: none; } }
+@media (prefers-reduced-motion: no-preference) { button, a.tile, .nav a, .pub { transition: background-color .15s, border-color .15s, color .15s, filter .15s; } }
 </style>
 
 <nav class="side" aria-label="Sections">
-  <div class="brand"><span class="mark">TD</span><span>Tokenised Debt Lab</span></div>
+  <div class="masthead">
+    <a class="pub" href="https://substack.com/@inferenceletter" target="_blank" rel="noopener">The Inference Letter</a>
+    <div class="brand"><span class="mark">TD</span><span>Tokenised Debt Lab</span></div>
+  </div>
   <ul class="nav" id="nav">
     <li><a href="#overview">Overview</a></li>
     <li><a href="#bonds">Bonds</a></li>
