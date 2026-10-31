@@ -49,8 +49,8 @@ def conn(tmp_path):
     c.close()
 
 
-def decide(conn, curves=CURVES, on=TODAY, now=NOW, pnl=None, instruments=INSTRUMENTS):
-    return {d.instrument_id: d for d in decide_quotes(conn, instruments, curves, on, now, 96, CONFIG, pnl or {})}
+def decide(conn, curves=CURVES, on=TODAY, now=NOW, instruments=INSTRUMENTS):
+    return {d.instrument_id: d for d in decide_quotes(conn, instruments, curves, on, now, 96, CONFIG)}
 
 
 def test_both_bonds_quoted_and_the_fund_never(conn):
@@ -163,7 +163,7 @@ def test_sides_decided_in_the_same_round_count_as_open(conn):
 def test_own_open_orders_are_replaced_not_counted(conn):
     marks = {CENTURY.id: Mark("GBP", D(94), D("3.5"), D("0.137"), D(36))}
     for side, price in (("buy", "89.80"), ("sell", "91.40")):
-        assert place_order(conn, Order(f"old-{side}", CENTURY.id, side, D(price), D(100_000)), marks, {}, NOW).allowed
+        assert place_order(conn, Order(f"old-{side}", CENTURY.id, side, D(price), D(100_000)), marks, NOW).allowed
     assert decide(conn)[CENTURY.id].status == "quoted"  # 2 old + 2 new would be 4, still fine; the short:
     controls.set_limit(conn, "max_open_orders", "all", D(2), "Ethan", "test")
     d = decide(conn)
@@ -173,9 +173,12 @@ def test_own_open_orders_are_replaced_not_counted(conn):
 
 def test_daily_loss_in_one_currency_pauses_everything(conn):
     # Decision 3: a breach in either currency pauses the whole bot and cancels every order.
-    d = decide(conn, pnl={"GBP": D(-20_000)})
+    assert decide(conn)[CENTURY.id].status == "quoted"  # opens the day at today's curves
+    gilts_up = {**CURVES, "GBP": replace(GBP, curve=GBP.curve.shifted(D(20)))}  # gilt yields +20 bp
+    d = decide(conn, curves=gilts_up)  # the 1m century loses more than 20,000 on the day, from the ledger
     assert d[CENTURY.id].status == d[SHORT.id].status == "none"
-    assert d[SHORT.id].reasons == ("bot is paused (daily loss 20,000 GBP has reached the maximum 20,000)",)
+    assert d[SHORT.id].reasons[0].startswith("bot is paused (daily loss ")
+    assert d[SHORT.id].reasons[0].endswith("GBP has reached the maximum 20,000)")
     assert controls.state(conn)["changed_by"] == "risk check"
 
 

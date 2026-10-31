@@ -2,7 +2,7 @@
 
 For every instrument, in order:
 1. A fund share is never quoted off its reported NAV.
-2. A daily-loss breach in any currency pauses the bot first. The bot must be running, the ledger must pass its integrity check, and there must be a market maker.
+2. A daily-loss breach in any currency, worked out from the ledger, pauses the bot first. The bot must be running, the ledger must pass its integrity check, and there must be a market maker.
 3. The bond's curve must be official and fresh (`risk_increasing_allowed`).
 4. The bond must value. Its lifecycle state sets what is allowed: *normal*; *restricted*
    (grace period: only the ask, at twice the spread and half the size); *halted*
@@ -61,17 +61,18 @@ class _Prepared:
 
 
 def decide_quotes(conn: sqlite3.Connection, instruments: list[Instrument], curves: dict[str, CurveSnapshot],
-                  on: date, now: datetime, max_curve_age_hours: int, config_path: Path,
-                  daily_pnl: dict[str, Decimal]) -> list[QuoteDecision]:
+                  on: date, now: datetime, max_curve_age_hours: int, config_path: Path) -> list[QuoteDecision]:
     """Decide and record a quote (or none) for every instrument, valued on `on`."""
-    execution.enforce_daily_loss(conn, daily_pnl, now)  # a breach in any currency pauses everything
-    blockers = _blockers(conn)
-    mm = None if any(b.startswith("no market maker") for b in blockers) else execution.market_maker_id(conn)
+    has_mm = conn.execute("SELECT 1 FROM parties WHERE role = 'market_maker'").fetchone() is not None
+    mm = execution.market_maker_id(conn) if has_mm else None
     bonds = [i for i in instruments if isinstance(i, FixedRateBond)]
     held = {} if mm is None else ledger.balances(conn).get(mm, {})
     prepared = {i.id: _prepare(conn, i, curves, on, now, max_curve_age_hours,
                                held.get(i.id, ZERO)) for i in instruments}
     marks = {k: p.mark for k, p in prepared.items() if p.mark is not None}
+    if mm is not None:  # a breach in any currency pauses everything, before anything is quoted
+        execution.enforce_daily_loss(conn, marks, now)
+    blockers = _blockers(conn)
     unknown = _unknown_exposure(held, bonds, marks)
 
     out, pending = [], []
@@ -80,11 +81,22 @@ def decide_quotes(conn: sqlite3.Connection, instruments: list[Instrument], curve
         reasons = list(p.reasons) if p.state == "never" else blockers + list(p.reasons)
         quote = None
         if not reasons:
-            quote, side_reasons, orders = _quote_and_check(conn, inst, p, config_path, now, marks, daily_pnl,
+            quote, side_reasons, orders = _quote_and_check(conn, inst, p, config_path, now, marks,
                                                            tuple(pending), unknown)
             reasons += side_reasons
             pending += orders
         out.append(_record(conn, inst, p, quote, reasons, now))
+    return out
+
+
+def current_marks(conn: sqlite3.Connection, instruments: list[Instrument], curves: dict[str, CurveSnapshot],
+                  on: date, now: datetime, max_curve_age_hours: int) -> dict[str, Mark]:
+    """The marks a quoting round would use now, for display; nothing is decided or recorded."""
+    out = {}
+    for inst in instruments:
+        p = _prepare(conn, inst, curves, on, now, max_curve_age_hours, ZERO)
+        if p.mark is not None:
+            out[inst.id] = p.mark
     return out
 
 
@@ -146,7 +158,7 @@ def _unknown_exposure(held: dict[str, Decimal], bonds: list[FixedRateBond], mark
     return out
 
 
-def _quote_and_check(conn, inst, p: _Prepared, config_path, now, marks, daily_pnl, pending, unknown):
+def _quote_and_check(conn, inst, p: _Prepared, config_path, now, marks, pending, unknown):
     try:
         cap = controls.limit(conn, "max_inventory", inst.id)
     except controls.ControlError as exc:
@@ -160,7 +172,7 @@ def _quote_and_check(conn, inst, p: _Prepared, config_path, now, marks, daily_pn
         if price is None:
             continue
         order = Order(f"{inst.id}:{side}:{now.isoformat()}", inst.id, side, price, size)
-        broken = execution.check(conn, order, marks, daily_pnl, pending=pending + tuple(orders), replacing=replacing)
+        broken = execution.check(conn, order, marks, now, pending=pending + tuple(orders), replacing=replacing)
         if side == "buy" and (why := unknown.get(inst.currency) or unknown.get("*")):
             broken.append(why)
         if broken:

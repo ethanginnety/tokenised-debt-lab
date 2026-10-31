@@ -54,6 +54,9 @@ def seed_book(conn: sqlite3.Connection, config: BookConfig, instruments: list[In
     by_id = {i.id: i for i in instruments}
     posted = 0
     with atomic(conn):
+        for inst in instruments:  # so the day's P&L knows each holding's currency even unvalued
+            conn.execute("INSERT OR IGNORE INTO instrument_currencies(instrument_id, currency) VALUES (?, ?)",
+                         (inst.id, inst.currency))
         for role in ROLES:
             p = config.parties[role]
             ledger.add_party(conn, p["id"], p["name"], role, p.get("description", ""))

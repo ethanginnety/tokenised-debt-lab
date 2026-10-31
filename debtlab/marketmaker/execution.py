@@ -6,7 +6,8 @@ the worst: every open order on the same side fills. It lists every limit an orde
 would break, not just the first, and a refused order is audited with its reasons.
 A daily-loss breach also pauses the bot, which cancels its open orders.
 
-Daily P&L is passed in by the caller until the P&L split exists (M4 step 6).
+The day's P&L is worked out here from the ledger (`daily.daily_pnl`), never passed in
+by the caller (M4 step 6): what the bot is told can't hide a loss from the limit.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from decimal import Decimal
 
 from debtlab import ledger
 from debtlab.audit.db import atomic, record_event
-from debtlab.marketmaker import controls
+from debtlab.marketmaker import controls, daily
 from debtlab.money import HUNDRED, ZERO, money, plain
 
 SIDES = ("buy", "sell")
@@ -64,11 +65,11 @@ def open_orders(conn: sqlite3.Connection) -> list[dict]:
     return [{**dict(r), "remaining": Decimal(r["size"]) - Decimal(r["filled"])} for r in rows]
 
 
-def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark], daily_pnl: dict[str, Decimal],
+def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark], now: datetime | None = None,
           pending: tuple[Order, ...] = (), replacing: frozenset[str] = frozenset()) -> list[str]:
     """Every reason the order can't be placed now; empty if it can.
 
-    `pending`: orders about to be placed with this one (the other side of a quote, other
+    `now` sets the day for the daily-loss limit. `pending`: orders about to be placed with this one (the other side of a quote, other
     instruments), counted as open. `replacing`: open orders that will be cancelled first.
     """
     reasons: list[str] = []
@@ -99,8 +100,12 @@ def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark], daily_
         reasons.append(f"{len(others)} orders already open; the maximum is {cap}")
     if (cap := limit("max_data_age_hours", controls.ALL)) is not None and mark.data_age_hours > cap:
         reasons.append(f"data {mark.data_age_hours:.1f}h old; the maximum is {cap}h")
-    if (cap := limit("max_daily_loss", ccy)) is not None and daily_pnl.get(ccy, ZERO) <= -cap:
-        reasons.append(f"daily loss {-daily_pnl[ccy]:,f} {ccy} has reached the maximum {cap:,f}")
+    day = daily.daily_pnl(conn, marks, now or datetime.now(timezone.utc))
+    if day.get(ccy, ZERO) is None:
+        if order.side == "buy":
+            reasons.append(f"the day's {ccy} P&L is unknown: a holding can't be valued")
+    elif (cap := limit("max_daily_loss", ccy)) is not None and day.get(ccy, ZERO) <= -cap:
+        reasons.append(f"daily loss {money(-day[ccy]):,f} {ccy} has reached the maximum {cap:,f}")
 
     def resting(instrument: str, side: str) -> Decimal:
         return sum((o["remaining"] for o in others if o["instrument_id"] == instrument and o["side"] == side), ZERO)
@@ -139,15 +144,16 @@ def check(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark], daily_
     return reasons
 
 
-def enforce_daily_loss(conn: sqlite3.Connection, daily_pnl: dict[str, Decimal],
+def enforce_daily_loss(conn: sqlite3.Connection, marks: dict[str, Mark],
                        now: datetime | None = None) -> str | None:
-    """If any currency's loss has reached its limit, pause the whole bot (cancelling every order)
-    and return why; otherwise None. Called before every quoting round and every order."""
+    """If any currency's loss for the day (from the ledger) has reached its limit, pause the
+    whole bot (cancelling every order) and return why; otherwise None. Called before every
+    quoting round and every order."""
     lim = controls.limits(conn)
-    for ccy, value in sorted(daily_pnl.items()):
+    for ccy, value in sorted(daily.daily_pnl(conn, marks, now or datetime.now(timezone.utc)).items()):
         cap = lim.get(("max_daily_loss", ccy))
-        if cap is not None and value <= -cap:
-            reason = f"daily loss {-value:,f} {ccy} has reached the maximum {cap:,f}"
+        if value is not None and cap is not None and value <= -cap:
+            reason = f"daily loss {money(-value):,f} {ccy} has reached the maximum {cap:,f}"
             if controls.state(conn)["state"] == "running":
                 controls.pause(conn, "risk check", reason, now)
             return reason
@@ -155,7 +161,7 @@ def enforce_daily_loss(conn: sqlite3.Connection, daily_pnl: dict[str, Decimal],
 
 
 def place_order(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark],
-                daily_pnl: dict[str, Decimal], now: datetime | None = None) -> Decision:
+                now: datetime | None = None) -> Decision:
     """Check, then record the order as open, or audit the refusal. All or nothing."""
     at = (now or datetime.now(timezone.utc)).isoformat()
     with atomic(conn):
@@ -165,11 +171,11 @@ def place_order(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark],
                     order.instrument_id, order.side, order.price, order.size):
                 raise controls.ControlError(f"order {order.id} already placed with different terms")
             return Decision(True, already_placed=True)
-        reasons = check(conn, order, marks, daily_pnl)
+        reasons = check(conn, order, marks, now)
         payload = {"id": order.id, "instrument": order.instrument_id, "side": order.side,
                    "price": plain(order.price), "size": plain(order.size)}
         if reasons:
-            breach = enforce_daily_loss(conn, daily_pnl, now) is not None
+            breach = enforce_daily_loss(conn, marks, now) is not None
             record_event(conn, "order_refused", {**payload, "reasons": reasons}, entity=order.instrument_id)
             return Decision(False, tuple(reasons), paused=breach)
         conn.execute("INSERT INTO mm_orders(id, instrument_id, side, price, size, status, created_at, updated_at)"

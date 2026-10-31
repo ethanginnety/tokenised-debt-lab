@@ -277,23 +277,11 @@ def _marks(conn, bonds, value, seen, dv01, now, curves) -> dict[str, Mark]:
     return out
 
 
-def running_pnl(conn, run_id: str, bonds, value, seen, mm) -> dict[str, Decimal]:
-    """Total P&L so far per currency, at the bot's own marks: what the daily-loss limit sees."""
-    start = json.loads(conn.execute("SELECT start FROM mm_runs WHERE id = ?", (run_id,)).fetchone()["start"])
-    held = ledger.balances(conn).get(mm, {})
-    currencies = {b.id: b.currency for b in bonds}
-    end_marks = {b.id: sum(value(b, seen[b.currency])) for b in bonds}
-    return pnl.total(currencies, {c: D(v) for c, v in start["cash"].items()}, held,
-                     {i: D(v) for i, v in start["units"].items()}, held,
-                     {i: D(v) for i, v in start["marks"].items()}, end_marks)
-
-
 def _requote(conn, run_id, step, instruments, bonds, curves, seen, on, now, max_age, config_path, value, dv01, mm):
     shifted = {c: replace(s, source=f"{s.source} (simulated shift {seen[c]:+.4f} bp)", curve=s.curve.shifted(seen[c]))
                for c, s in curves.items() if c in seen}
-    daily = running_pnl(conn, run_id, bonds, value, seen, mm)
     controls.cancel_all(conn, "requote", now)  # pull every old quote first, then quote afresh
-    decisions = decide_quotes(conn, instruments, shifted, on, now, max_age, config_path, daily)
+    decisions = decide_quotes(conn, instruments, shifted, on, now, max_age, config_path)
     marks = _marks(conn, bonds, value, seen, dv01, now, curves)
     for d in decisions:
         if d.quote is None:
@@ -301,7 +289,7 @@ def _requote(conn, run_id, step, instruments, bonds, curves, seen, on, now, max_
         for side, price, size in (("buy", d.quote.bid, d.quote.bid_size), ("sell", d.quote.ask, d.quote.ask_size)):
             if price is not None:
                 execution.place_order(conn, Order(f"{run_id}:{step}:{d.instrument_id}:{side}", d.instrument_id,
-                                                  side, price, size), marks, daily, now)
+                                                  side, price, size), marks, now)
 
 
 def _clients(conn, run_id, seed, step, bond, params, value, seen, true, on, now, mm, market, config_path):

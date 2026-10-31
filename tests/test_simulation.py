@@ -13,7 +13,7 @@ from debtlab import ledger
 from debtlab.audit.db import connect, migrate
 from debtlab.instruments import load_instruments
 from debtlab.marketdata import adapters
-from debtlab.marketmaker import controls, pnl, simulation
+from debtlab.marketmaker import controls, daily, execution, pnl, simulation
 from debtlab.marketmaker.book import load_book_config, seed_book
 from debtlab.marketmaker.simulation import SimulatedCrash, SimulationError, daily_sd_bp, fill_probability
 from debtlab.money import D, q
@@ -286,6 +286,21 @@ def test_daily_loss_limit_pauses_the_bot_mid_run(tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM mm_orders WHERE status = 'open'").fetchone()[0] == 0
     last_order = conn.execute("SELECT MAX(created_at) FROM mm_orders").fetchone()[0]
     assert last_order <= conn.execute("SELECT MAX(changed_at) FROM mm_state_changes").fetchone()[0]
+
+
+def test_the_loss_limit_sees_the_same_pnl_as_the_run(tmp_path):
+    # Inside a run the limit reads the day's P&L from the ledger, not from the simulation:
+    # on a fresh day the two agree within a penny at the run's final marks (the run rounds
+    # its marks per 100; the quote round that opens the day doesn't).
+    conn = new_db(tmp_path / "same.sqlite3")
+    summary = simulate(conn, informed_arrival_prob="0.075", profile="stress")
+    marks = {i: execution.Mark(next(b.currency for b in INSTRUMENTS if b.id == i), D(s["fair_end"]), D(0), D(0), D(0))
+             for i, s in summary["instruments"].items()}
+    from_ledger = daily.daily_pnl(conn, marks, NOW)
+    assert set(from_ledger) == set(summary["pnl"])
+    for ccy, p in summary["pnl"].items():
+        assert abs(from_ledger[ccy] - D(p["total_from_ledger"])) < D("0.01"), ccy
+    assert fills(conn)  # it traded, so the agreement means something
 
 
 def test_nothing_fills_while_killed(tmp_path):
