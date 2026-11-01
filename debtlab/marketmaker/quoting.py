@@ -89,6 +89,19 @@ def decide_quotes(conn: sqlite3.Connection, instruments: list[Instrument], curve
     return out
 
 
+class QuoteModelStrategy:
+    """The default `Strategy`: the approved quote model, through `decide_quotes`."""
+
+    name = "quote model (fair value, inventory skew, recorded spread components)"
+
+    def __init__(self, config_path: Path, max_curve_age_hours: int) -> None:
+        self.config_path = Path(config_path)
+        self.max_curve_age_hours = max_curve_age_hours
+
+    def decide(self, conn, instruments, curves, on, now) -> list[QuoteDecision]:
+        return decide_quotes(conn, instruments, curves, on, now, self.max_curve_age_hours, self.config_path)
+
+
 def current_marks(conn: sqlite3.Connection, instruments: list[Instrument], curves: dict[str, CurveSnapshot],
                   on: date, now: datetime, max_curve_age_hours: int) -> dict[str, Mark]:
     """The marks a quoting round would use now, for display; nothing is decided or recorded."""

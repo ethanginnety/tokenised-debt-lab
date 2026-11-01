@@ -28,6 +28,7 @@ from debtlab.service import (
     lifecycle_view,
     load_curves,
     load_navs,
+    marketmaker_view,
     value_all,
     with_current_gate,
 )
@@ -170,6 +171,14 @@ def create_app(settings: Settings | None = None, clock: Callable[[], datetime] =
         """Read-only. Advancing the simulation date and triggering a default stay in scripts/lifecycle.py."""
         view = read_lifecycle(lambda s: lifecycle_view(s.conn, s.db_role, s.bonds, s.curves, s.valuations))
         return {"database": {"role": app.state.s.db_role, "path": _display_path(settings.db_path)}, **view}
+
+    @app.get("/api/marketmaker")
+    def get_marketmaker() -> dict:
+        """Read-only. SIMULATED. Every control (pause, resume, kill, reset, limits, runs) stays in scripts/mm.py."""
+        s: State = app.state.s
+        view = read_lifecycle(lambda s: marketmaker_view(s.conn, s.bonds, s.curves, s.clock(),
+                                                         settings.max_curve_age_hours))
+        return {"database": {"role": s.db_role, "path": _display_path(settings.db_path)}, **view}
 
     @app.get("/api/events")
     def events(kind: str | None = None, limit: int = Query(100, ge=1, le=1000)) -> list[dict]:

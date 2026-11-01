@@ -4,7 +4,7 @@ A prototype marketplace for **simulated** tokenised debt: a bond-pricing engine,
 
 > **Educational prototype.** The instruments are simulations. Nothing here is a real security, an offer, or a public-blockchain asset.
 
-**Status:** Milestones 1 (pricing) and 2 (real curves) complete; Milestone 3 (instruments and ledger) complete. Next: Milestone 4, the simulated market maker. See [ROADMAP.md](ROADMAP.md). The full brief is in [PROMPT.md](PROMPT.md).
+**Status:** Milestones 1 (pricing) and 2 (real curves) complete; Milestone 3 (instruments and ledger) complete. Milestone 4 (the simulated market maker) complete. Next: Milestone 5, private credit depth. See [ROADMAP.md](ROADMAP.md). The full brief is in [PROMPT.md](PROMPT.md).
 
 ## Quick start
 
@@ -184,7 +184,98 @@ python scripts/lifecycle.py advance 2028-03-20            # recovery, 60% losses
 - One transfer pattern can stall a scenario at maturity (risk R15, fixed when trading arrives in M4).
 - The lifecycle section was checked in a browser by Ethan (30 Oct 2026), not by Claude, which has no JavaScript engine.
 
-**Next:** M4, the simulated market maker. It quotes around these fair values with inventory and risk limits, and has to respect the lifecycle: no quotes on a halted bond, restricted quoting in a grace period. Its simulated informed clients arrive at random rather than around news, so the adverse selection it shows is likely understated compared with real markets.
+**Next:** M4, the simulated market maker, below.
+
+## Milestone 4 in plain English
+
+A market maker stands ready to trade both ways. It shows a **bid** (the price it will pay) and an **ask** (the price it will sell at), and earns the gap, the **spread**, when clients deal on both sides. Two things can go wrong: the market moves against the bonds it holds, and the client who deals may know something it doesn't (**adverse selection**). M4 builds one in simulation only.
+
+> **SIMULATED: not evidence of real profitability.** The market, the clients and how they behave are all modelled. A positive number here says the model is consistent with itself, not that this strategy would make money on a real venue.
+
+### How it works, step by step
+
+1. **A quote.** Around its fair value from M1 (shifted slightly against its inventory), the bot sets a half-spread made of named parts: a base cost, duration risk, credit, data age, inventory, illiquidity, fees and, on the century bond, long-end model risk. Every quote, or the decision not to quote, is recorded with its reasons.
+2. **Limits, checked before every order.** Inventory, exposure, order size, open orders, data age, cash reserve and **daily loss**, all stored in the database with who set them and why. The day's P&L for the loss limit is worked out from the ledger itself, so nothing the bot is told can hide a loss. A breach pauses the bot; the kill switch stops it until someone resets it with a reason.
+3. **Quote nothing when unsure.** No quote on a stale, missing or illustrative curve, a bond that won't value, a failed ledger check, a halted bond, or the fund share. A bond in its grace period gets only an ask, at twice the spread and half the size.
+4. **A simulated day.** 390 one-minute steps. Government yields follow a seeded random walk with occasional 8 bp jumps (about 8 bp a day in the *normal* profile, 16 bp in *stress*). The bot sees each move 3 minutes late. **Uninformed clients** arrive at random and are price-sensitive: the wider the spread, the less often they deal. **Informed clients** know the true value and deal only when the bot's quote is stale.
+5. **The P&L split.** Spread captured + market move on the starting position + MTM on traded inventory − fees − slippage, per currency. It must equal the P&L worked out from cash and inventory alone, to the cent, and does in every run.
+
+### Worked example: the same seeds with and without informed clients
+
+Each column below runs the same seeds, so the market path and the uninformed clients are identical. The only difference is a 4.5% chance per bond per minute of an informed client arriving **on top**. Whatever changes is adverse selection. All figures are from `results/mm_seeds_2026-10-30.json` (`python scripts/mm_seeds.py --seeds 200`, on the official 29 Oct gilt and Treasury curves).
+
+**One seed, to see the mechanism.** Stress profile, GBP, seed 153. It was picked by a rule, not by hand: the median result among the 68 stress seeds with exactly one informed GBP fill.
+
+| GBP, seed 153, stress | without informed | with informed | difference |
+|---|---:|---:|---:|
+| Spread captured | 3,171.39 | 2,952.66 | −218.73 |
+| Market move on the starting position | 25,207.47 | 25,207.47 | 0.00 |
+| MTM on traded inventory | −1,147.26 | −1,226.01 | −78.75 |
+| Fees | 24.78 | 29.60 | 4.82 more |
+| **Total** | **27,206.82** | **26,904.52** | **−302.30** |
+| Uninformed / informed fills | 8 / 0 | 8 / 1 | |
+| Informed markout after 30 minutes | | −93.23 | |
+
+The informed client dealt once, on a stale quote, and that fill alone was worth −£93 to the bot 30 minutes later. The rest of the £302 is a knock-on: the fill moved the bot's inventory, so its later quotes were skewed differently and the same eight uninformed clients dealt at worse prices for it. The total is dominated by the £25k market move on the £1m of century bond it started with, which is the same in both columns.
+
+**One seed proves nothing, so here are 200 per column** (mean ± standard deviation over seeds; amounts in currency):
+
+| | normal, uninformed only | normal, + informed | stress, uninformed only | stress, + informed |
+|---|---:|---:|---:|---:|
+| GBP spread captured | 4,278 ± 1,456 | 4,298 ± 1,475 | 3,492 ± 1,793 | 3,619 ± 1,874 |
+| GBP market move, starting position | −1,077 ± 12,121 | −1,077 ± 12,121 | −2,030 ± 24,785 | −2,030 ± 24,785 |
+| GBP MTM on traded inventory | 185 ± 1,515 | 100 ± 1,589 | 524 ± 3,116 | −66 ± 3,064 |
+| GBP fees | 28 ± 9 | 28 ± 9 | 24 ± 12 | 27 ± 13 |
+| **GBP total** | **3,358 ± 12,535** | **3,292 ± 12,528** | **1,962 ± 26,155** | **1,495 ± 26,051** |
+| GBP informed fills | 0 | 0.20 ± 0.44 | 0 | 0.88 ± 0.99 |
+| GBP informed markout, 30 min | 0 | −76 ± 214 | 0 | −459 ± 943 |
+| USD spread captured | 1,048 ± 272 | 1,049 ± 272 | 866 ± 361 | 859 ± 367 |
+| USD MTM on traded inventory | 19 ± 250 | −3 ± 272 | 28 ± 459 | −48 ± 506 |
+| **USD total** | **964 ± 1,764** | **942 ± 1,780** | **696 ± 3,442** | **610 ± 3,467** |
+| Daily-loss limit tripped (share of runs) | 4% | 4% | 33% | 34% |
+
+The averages above are noisy because every run carries the same big rates position. Pairing each seed with itself removes that noise (with informed − without, mean ± standard error over 200 seeds):
+
+| | normal GBP | normal USD | stress GBP | stress USD |
+|---|---:|---:|---:|---:|
+| Total | −66 ± 31 | −22 ± 6 | −467 ± 126 | −86 ± 20 |
+| Spread captured | +20 ± 20 | +1 ± 3 | +127 ± 42 | −7 ± 7 |
+| MTM on traded inventory | −85 ± 40 | −22 ± 7 | −590 ± 136 | −76 ± 20 |
+
+**Reading it.**
+- Adverse selection is real but small next to the rates position. In normal markets informed clients cost about £66 a day on the century bond. In stress the cost is about seven times larger (£467), because jumps leave quotes stale more often. Either is small next to the ±£12k–£26k daily swing from holding £1m of a 100-year bond unhedged.
+- It shows up in *MTM on traded inventory*, not in spread. An informed fill looks like spread captured against the bot's own lagged fair value, then loses more than that as its mark catches up. The informed markouts measure the same loss directly: −£459 in stress GBP, against a paired total of −£467.
+- The spread is the only reliably positive line, about £4k a day on the century bond and $1k on the short bond in normal markets. Whether that survives real clients, real fees and a hedge is exactly what this simulation can't tell you.
+
+### Run it
+
+```powershell
+python -m pytest                                            # all tests
+python scripts/mm.py status                                 # state, holdings, today's P&L from the ledger, limits, runs
+python scripts/mm.py resume --reason "demo"                 # the bot starts paused
+python scripts/mm.py run --seed 7                           # one simulated day, normal profile, on the latest official curves
+python scripts/mm.py run --seed 7 --profile stress --informed 0.045 --id stress-7
+python scripts/mm.py kill --reason "looks wrong"            # then: reset --reason, then resume --reason
+python scripts/mm.py limits max_daily_loss GBP 15000 --reason "tighter"
+python scripts/mm_seeds.py --seeds 200 --out results/x.json # the comparison above (several minutes)
+$env:DEBTLAB_DATA_MODE = "online"; python -m debtlab.api     # the dashboard's Market maker section, read-only
+```
+
+`run` needs a fresh official curve, so start the app once in online mode first. To try it without touching your main database, copy `data/debtlab.sqlite3` and pass `--db` to the copy.
+
+**What success looks like:** each run prints the P&L split with the ledger total beside it, and the two match. `status` shows today's P&L against the loss limit. The *Market maker* section shows the bot's state, today's P&L per currency with how much of the loss limit is used, the latest run's split, fills and markouts, the runs, the limits in force, recent quote decisions with reasons, and open orders.
+
+### Files
+
+`debtlab/marketmaker/` (`book.py`, `quotes.py`, `controls.py`, `execution.py`, `quoting.py`, `simulation.py`, `pnl.py`, `daily.py`, and `interfaces.py`: the strategy, risk check and venue seams the XRPL adapters will plug into), `debtlab/service.py` (`marketmaker_view`), `debtlab/api/app.py` (`/api/marketmaker`), `config/marketmaker.json`, `migrations/007`–`011`, `scripts/mm.py`, `scripts/mm_seeds.py`, `results/`, and tests in `tests/test_trading.py`, `test_quotes.py`, `test_controls.py`, `test_quoting.py`, `test_simulation.py`, `test_daily.py`, `test_mm_cli.py`, `test_marketmaker_api.py` and `test_interfaces.py`.
+
+### Known limitations
+
+- **Informed arrivals are random rather than news-driven.** In real markets informed flow clusters around news, exactly when quotes are most stale, so the adverse selection shown here is likely understated compared with real markets.
+- The bot doesn't hedge, so the day's P&L is mostly the rates position on the century bond. A hedge with a gilt future would isolate the market-making result (see ROADMAP, Ideas after M4).
+- Each run is one simulated day on today's curve. The simulated curve moves aren't stored, so after a run `status` and the dashboard value the bot's holdings at the real curve and show a different day's P&L from the run's own total (see ASSUMPTIONS, Daily loss).
+- The bot marks its holdings at its own model prices; there is no market price to check them against.
+- The dashboard is read-only. Every control stays in `scripts/mm.py`, where each change records who and why. The Market maker section was checked in a browser by Ethan (1 Nov 2026).
 
 ## What "default" means here
 

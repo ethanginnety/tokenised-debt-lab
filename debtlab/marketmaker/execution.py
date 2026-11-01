@@ -8,6 +8,9 @@ A daily-loss breach also pauses the bot, which cancels its open orders.
 
 The day's P&L is worked out here from the ledger (`daily.daily_pnl`), never passed in
 by the caller (M4 step 6): what the bot is told can't hide a loss from the limit.
+
+`LedgerRiskCheck` is the default `RiskCheck`; `place_order` sends an order that passes it
+to the active venue, and `book_fill` books a fill from any venue (see `interfaces`).
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from decimal import Decimal
 from debtlab import ledger
 from debtlab.audit.db import atomic, record_event
 from debtlab.marketmaker import controls, daily
+from debtlab.marketmaker.interfaces import RiskCheck, active_venue
 from debtlab.money import HUNDRED, ZERO, money, plain
 
 SIDES = ("buy", "sell")
@@ -160,10 +164,28 @@ def enforce_daily_loss(conn: sqlite3.Connection, marks: dict[str, Mark],
     return None
 
 
+class LedgerRiskCheck:
+    """The default risk check: limits and state from the database, daily P&L from the ledger."""
+
+    name = "limits from the database, daily loss from the ledger"
+
+    def check(self, conn, order, marks, now, pending=(), replacing=frozenset()) -> list[str]:
+        return check(conn, order, marks, now, pending=pending, replacing=replacing)
+
+    def after_refusal(self, conn, marks, now) -> bool:
+        return enforce_daily_loss(conn, marks, now) is not None
+
+
+DEFAULT_RISK = LedgerRiskCheck()
+
+
 def place_order(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark],
-                now: datetime | None = None) -> Decision:
-    """Check, then record the order as open, or audit the refusal. All or nothing."""
-    at = (now or datetime.now(timezone.utc)).isoformat()
+                now: datetime | None = None, risk: RiskCheck | None = None) -> Decision:
+    """Check, then record the order as open and send it to the active venue, or audit the
+    refusal. All or nothing: if the venue refuses, the order isn't recorded either."""
+    risk = risk or DEFAULT_RISK
+    now = now or datetime.now(timezone.utc)
+    at = now.isoformat()
     with atomic(conn):
         row = conn.execute("SELECT instrument_id, side, price, size FROM mm_orders WHERE id = ?", (order.id,)).fetchone()
         if row:
@@ -171,11 +193,12 @@ def place_order(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark],
                     order.instrument_id, order.side, order.price, order.size):
                 raise controls.ControlError(f"order {order.id} already placed with different terms")
             return Decision(True, already_placed=True)
-        reasons = check(conn, order, marks, now)
+        reasons = risk.check(conn, order, marks, now)
+        venue = active_venue()
         payload = {"id": order.id, "instrument": order.instrument_id, "side": order.side,
-                   "price": plain(order.price), "size": plain(order.size)}
+                   "price": plain(order.price), "size": plain(order.size), "venue": venue.name}
         if reasons:
-            breach = enforce_daily_loss(conn, marks, now) is not None
+            breach = risk.after_refusal(conn, marks, now)
             record_event(conn, "order_refused", {**payload, "reasons": reasons}, entity=order.instrument_id)
             return Decision(False, tuple(reasons), paused=breach)
         conn.execute("INSERT INTO mm_orders(id, instrument_id, side, price, size, status, created_at, updated_at)"
@@ -183,4 +206,27 @@ def place_order(conn: sqlite3.Connection, order: Order, marks: dict[str, Mark],
                      (order.id, order.instrument_id, order.side, plain(order.price), plain(order.size), at, at))
         record_event(conn, "order_placed", payload, entity=order.instrument_id,
                      idempotency_key=f"order_placed:{order.id}")
+        venue.submit(conn, order, now)  # last: a venue that refuses rolls the whole order back
     return Decision(True)
+
+
+def book_fill(conn: sqlite3.Connection, fill_id: str, bond, side: str, price: Decimal, size: Decimal,
+              fee: Decimal, counterparty: str, fee_to: str, on, now: datetime, order_id: str | None = None,
+              memo: str = "") -> ledger.Settlement:
+    """Book a fill reported by any venue, the same way for all: a delivery-versus-payment
+    ledger trade at the clean price (plus accrued, or flat), the fee from the market maker to
+    `fee_to`, and the order's filled amount. `side` is the market maker's. Idempotent by fill id
+    through the ledger's transaction ids; call it inside the caller's transaction."""
+    mm = market_maker_id(conn)
+    buyer, seller = (mm, counterparty) if side == "buy" else (counterparty, mm)
+    s = ledger.trade(conn, f"fill:{fill_id}", bond, buyer, seller, size, price, on, memo=memo)
+    if fee:
+        ledger.post(conn, f"fee:{fill_id}", "fee", on, [ledger.Line(mm, bond.currency, -fee),
+                                                        ledger.Line(fee_to, bond.currency, fee)],
+                    memo=f"fee on {fill_id}" + (f" ({memo})" if memo else ""))
+    if order_id:
+        row = conn.execute("SELECT size, filled FROM mm_orders WHERE id = ?", (order_id,)).fetchone()
+        filled = Decimal(row["filled"]) + size
+        conn.execute("UPDATE mm_orders SET filled = ?, status = ?, updated_at = ? WHERE id = ?",
+                     (plain(filled), "filled" if filled >= Decimal(row["size"]) else "open", now.isoformat(), order_id))
+    return s

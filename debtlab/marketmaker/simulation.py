@@ -47,12 +47,12 @@ from pathlib import Path
 from debtlab import ledger, lifecycle
 from debtlab.audit.db import atomic, record_event
 from debtlab.instruments import Instrument
-from debtlab.ledger import Line
 from debtlab.marketdata.models import CurveSnapshot
 from debtlab.marketmaker import controls, execution, pnl
 from debtlab.marketmaker.execution import Mark, Order
+from debtlab.marketmaker.interfaces import Strategy
 from debtlab.marketmaker.quotes import load_quote_params
-from debtlab.marketmaker.quoting import decide_quotes
+from debtlab.marketmaker.quoting import QuoteModelStrategy
 from debtlab.money import D, HUNDRED, ONE, ZERO, money, plain
 from debtlab.pricing.bond import FixedRateBond
 from debtlab.pricing.engine import value_bond
@@ -174,8 +174,11 @@ class _Valuer:
 
 def run(conn: sqlite3.Connection, run_id: str, seed: str, instruments: list[Instrument],
         curves: dict[str, CurveSnapshot], on: date, start: datetime, max_curve_age_hours: int,
-        config_path: Path, params: SimParams, crash_at_step: int | None = None) -> dict:
-    """Run (or resume) a simulation and return its summary."""
+        config_path: Path, params: SimParams, crash_at_step: int | None = None,
+        strategy: Strategy | None = None) -> dict:
+    """Run (or resume) a simulation and return its summary. `strategy` decides the quotes
+    (default: the approved quote model); every order still passes the execution check."""
+    strategy = strategy or QuoteModelStrategy(config_path, max_curve_age_hours)
     bonds = [i for i in instruments if isinstance(i, FixedRateBond) and i.benchmark in curves]
     mm = execution.market_maker_id(conn)
     market = conn.execute("SELECT id FROM parties WHERE role = 'market'").fetchone()["id"]
@@ -191,8 +194,7 @@ def run(conn: sqlite3.Connection, run_id: str, seed: str, instruments: list[Inst
         true = {c: paths[c][step] for c in currencies}
         with atomic(conn):
             if step % params.requote_every == 0:
-                _requote(conn, run_id, step, instruments, bonds, curves, seen, on, now, max_curve_age_hours,
-                         config_path, value, dv01, mm)
+                _requote(conn, run_id, step, instruments, bonds, curves, seen, on, now, strategy, value, dv01)
             for bond in bonds:
                 _clients(conn, run_id, seed, step, bond, params, value, seen, true, on, now, mm, market, config_path)
                 if crash_at_step == step:
@@ -277,11 +279,11 @@ def _marks(conn, bonds, value, seen, dv01, now, curves) -> dict[str, Mark]:
     return out
 
 
-def _requote(conn, run_id, step, instruments, bonds, curves, seen, on, now, max_age, config_path, value, dv01, mm):
+def _requote(conn, run_id, step, instruments, bonds, curves, seen, on, now, strategy, value, dv01):
     shifted = {c: replace(s, source=f"{s.source} (simulated shift {seen[c]:+.4f} bp)", curve=s.curve.shifted(seen[c]))
                for c, s in curves.items() if c in seen}
     controls.cancel_all(conn, "requote", now)  # pull every old quote first, then quote afresh
-    decisions = decide_quotes(conn, instruments, shifted, on, now, max_age, config_path)
+    decisions = strategy.decide(conn, instruments, shifted, on, now)
     marks = _marks(conn, bonds, value, seen, dv01, now, curves)
     for d in decisions:
         if d.quote is None:
@@ -333,24 +335,17 @@ def _clients(conn, run_id, seed, step, bond, params, value, seen, true, on, now,
 def _fill(conn, run_id, step, bond, side, price, size, client, bot_fair, true_fair, on, now, mm, market,
           config_path, order_id=None, fill_id=None) -> None:
     fill_id = fill_id or f"{run_id}:{step}:{bond.id}:{side}:{client}"
-    buyer, seller = (mm, market) if side == "buy" else (market, mm)
-    s = ledger.trade(conn, f"fill:{fill_id}", bond, buyer, seller, size, price, on, memo=LABEL)
     fee_bp = _sizes_and_fees(config_path, bond.id).fee_bp
-    fee = money(s.cash * fee_bp / BP_PER_UNIT)
+    cash = ledger.trade_cash(conn, bond, size, price, on)
+    fee = money(cash * fee_bp / BP_PER_UNIT)
     funding = conn.execute("SELECT id FROM parties WHERE role = 'funding'").fetchone()["id"]
-    if fee:
-        ledger.post(conn, f"fee:{fill_id}", "fee", on, [Line(mm, bond.currency, -fee), Line(funding, bond.currency, fee)],
-                    memo=f"fee on {fill_id} ({LABEL})")
+    s = execution.book_fill(conn, fill_id, bond, side, price, size, fee, market, funding, on, now,
+                            order_id=order_id, memo=LABEL)
     conn.execute(
         "INSERT INTO mm_fills(id, run_id, step, order_id, instrument_id, currency, side, client, price, size, cash,"
         " bot_fair_dirty, true_fair_dirty, fee, txn_id, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (fill_id, run_id, step, order_id, bond.id, bond.currency, side, client, plain(price), plain(size),
          plain(s.cash), plain(bot_fair), plain(true_fair), plain(fee), f"fill:{fill_id}", now.isoformat()))
-    if order_id:
-        row = conn.execute("SELECT size, filled FROM mm_orders WHERE id = ?", (order_id,)).fetchone()
-        filled = D(row["filled"]) + size
-        conn.execute("UPDATE mm_orders SET filled = ?, status = ?, updated_at = ? WHERE id = ?",
-                     (plain(filled), "filled" if filled >= D(row["size"]) else "open", now.isoformat(), order_id))
 
 
 def _unwind(conn, run_id, params, bonds, value, paths, on, start, mm, market, config_path) -> None:

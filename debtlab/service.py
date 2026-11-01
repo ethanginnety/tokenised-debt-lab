@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from debtlab import ledger, lifecycle
@@ -363,3 +363,87 @@ def fund_view(f: FundShare, nav: NavReport | None, now: datetime) -> dict:
         "nav_age_days": age,  # how old the valuation is
         "days_since_reported": (now.date() - nav.reported_at.date()).days,
     }
+
+
+# ---------------------------------------------------------------- market maker (M4 step 7)
+
+MM_CONTROLS_NOTE = ("Read-only. Pause, resume, the kill switch, its reset, limit changes, runs and unwinds "
+                    "are done with scripts/mm.py, each with who and why, and audited.")
+MM_MARKS_NOTE = ("Marks are the bot's own fair values on the curves this page loaded. The day's P&L is worked "
+                 "out from the ledger exactly as the daily-loss limit sees it; a simulation run's own curve moves "
+                 "aren't stored, so after a run this differs from the run's total.")
+
+
+def marketmaker_view(conn: sqlite3.Connection, bonds: list[FixedRateBond], curves: dict[str, CurveSnapshot],
+                     now: datetime, max_curve_age_hours: int, runs: int = 10, quotes: int = 12) -> dict:
+    """Everything /api/marketmaker shows. Reads only: nothing is quoted, opened or recorded."""
+    from debtlab.marketmaker import controls, daily, simulation
+    from debtlab.marketmaker.quoting import current_marks, recent_quotes
+
+    mm = conn.execute("SELECT id, name FROM parties WHERE role = 'market_maker'").fetchone()
+    if mm is None:
+        return {"enabled": False, "label": simulation.LABEL,
+                "reason": "No market maker in this database (a scenario database gets one only when created "
+                          "with --market-maker)."}
+    held = {a: v for a, v in ledger.balances(conn).get(mm["id"], {}).items() if v}
+    marks = current_marks(conn, bonds, curves, now.date(), now, max_curve_age_hours)
+    day = daily.daily_pnl(conn, marks, now, write=False)
+    lim = controls.limits(conn)
+    day_rows = []
+    if day is not None:
+        for ccy, v in sorted(day.items()):
+            cap = lim.get(("max_daily_loss", ccy))
+            used = None if v is None or cap in (None, 0) else plain(q(max(-v, Decimal(0)) / cap * 100, 1))
+            day_rows.append({"currency": ccy, "pnl": None if v is None else plain(q(v, 2)),
+                             "loss_limit": None if cap is None else plain(cap), "limit_used_pct": used})
+    limit_rows = conn.execute(
+        "SELECT name, scope, value, changed_at, changed_by, reason FROM mm_limit_changes WHERE id IN"
+        " (SELECT MAX(id) FROM mm_limit_changes GROUP BY name, scope) ORDER BY name, scope").fetchall()
+    run_rows = conn.execute("SELECT id, seed, status, started_at, last_step, params, summary FROM mm_runs"
+                            " ORDER BY rowid DESC LIMIT ?", (runs,)).fetchall()
+    return {
+        "enabled": True,
+        "label": simulation.LABEL,
+        "controls_note": MM_CONTROLS_NOTE,
+        "marks_note": MM_MARKS_NOTE,
+        "party": {"id": mm["id"], "name": mm["name"]},
+        "state": controls.state(conn),
+        "holdings": {
+            "units": {a: plain(v) for a, v in sorted(held.items()) if not ledger.is_cash(a)},
+            "cash": {a: plain(v) for a, v in sorted(held.items()) if ledger.is_cash(a)},
+        },
+        "marks": {i: {"currency": m.currency, "dirty": plain(m.dirty), "dv01": plain(m.dv01),
+                      "data_age_hours": plain(m.data_age_hours)} for i, m in sorted(marks.items())},
+        "marks_on_market_data": all(c.is_market_data for c in curves.values()) if curves else False,
+        "day": {"date": now.astimezone(timezone.utc).date().isoformat(), "opened": day is not None,
+                "pnl": day_rows},
+        "limits": [{**dict(r), "unit": controls.LIMITS.get(r["name"], ("", ""))[1]} for r in limit_rows],
+        "open_orders": [dict(r) for r in conn.execute(
+            "SELECT id, instrument_id, side, price, size, filled, created_at FROM mm_orders"
+            " WHERE status = 'open' ORDER BY id")],
+        "quotes": _with_run_steps(recent_quotes(conn, quotes), conn),
+        "runs": [{"id": r["id"], "seed": r["seed"], "status": r["status"], "started_at": r["started_at"],
+                  "steps_done": r["last_step"] + 1, "steps": json.loads(r["params"])["steps"],
+                  "summary": json.loads(r["summary"]) if r["summary"] else None} for r in run_rows],
+        "integrity": ledger.check_integrity(conn),
+    }
+
+
+def _with_run_steps(quotes: list[dict], conn: sqlite3.Connection) -> list[dict]:
+    """Tag each quote decision made inside a simulation run with that run and its step, since
+    its time is on the run's simulated clock (which can run hours past the real time).
+    A run quotes exactly at start + step x step length, so a decision belongs to the run
+    whose start it sits a whole number of steps after; two runs started at the same instant
+    can't be told apart, and the later one is named."""
+    runs = []
+    for r in conn.execute("SELECT id, started_at, params FROM mm_runs ORDER BY rowid DESC"):
+        params = json.loads(r["params"])
+        runs.append((r["id"], datetime.fromisoformat(r["started_at"]),
+                     timedelta(seconds=int(params["step_seconds"])), int(params["steps"])))
+    out = []
+    for qd in quotes:
+        at = datetime.fromisoformat(qd["quoted_at"])
+        run = next(((rid, (at - start) // step) for rid, start, step, steps in runs
+                    if start <= at <= start + steps * step and (at - start) % step == timedelta(0)), None)
+        out.append({**qd, "run_id": run[0] if run else None, "step": run[1] if run else None})
+    return out

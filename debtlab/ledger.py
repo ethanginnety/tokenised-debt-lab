@@ -281,14 +281,25 @@ def trade(conn: sqlite3.Connection, txn_id: str, bond: FixedRateBond, buyer: str
     if buyer == seller:
         raise LedgerError("a party can't trade with itself")
     _trading_parties(conn, buyer, seller, "trades are between holders, the market maker and the market")
-    flat = trades_flat(conn, bond.id)
-    accrued = ZERO if flat else accrued_per_100(bond, trade_date)
-    cash = money(face * (clean_price + accrued) / HUNDRED)
+    flat, accrued, cash = _trade_terms(conn, bond, face, clean_price, trade_date)
     posted = post(conn, txn_id, "trade", trade_date, [
         Line(seller, bond.id, -face), Line(buyer, bond.id, face),
         Line(buyer, bond.currency, -cash), Line(seller, bond.currency, cash),
     ], memo)
     return Settlement(txn_id, posted, face, clean_price, accrued, flat, cash)
+
+
+def _trade_terms(conn: sqlite3.Connection, bond: FixedRateBond, face: Decimal, clean_price: Decimal,
+                 trade_date: date) -> tuple[bool, Decimal, Decimal]:
+    flat = trades_flat(conn, bond.id)
+    accrued = ZERO if flat else accrued_per_100(bond, trade_date)
+    return flat, accrued, money(face * (clean_price + accrued) / HUNDRED)
+
+
+def trade_cash(conn: sqlite3.Connection, bond: FixedRateBond, face: Decimal, clean_price: Decimal,
+               trade_date: date) -> Decimal:
+    """The cash a trade would settle for (clean + accrued, or flat), to the cent, without booking it."""
+    return _trade_terms(conn, bond, face, clean_price, trade_date)[2]
 
 
 def _trading_parties(conn: sqlite3.Connection, a: str, b: str, message: str) -> None:

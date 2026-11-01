@@ -28,10 +28,11 @@ def parse_args(argv: list[str]) -> tuple[Path, bool]:
 
 
 def snapshot_data(client: TestClient) -> dict:
-    """The overview, plus the lifecycle detail a static page can't fetch for itself."""
+    """The overview, plus the lifecycle and market maker detail a static page can't fetch for itself."""
     data = client.get("/api/overview").json()
     if data["lifecycle"]["enabled"]:
         data["lifecycle_detail"] = client.get("/api/lifecycle").json()
+    data["marketmaker_detail"] = client.get("/api/marketmaker").json()
     return data
 
 

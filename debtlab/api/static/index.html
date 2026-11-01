@@ -49,6 +49,7 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3); color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
@@ -198,13 +199,14 @@ section.sec { display: flex; flex-direction: column; gap: 16px; scroll-margin-to
 .banner strong { font-weight: 700; color: var(--warn-ink); }
 
 /* overview tiles */
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14.5rem), 1fr)); gap: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: 16px; }
 .tile {
   display: flex; flex-direction: column; gap: 4px; padding: 16px; text-decoration: none; color: inherit;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); min-width: 0;
 }
 a.tile:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tile-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; }
+.tile-head > .label { white-space: nowrap; }  /* codes whole; the pill drops below when there isn't room */
 .tile-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .big { margin-top: 8px; }
 .tile-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; }
@@ -278,6 +280,18 @@ tr.detail th { background: var(--soft); position: static; }
 .timeline li.upcoming { color: var(--muted); }
 .subhead { display: flex; align-items: center; gap: 8px; }
 
+/* codes, units */
+.code { white-space: nowrap; }
+.unit { font-family: var(--font-ui); margin-left: 2px; }
+
+/* market maker */
+.meter { height: 6px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); overflow: hidden; margin-top: 8px; }
+.meter > i { display: block; height: 100%; background: var(--accent); }
+.meter.warn > i { background: var(--warn); }
+.meter.bad > i { background: var(--neg); }
+tr.total > td { font-weight: 600; border-top: 1px solid var(--line); }
+td.wrap { white-space: normal; min-width: 14rem; }
+
 /* charts */
 .chart { position: relative; width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
@@ -341,12 +355,12 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     <li><a href="#bonds">Bonds</a></li>
     <li><a href="#fund">Fund</a></li>
     <li><a href="#lifecycle">Lifecycle</a></li>
+    <li><a href="#marketmaker">Market maker</a></li>
     <li><a href="#risk">Risk</a></li>
     <li><a href="#curves-sec">Curves</a></li>
     <li><a href="#sources">Data sources</a></li>
     <li><a href="#audit">Audit log</a></li>
   </ul>
-  <div class="side-foot"><span class="label">Milestone 3 complete</span><span>Instruments and ledger</span></div>
 </nav>
 
 <div class="main" id="app">
@@ -360,7 +374,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
 
     <section class="sec" id="overview" aria-label="Overview">
       <div class="page-head">
-        <p class="label">Milestone 3 complete · instruments and ledger</p>
+        <p class="label">Milestone 4 complete · simulated market maker</p>
         <div class="t"><h1>Overview</h1>
           <details class="info"><summary aria-label="About this page">i</summary><div class="pop">A prototype marketplace for simulated tokenised debt. This page shows the three simulated instruments: what each bond is worth, how sensitive it is to rates, what the private-credit fund reports, and where every number comes from.</div></details>
         </div>
@@ -388,6 +402,20 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
         <div class="pills" id="lifeMeta"></div>
       </div>
       <div class="stack" id="lifeBody"></div>
+    </section>
+
+    <section class="sec" id="marketmaker" aria-label="Market maker">
+      <div class="sec-head">
+        <div class="t"><h2>Market maker</h2>
+          <details class="info"><summary aria-label="About the market maker">i</summary><div class="pop">
+            <span>A simulated bot that quotes a bid and an ask on each bond around its own fair value, within limits stored in the database. Clients in a simulated market trade with it: uninformed ones at random, informed ones only when its quote is stale.</span>
+            <span>Read-only. Pause, resume, the kill switch, limit changes, runs and unwinds are done with scripts/mm.py, each with who and why, and audited. Reload the page to see a change.</span>
+          </div></details>
+        </div>
+        <div class="pills" id="mmMeta"></div>
+      </div>
+      <p class="note warn"><b>Simulated: not evidence of real profitability.</b> The market, the clients and their behaviour are all modelled. A positive result here says the model is self-consistent, not that the strategy would make money.</p>
+      <div class="stack" id="mmBody"></div>
     </section>
 
     <section class="sec" id="risk" aria-label="Risk">
@@ -453,9 +481,12 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
         <div class="t"><h2>Audit log</h2>
           <details class="info"><summary aria-label="About the audit log">i</summary><div class="pop">Every material action, newest first. Repeat valuations on the same data and date are recorded once.</div></details>
         </div>
-        <label class="small muted">Show
-          <select id="logFilter"><option value="">all events</option></select>
-        </label>
+        <div class="pills">
+          <label class="small muted"><input type="checkbox" id="logOrders"> Show order placed / cancelled</label>
+          <label class="small muted">Show
+            <select id="logFilter"><option value="">all events</option></select>
+          </label>
+        </div>
       </div>
       <div class="panel flush tbl-wrap log-wrap"><table id="log"></table></div>
     </section>
@@ -491,6 +522,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
 
   let DATA = null;
   let LIFE = null;  // /api/lifecycle, fetched only when reading a scenario database
+  let MM = null;    // /api/marketmaker
   const live = !window.__SNAPSHOT__;
 
   async function loadLifecycle() {
@@ -501,12 +533,18 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     catch (e) { LIFE = { error: e.message }; }
   }
 
+  async function loadMarketMaker() {
+    if (!live) { MM = DATA.marketmaker_detail || null; return; }
+    try { const r = await fetch("api/marketmaker"); if (!r.ok) throw new Error("HTTP " + r.status); MM = await r.json(); }
+    catch (e) { MM = { error: e.message }; }
+  }
+
   async function load() {
-    if (!live) { DATA = window.__SNAPSHOT__; await loadLifecycle(); render(); return; }
+    if (!live) { DATA = window.__SNAPSHOT__; await loadLifecycle(); await loadMarketMaker(); render(); return; }
     try {
       const r = await fetch("api/overview");
       if (!r.ok) throw new Error("HTTP " + r.status);
-      DATA = await r.json(); await loadLifecycle(); render();
+      DATA = await r.json(); await loadLifecycle(); await loadMarketMaker(); render();
     } catch (e) {
       const b = document.getElementById("banner");
       b.hidden = false;
@@ -516,7 +554,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
 
   async function refresh(btn) {
     btn.disabled = true; btn.textContent = "Refreshing…";
-    try { const r = await fetch("api/refresh", { method: "POST" }); if (!r.ok) throw new Error("HTTP " + r.status); DATA = await r.json(); await loadLifecycle(); render(); }
+    try { const r = await fetch("api/refresh", { method: "POST" }); if (!r.ok) throw new Error("HTTP " + r.status); DATA = await r.json(); await loadLifecycle(); await loadMarketMaker(); render(); }
     catch (e) { btn.disabled = false; btn.textContent = "Refresh failed: " + e.message + " (retry)"; return; }
     btn.disabled = false; btn.textContent = "Refresh prices";
   }
@@ -565,6 +603,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
       : [el("div", { class: "panel empty", text: "No fund share in this database." })]));
 
     lifecycleSection(d.lifecycle, LIFE);
+    marketMakerSection(MM);
     shocksTable(bonds);
     longEndTables(bonds);
     pyChart(bonds);
@@ -583,7 +622,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
       const ok = b.status === "ok";
       return el("a", { class: "tile", href: "#inst-" + b.terms.id },
         el("div", { class: "tile-head" },
-          el("span", { class: "label" }, el("i", { class: "sw", style: `background:var(${SERIES[i % 2]}); margin-right:6px` }), b.terms.id),
+          el("span", { class: "label code" }, el("i", { class: "sw", style: `background:var(${SERIES[i % 2]}); margin-right:6px` }), b.terms.id),
           gatePill(b)),
         el("div", { class: "tile-name", text: shortName(b.terms.name) }),
         el("div", { class: "big" }, ok ? fmt(b.fair_clean, 4) : "–", el("small", { text: "clean" })),
@@ -593,7 +632,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     funds.forEach((f) => {
       const missing = f.nav_status === "missing";
       tiles.push(el("a", { class: "tile", href: "#inst-" + f.terms.id },
-        el("div", { class: "tile-head" }, el("span", { class: "label", text: f.terms.id }), navPill(f.nav_status)),
+        el("div", { class: "tile-head" }, el("span", { class: "label code", text: f.terms.id }), navPill(f.nav_status)),
         el("div", { class: "tile-name", text: shortName(f.terms.name) }),
         el("div", { class: "big" }, missing ? "–" : fmt(f.nav_per_share, 4), el("small", { text: "NAV" })),
         missing ? el("div", { class: "tile-sub muted small", text: f.message })
@@ -604,7 +643,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
       el("div", { class: "tile-head" }, el("span", { class: "label", text: "Curve freshness" })),
       curves.length ? el("div", { class: "tile-rows" }, ...curves.map((c) => el("div", {},
         el("span", { class: "num", text: c.currency }), el("span", {}, curveStatus(c.status)),
-        el("span", { class: "num muted", text: fmt(c.age_hours, 0) + " h" }))))
+        el("span", { class: "num muted" }, fmt(c.age_hours, 0), el("span", { class: "unit", text: "h" })))))
         : el("div", { class: "tile-sub muted small", text: "No curves loaded." })));
     document.getElementById("tiles").replaceChildren(...tiles);
   }
@@ -886,6 +925,163 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
           .map((u) => u.kind + " " + u.instrument_id + " " + u.pay_date + ": " + fmt(u.amount_due, 2) + " (" + u.reason + ")").join("; ") })))));
   }
 
+  // ---------------------------------------------------------------- market maker (read-only, SIMULATED)
+  const BOT_CHIP = { running: "ok", paused: "warn", killed: "bad" };
+  const QUOTE_CHIP = { quoted: "ok", one_sided: "warn", none: "bad" };
+  const END_STATE = { running: "bot still running at end of run", paused: "bot paused by end of run", killed: "bot killed during run" };
+  // 3. The two largest spread components of a quote, e.g. "long-end 34 bp, duration 15 bp".
+  const SHORT_COMPONENT = { "long-end model risk": "long-end" };
+  const topComponents = (q) => (q.detail.components || []).filter((c) => Number(c.bp) > 0)
+    .sort((a, b) => Number(b.bp) - Number(a.bp)).slice(0, 2)
+    .map((c) => (SHORT_COMPONENT[c.name] || c.name) + " " + fmt(c.bp, 0) + " bp").join(", ");
+  // [key, label, sign as it enters the total, explanation]
+  const PNL_LINES = [
+    ["spread", "Spread captured", 1, "Each client fill against the bot's own fair value at that moment."],
+    ["start_mtm", "Market move, starting position", 1, "The inventory held at the start, revalued at the end mark. Mostly an unhedged rates position."],
+    ["traded_mtm", "MTM on traded inventory", 1, "What each fill's units gained or lost from the fill to the end mark. Adverse selection shows up here."],
+    ["fees", "Fees", -1, "0.5 bp of the cash on every fill."],
+    ["slippage", "Slippage", -1, "The cost of unwinding to an outside market, at its bid less impact."],
+  ];
+  const tbl = (heads, numCols, rows) => el("table", {},
+    el("thead", {}, el("tr", {}, ...heads.map((h, k) => el("th", { class: numCols.includes(k) ? "num" : "", text: h })))),
+    el("tbody", {}, ...rows));
+  const pnlCell = (x) => el("td", { class: "num " + (Number(x) < 0 ? "neg" : Number(x) > 0 ? "pos" : "muted"), text: signed(x, 2) });
+  const emptyRow = (text) => el("p", { class: "empty", style: "padding: 0 16px 16px", text });
+
+  function marketMakerSection(mm) {
+    const body = document.getElementById("mmBody"), meta = document.getElementById("mmMeta");
+    meta.replaceChildren();
+    if (!mm || mm.error) {
+      body.replaceChildren(el("div", { class: "panel empty", text: "Couldn't load the market maker" + (mm ? ": " + mm.error : " (not in this snapshot).") }));
+      return;
+    }
+    if (!mm.enabled) { body.replaceChildren(el("div", { class: "panel empty", text: mm.reason })); return; }
+    meta.replaceChildren(pill(BOT_CHIP[mm.state.state] || "", "Bot " + mm.state.state), pill("accent", "Controls: scripts/mm.py"));
+    body.replaceChildren(...[
+      mmTiles(mm),
+      mm.marks_on_market_data ? null : el("p", { class: "note warn", text: "Marks are on illustrative curves, not market data, so today's P&L is too. Quoting is blocked on them." }),
+      latestRun(mm.runs.find((r) => r.summary)),
+      lifeBlock("Runs", "Simulated days, newest first, with each currency's total P&L. A crashed run finishes when run again with the same id.", runsTable(mm.runs)),
+      lifeBlock("Recent quote decisions", "Every round records a quote or none, with the reasons; for a quote, its two largest spread components. A decision made inside a simulation run shows the run's step, since its clock is simulated. Newest first.", quotesTable(mm.quotes)),
+      el("div", { class: "grid2" },
+        lifeBlock("Limits in force", "Stored in the database; the latest change of each counts. Copied from config once, then changed only with scripts/mm.py.", limitsTable(mm.limits)),
+        lifeBlock("Open orders", "Orders resting now. Pausing, the kill switch and a daily-loss breach cancel them all.", ordersTable(mm.open_orders))),
+      el("div", { class: "gate" }, pill(mm.integrity.length ? "bad" : "ok", "Ledger integrity"),
+        el("span", { text: mm.integrity.length ? mm.integrity.join("; ") : "every transaction balances and no holder is below zero." })),
+    ].filter(Boolean));
+  }
+
+  function mmTiles(mm) {
+    const st = mm.state;
+    const tiles = [el("div", { class: "tile" },
+      el("div", { class: "tile-head" }, el("span", { class: "label", text: "Bot" }), pill(BOT_CHIP[st.state] || "", st.state)),
+      el("div", { class: "big", text: st.state.charAt(0).toUpperCase() + st.state.slice(1) }),
+      el("div", { class: "tile-sub muted small", text: st.changed_at ? when(st.changed_at) + " · " + st.changed_by + ": " + st.reason : st.reason }))];
+    const day = mm.day;
+    if (!day.opened) tiles.push(el("div", { class: "tile" },
+      el("div", { class: "tile-head" }, el("span", { class: "label", text: "Today's P&L · " + day.date })),
+      el("div", { class: "big muted", text: "–" }),
+      el("div", { class: "tile-sub muted small", text: "The day opens at the first quote or order." })));
+    day.pnl.forEach((p) => {
+      const used = p.limit_used_pct == null ? 0 : Math.min(Number(p.limit_used_pct), 100);
+      tiles.push(el("div", { class: "tile" },
+        el("div", { class: "tile-head" }, el("span", { class: "label", text: "Today's P&L · " + p.currency }),
+          info("About today's P&L", [mm.marks_note, "The bar is how much of the daily-loss limit the day's loss has used; at 100% the bot pauses itself."], true)),
+        el("div", { class: "big " + (p.pnl == null ? "muted" : Number(p.pnl) < 0 ? "neg" : "pos") },
+          p.pnl == null ? "unknown" : signed(p.pnl, 0), el("small", { text: p.currency })),
+        el("div", { class: "tile-sub" }, el("span", { class: "label", text: "Loss limit" }),
+          el("span", { class: "num", text: p.loss_limit == null ? "none" : fmt(p.loss_limit, 0) + (p.limit_used_pct == null ? "" : " · " + fmt(p.limit_used_pct, 0) + "% used") })),
+        el("div", { class: "meter" + (used >= 100 ? " bad" : used >= 50 ? " warn" : ""), role: "img", "aria-label": fmt(used, 0) + "% of the loss limit used" },
+          el("i", { style: "width:" + used + "%" }))));
+    });
+    const h = mm.holdings;
+    const line = (name, value) => el("div", { style: "grid-template-columns: 1fr auto" },
+      el("span", { class: "small code", text: name }), el("span", { class: "num", text: value }));
+    tiles.push(el("div", { class: "tile" },
+      el("div", { class: "tile-head" }, el("span", { class: "label", text: "Holdings" })),
+      el("div", { class: "tile-rows" },
+        ...Object.entries(h.units).map(([a, v]) => line(a, fmt(v, 0))),
+        ...Object.entries(h.cash).map(([c, v]) => line(c + " cash", fmt(v, 2))))));
+    return el("div", { class: "tiles" }, ...tiles);
+  }
+
+  function latestRun(run) {
+    if (!run) return el("div", { class: "panel empty", text: "No simulation runs yet. Start one with: python scripts/mm.py resume --reason WHY, then python scripts/mm.py run" });
+    const s = run.summary;
+    const ccys = Object.keys(s.pnl).sort();
+    const rows = PNL_LINES.map(([key, label, sign, why]) => el("tr", {},
+      el("td", {}, label + " ", info(label, why)),
+      ...ccys.map((c) => pnlCell(sign * Number(s.pnl[c][key])))));
+    rows.push(el("tr", { class: "total" }, el("td", { text: "Total" }), ...ccys.map((c) => pnlCell(s.pnl[c].total))));
+    rows.push(el("tr", {}, el("td", { class: "muted", text: "Total from cash and inventory alone" }),
+      ...ccys.map((c) => el("td", { class: "num muted", text: signed(s.pnl[c].total_from_ledger, 2) }))));
+    const fills = Object.entries(s.instruments).map(([id, x]) => el("tr", {},
+      el("td", { class: "code", text: id }),
+      el("td", { class: "num", text: String(x.fills.uninformed) }),
+      el("td", { class: "num", text: String(x.fills.informed) }),
+      el("td", { class: "num", text: String(x.fills.unwind) }),
+      el("td", { class: "num", text: fmt(x.inventory_start, 0) + " → " + fmt(x.inventory_end, 0) }),
+      el("td", { class: "num", text: fmt(x.fair_start, 4) + " → " + fmt(x.fair_end, 4) })));
+    const marks = Object.entries(s.markouts).flatMap(([c, by]) => Object.entries(by).map(([client, m]) => el("tr", {},
+      el("td", { text: c + " · " + client }),
+      el("td", { class: "num", text: String(m.fills) }),
+      pnlCell(m["5_steps"]), pnlCell(m["30_steps"]))));
+    return el("div", { class: "panel flush" },
+      el("div", { class: "panel-head" },
+        el("div", { class: "t" }, "Latest run · " + run.id + " ",
+          info("About this run", "Profile " + s.profile + ", seed " + run.seed + ", " + run.steps + " one-minute steps from " + when(run.started_at)
+            + ". Amounts in each currency, at the bot's own marks. The split must equal the total worked out from cash and inventory alone, to the cent. Unwind: " + s.unwind + ".")),
+        el("div", { class: "pills" }, pill("accent", s.profile), pill(BOT_CHIP[s.bot_end.state] || "", END_STATE[s.bot_end.state] || "bot " + s.bot_end.state + " at end of run"))),
+      el("div", { class: "tbl-wrap" }, tbl(["P&L", ...ccys], ccys.map((_, k) => k + 1), rows)),
+      el("div", { class: "stack", style: "padding: 16px" },
+        el("div", { class: "tbl-wrap" }, tbl(["Fills", "Uninformed", "Informed", "Unwind", "Inventory", "Fair, dirty"], [1, 2, 3, 4, 5], fills)),
+        el("div", { class: "tbl-wrap" },
+          el("div", { class: "subhead", style: "margin-bottom: 8px" }, el("span", { class: "label", text: "Markouts" }),
+            info("About markouts", "Each fill revalued at the bot's fair value 5 and 30 steps later, summed. Positive: the bot earned its spread. Negative: the client knew better (adverse selection).")),
+          marks.length ? tbl(["Flow", "Fills", "5 steps", "30 steps"], [1, 2, 3], marks) : el("p", { class: "empty", text: "No client fills." }))));
+  }
+
+  function runsTable(runs) {
+    if (!runs.length) return emptyRow("No runs yet.");
+    return tbl(["Run", "Started (UTC)", "Profile", "Steps", "Total"], [3, 4], runs.map((r) => el("tr", {},
+      el("td", { class: "code", text: r.id }),
+      el("td", { class: "num", style: "text-align:left", text: r.started_at.replace("T", " ").slice(0, 16) }),
+      el("td", {}, r.summary ? pill("accent", r.summary.profile) : pill("warn", r.status)),
+      el("td", { class: "num", text: r.steps_done + " / " + r.steps }),
+      el("td", { class: "num" }, ...(r.summary ? Object.entries(r.summary.pnl).sort().map(([c, p]) =>
+        el("div", { class: Number(p.total) < 0 ? "neg" : "pos", text: c + " " + signed(p.total, 2) })) : ["–"])))));
+  }
+
+  function limitsTable(limits) {
+    return tbl(["Limit", "Scope", "Value", "Set by"], [2], limits.map((l) => el("tr", {},
+      el("td", {}, el("div", { text: words(l.name) }), el("div", { class: "cell-sub", text: l.unit })),
+      el("td", { class: "num code", style: "text-align:left", text: l.scope }),
+      el("td", { class: "num", text: fmt(l.value, 0) }),
+      el("td", { class: "cell-sub", text: l.changed_by + ", " + l.changed_at.slice(0, 10) + ": " + l.reason }))));
+  }
+
+  function quotesTable(quotes) {
+    if (!quotes.length) return emptyRow("No quote decisions yet.");
+    return tbl(["When", "Bond", "Decision", "Bid / ask", "Spread", "Reasons"], [3, 4], quotes.map((q) => el("tr", {},
+      q.run_id
+        ? el("td", {}, el("div", { class: "code", text: "step " + q.step }), el("div", { class: "cell-sub code", text: q.run_id + " (simulated)" }))
+        : el("td", { class: "num", style: "text-align:left", text: q.quoted_at.replace("T", " ").slice(0, 16) + " UTC" }),
+      el("td", { class: "code", text: q.instrument_id }),
+      el("td", {}, pill(QUOTE_CHIP[q.status] || "", words(q.status))),
+      el("td", { class: "num", text: (q.bid ? fmt(q.bid, 2) : "–") + " / " + (q.ask ? fmt(q.ask, 2) : "–") }),
+      el("td", { class: "num", text: q.detail.spread_bp ? fmt(q.detail.spread_bp, 1) + " bp" : "–" }),
+      el("td", { class: "cell-sub wrap", text: q.reasons.length ? q.reasons.join("; ") : topComponents(q) }))));
+  }
+
+  function ordersTable(orders) {
+    if (!orders.length) return emptyRow("No open orders.");
+    return tbl(["Order", "Side", "Price", "Remaining"], [2, 3], orders.map((o) => el("tr", {},
+      el("td", { class: "small", text: o.id }),
+      el("td", { text: o.side }),
+      el("td", { class: "num", text: fmt(o.price, 2) }),
+      el("td", { class: "num", text: fmt(Number(o.size) - Number(o.filled), 0) }))));
+  }
+
   // ---------------------------------------------------------------- risk tables
   function shocksTable(bonds) {
     const ok = bonds.filter((b) => b.status === "ok");
@@ -1090,7 +1286,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
         el("td", { class: "num", style: "text-align:left; font-weight:600", text: c.currency }),
         el("td", {}, el("div", { text: c.source }), el("div", { class: "cell-sub", text: c.notes })),
         el("td", { class: "num", text: c.observation_date }),
-        el("td", { class: "num", text: fmt(c.age_hours, 0) + " h" }),
+        el("td", { class: "num" }, fmt(c.age_hours, 0), el("span", { class: "unit", text: "h" })),
         el("td", {}, curveStatus(c.status))))));
   }
 
@@ -1101,14 +1297,17 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
       el("ul", { class: "assume" }, ...b.terms.assumptions.map((a) => el("li", { text: a }))))));
   }
 
+  const ORDER_EVENTS = ["order_placed", "order_cancelled"];
   function auditLog(events) {
     const sel = document.getElementById("logFilter");
     const kinds = [...new Set(events.map((e) => e.kind))].sort();
     const current = sel.value;
     sel.replaceChildren(el("option", { value: "", text: "all events" }), ...kinds.map((k) => el("option", { value: k, text: k })));
     sel.value = kinds.includes(current) ? current : "";
+    const orders = document.getElementById("logOrders");
     const draw = () => {
-      const rows = events.filter((e) => !sel.value || e.kind === sel.value);
+      // Order events are many and routine: hidden unless asked for, by the toggle or by choosing one in the filter.
+      const rows = events.filter((e) => sel.value ? e.kind === sel.value : orders.checked || !ORDER_EVENTS.includes(e.kind));
       document.getElementById("log").replaceChildren(
         el("thead", {}, el("tr", {}, ...["#", "Time (UTC)", "Event", "Subject", "Details"].map((h, k) => el("th", { class: k === 0 ? "num" : "", text: h })))),
         el("tbody", {}, ...(rows.length ? rows.map((e) => {
@@ -1124,6 +1323,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
           : [el("tr", {}, el("td", { colspan: "5", class: "empty", text: "No events of this kind." }))])));
     };
     sel.onchange = draw;
+    orders.onchange = draw;
     draw();
   }
 

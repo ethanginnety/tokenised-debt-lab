@@ -20,6 +20,7 @@ from pathlib import Path
 
 from debtlab.audit.db import atomic, record_event
 from debtlab.ledger import is_cash
+from debtlab.marketmaker.interfaces import active_venue
 from debtlab.money import D, plain
 
 LIMITS = {  # name -> what the scope is, and the unit
@@ -160,12 +161,21 @@ def reset(conn: sqlite3.Connection, by: str, reason: str, now: datetime | None =
 
 
 def cancel_all(conn: sqlite3.Connection, reason: str, now: datetime | None = None) -> int:
-    """Cancel every open order, each one audited. Returns how many."""
-    at = (now or _now()).isoformat()
+    """Cancel every open order, each one audited, and send the cancels to the active venue
+    (so a pause or the kill switch reaches it whoever calls them). Returns how many."""
+    now = now or _now()
+    at = now.isoformat()
     with atomic(conn):
         ids = [r["id"] for r in conn.execute("SELECT id FROM mm_orders WHERE status = 'open' ORDER BY id")]
         for order_id in ids:
             conn.execute("UPDATE mm_orders SET status = 'cancelled', updated_at = ?, reason = ? WHERE id = ?",
                          (at, reason, order_id))
             record_event(conn, "order_cancelled", {"id": order_id, "reason": reason}, entity=order_id)
+        if ids:
+            venue = active_venue()
+            try:
+                venue.cancel(conn, ids, reason, now)
+            except Exception as exc:  # noqa: BLE001 - a venue failure must never undo a pause or kill here
+                record_event(conn, "venue_cancel_failed", {"venue": venue.name, "orders": ids, "reason": reason,
+                                                           "error": f"{type(exc).__name__}: {exc}"})
     return len(ids)
