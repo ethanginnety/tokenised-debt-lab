@@ -88,3 +88,14 @@ This writes a single HTML file with today's numbers baked in.
 ## Emergency stop
 
 Milestone 1 places no orders, so stopping the process is enough. A persisted kill switch arrives with the market maker (M4) and must be tested before any live trading (M8).
+
+## Multi-day runs on Windows (M7 monitor and paper run)
+
+The RLUSD/XRP monitor and the paper run (M7) need the machine awake and online for days. Until M9 nothing restarts them for you. Before a run:
+
+1. **Plug in and stop sleep.** Settings → System → Power & battery → Screen, sleep & hibernate timeouts: *When plugged in, put my device to sleep after* **Never** (the screen may turn off; that's fine). Or in a terminal: `powercfg /change standby-timeout-ac 0` and `powercfg /change hibernate-timeout-ac 0`. On a laptop, Control Panel → Power Options → *Choose what closing the lid does* → **Do nothing** when plugged in. The monitor will also ask Windows not to sleep while it runs, but these settings cover the time it isn't running.
+2. **Keep Windows Update from restarting the machine.** Settings → Windows Update → *Pause updates* for the length of the run. Install anything pending and restart *before* starting. Set *Active hours* to cover as much of the day as allowed, as a second guard.
+3. **Keep the network up.** Prefer a cable. Device Manager → Network adapters → your adapter → Power Management: untick *Allow the computer to turn off this device to save power*.
+4. **Keep the database out of OneDrive's way.** This repository lives in a OneDrive folder, and syncing a SQLite database while it is being written can lock or conflict. Point the monitor's `--db` at a folder outside OneDrive, such as `C:\debtlab-data\xrpl.sqlite3` (recommended), or pause OneDrive syncing for the run (it resumes by itself after at most 24 hours, so renew it).
+5. **Don't hide gaps.** Whatever stops the run (sleep, update restart, crash, lost Wi-Fi), the monitor records it: disconnects and stale data as outages while it runs, and time it wasn't running at all as a gap found from its last heartbeat on the next start. Uptime is reported with every gap. Restart it as soon as you notice; never edit or delete outage records.
+6. After the run, undo these settings if you want normal sleep and updates back.
