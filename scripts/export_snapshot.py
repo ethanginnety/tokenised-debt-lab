@@ -33,6 +33,7 @@ def snapshot_data(client: TestClient) -> dict:
     if data["lifecycle"]["enabled"]:
         data["lifecycle_detail"] = client.get("/api/lifecycle").json()
     data["marketmaker_detail"] = client.get("/api/marketmaker").json()
+    data["xrpl_detail"] = client.get("/api/xrpl").json()
     return data
 
 

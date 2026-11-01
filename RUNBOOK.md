@@ -124,4 +124,6 @@ python scripts/xrpl_monitor.py status --hours 24                          # just
 
 Read-only: it holds no key and can't place anything. Set `DEBTLAB_XRPL_DB` once instead of passing `--db` every time (keep the file outside OneDrive; see *Multi-day runs on Windows*). It prints a line every 50 ledgers (about 3 minutes) and a warning if the RLUSD issuer's settings change. If it loses the connection it records an outage and retries, switching endpoints. If it stops (crash, sleep, update restart), start it again: the gap is recorded as *not running*, and uptime in `status` includes it. Expect about 0.75 GB a day of download and about 50 MB a day of database.
 
+The dashboard's *RLUSD/XRP* section shows the same figures, refreshed every 10 s. Start the app with the same `DEBTLAB_XRPL_DB` as the monitor (or neither, for the default `data/xrpl.sqlite3`); the app only reads that file.
+
 For the step 4 checkpoint, run it for at least 2 days, then send Claude the output of `status`.

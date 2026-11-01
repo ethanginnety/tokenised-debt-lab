@@ -132,6 +132,7 @@ Plan approved by Ethan on 1 Nov 2026 (decisions A–G in ROADMAP). Facts and sou
 | Uptime | Worked out from the snapshots: time between consecutive snapshots no more than 30 s apart, plus up to 30 s after the latest, over the time since monitoring started. Connecting time counts as down. | Doesn't trust the monitor's account of itself. |
 | EUR/USD | ECB reference rate, fetched at start and every 6 hours, stale after 96 h from midnight UTC of its date. 1 RLUSD = 1 USD (R19). | Decision D. |
 | Monitor database | Its own SQLite file (default `data/xrpl.sqlite3`; `DEBTLAB_XRPL_DB` or `--db`), migrations in `migrations/xrpl/`; a bond database is refused. Stored levels (top 10 a side) dropped after 3 days; every summary kept. | Keeps market data away from the bond books. |
+| Dashboard and the monitor | The app opens the monitor's database read-only (`mode=ro`) and never creates it; the monitor is the only writer. *Running* means a heartbeat in the last 30 s and no clean stop. | The page can't change market data. |
 | Websocket | Our own read-only client over `websockets` (installed with xrpl-py), with the same whitelist and pinned reads as JSON-RPC; xrpl-py itself is used for address checks. | Keeps the request path in our code, where the whitelist is. |
 | xrpl-py | Pinned exactly, 5.2.0 (16 Sep 2026). JSON-RPC reads go through `httpx` in `ReadOnlyClient` and websocket reads through `wsclient.ReadOnlyWebsocket`, so the whitelist sits in our own code; xrpl-py is used for address checks. | Easier to prove read-only when the request path is ours. |
 

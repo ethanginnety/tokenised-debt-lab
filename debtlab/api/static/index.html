@@ -356,6 +356,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     <li><a href="#fund">Fund</a></li>
     <li><a href="#lifecycle">Lifecycle</a></li>
     <li><a href="#marketmaker">Market maker</a></li>
+    <li><a href="#xrpl">RLUSD/XRP</a></li>
     <li><a href="#risk">Risk</a></li>
     <li><a href="#curves-sec">Curves</a></li>
     <li><a href="#sources">Data sources</a></li>
@@ -416,6 +417,20 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
       </div>
       <p class="note warn"><b>Simulated: not evidence of real profitability.</b> The market, the clients and their behaviour are all modelled. A positive result here says the model is self-consistent, not that the strategy would make money.</p>
       <div class="stack" id="mmBody"></div>
+    </section>
+
+    <section class="sec" id="xrpl" aria-label="RLUSD/XRP live market data">
+      <div class="sec-head">
+        <div class="t"><h2>RLUSD/XRP</h2>
+          <details class="info"><summary aria-label="About the RLUSD/XRP monitor">i</summary><div class="pop">
+            <span>The real RLUSD/XRP order book on the XRP Ledger, read by the monitor (scripts/xrpl_monitor.py) from every validated ledger, with the AMM pool beside it. Prices are RLUSD per XRP.</span>
+            <span>Read-only. The monitor holds no key and places nothing. This page reads its database read-only and reloads this section every 10 seconds.</span>
+          </div></details>
+        </div>
+        <div class="pills" id="xrMeta"></div>
+      </div>
+      <p class="note warn"><b>Live market data, read-only.</b> Real prices from validated ledgers, not a model and not a bond price: no bond value is used for this pair. Nothing here trades; paper trading comes later in M7, and anything live only after Ethan's explicit approval (M8).</p>
+      <div class="stack" id="xrBody"></div>
     </section>
 
     <section class="sec" id="risk" aria-label="Risk">
@@ -523,6 +538,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
   let DATA = null;
   let LIFE = null;  // /api/lifecycle, fetched only when reading a scenario database
   let MM = null;    // /api/marketmaker
+  let XR = null;    // /api/xrpl
   const live = !window.__SNAPSHOT__;
 
   async function loadLifecycle() {
@@ -539,12 +555,20 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     catch (e) { MM = { error: e.message }; }
   }
 
+  async function loadXrpl() {
+    if (!live) { XR = DATA.xrpl_detail || null; return; }
+    try { const r = await fetch("api/xrpl"); if (!r.ok) throw new Error("HTTP " + r.status); XR = await r.json(); }
+    catch (e) { XR = { error: e.message }; }
+  }
+
   async function load() {
-    if (!live) { DATA = window.__SNAPSHOT__; await loadLifecycle(); await loadMarketMaker(); render(); return; }
+    if (!live) { DATA = window.__SNAPSHOT__; await loadLifecycle(); await loadMarketMaker(); await loadXrpl(); render(); return; }
     try {
       const r = await fetch("api/overview");
       if (!r.ok) throw new Error("HTTP " + r.status);
-      DATA = await r.json(); await loadLifecycle(); await loadMarketMaker(); render();
+      DATA = await r.json(); await loadLifecycle(); await loadMarketMaker(); await loadXrpl(); render();
+      // The monitor writes a snapshot every validated ledger (~4 s); keep this one section current.
+      setInterval(async () => { await loadXrpl(); xrplSection(XR); }, 10000);
     } catch (e) {
       const b = document.getElementById("banner");
       b.hidden = false;
@@ -554,7 +578,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
 
   async function refresh(btn) {
     btn.disabled = true; btn.textContent = "Refreshing…";
-    try { const r = await fetch("api/refresh", { method: "POST" }); if (!r.ok) throw new Error("HTTP " + r.status); DATA = await r.json(); await loadLifecycle(); await loadMarketMaker(); render(); }
+    try { const r = await fetch("api/refresh", { method: "POST" }); if (!r.ok) throw new Error("HTTP " + r.status); DATA = await r.json(); await loadLifecycle(); await loadMarketMaker(); await loadXrpl(); render(); }
     catch (e) { btn.disabled = false; btn.textContent = "Refresh failed: " + e.message + " (retry)"; return; }
     btn.disabled = false; btn.textContent = "Refresh prices";
   }
@@ -604,6 +628,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
 
     lifecycleSection(d.lifecycle, LIFE);
     marketMakerSection(MM);
+    xrplSection(XR);
     shocksTable(bonds);
     longEndTables(bonds);
     pyChart(bonds);
@@ -612,7 +637,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     assumptions([...bonds, ...funds], d.curves);
     auditLog(d.events);
     document.getElementById("footer").textContent =
-      `Version ${d.version} · data mode ${d.data_mode} · ${d.database ? d.database.role + " database " + d.database.path + " · " : ""}page generated ${when(d.generated_at)}. Educational prototype: simulated instruments only. Nothing here is a real security, an offer, or a public-blockchain asset.`;
+      `Version ${d.version} · data mode ${d.data_mode} · ${d.database ? d.database.role + " database " + d.database.path + " · " : ""}page generated ${when(d.generated_at)}. Educational prototype: simulated instruments only. Nothing here is a real security, an offer, or a public-blockchain asset; the RLUSD/XRP section is real market data, read-only.`;
     spy();
   }
 
@@ -947,6 +972,137 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     el("tbody", {}, ...rows));
   const pnlCell = (x) => el("td", { class: "num " + (Number(x) < 0 ? "neg" : Number(x) > 0 ? "pos" : "muted"), text: signed(x, 2) });
   const emptyRow = (text) => el("p", { class: "empty", style: "padding: 0 16px 16px", text });
+
+  // ---- RLUSD/XRP: live market data, read-only (M7) ----
+  const MON_CHIP = { running: "ok", stopped: "warn", "not running": "bad", "never run": "warn" };
+  const dur = (sec) => { const s = Number(sec); if (s < 90) return fmt(s, 0) + " s"; if (s < 5400) return fmt(s / 60, 0) + " min"; return fmt(s / 3600, 1) + " h"; };
+  const pct = (x, dp) => x == null ? "–" : fmt(Number(x) * 100, dp) + "%";
+  const SIDE = { buy_xrp: "taker bought XRP", sell_xrp: "taker sold XRP" };
+
+  function xrplSection(x) {
+    const body = document.getElementById("xrBody"), meta = document.getElementById("xrMeta");
+    if (!body) return;
+    meta.replaceChildren();
+    if (!x || x.error) { body.replaceChildren(el("div", { class: "panel empty", text: "Couldn't load the RLUSD/XRP monitor" + (x ? ": " + x.error : " (not in this snapshot).") })); return; }
+    if (!x.enabled) { body.replaceChildren(el("div", { class: "panel empty", text: x.reason })); return; }
+    const m = x.monitor, l = x.latest;
+    meta.replaceChildren(pill("accent", "Live market data · read-only"), pill(MON_CHIP[m.state] || "", "Monitor " + m.state),
+      l ? pill(l.fresh ? "ok" : "bad", l.fresh ? "Data fresh" : "Data stale") : null);
+    body.replaceChildren(...[
+      xrTiles(x),
+      l && !l.valid ? el("p", { class: "note warn", text: "Latest book invalid: " + l.reasons.join("; ") + ". Nothing would quote off it." }) : null,
+      lifeBlock("Decision C so far", x.decision_c.note + " A verdict here is provisional until the checkpoint.", xrCheckTable(x.decision_c)),
+      el("div", { class: "grid2" },
+        lifeBlock("Top of the book", "The best funded offers at ledger " + (l ? l.ledger_index : "–") + ", up to 10 a side. A bid buys XRP; an ask sells it. Sizes are what is funded now.", xrLevels(l)),
+        lifeBlock("Depth around the mid", "Funded RLUSD within each band of the mid, from the latest deep read (every 50th ledger). A band marked as a lower bound reaches past the offers read.", xrDepth(x.latest_deep))),
+      lifeBlock("Recent trades", "From validated transaction metadata: offers on the book that were taken, and swaps through the AMM pool. Newest first.", xrTrades(x.trades)),
+      lifeBlock("Outages", "Every time the data wasn't fresh, with the reason: disconnected, stale (no validated ledger for 30 s), missed ledgers, or the monitor not running at all (found from its last heartbeat). Never edited or deleted.", xrOutages(x.outages)),
+      xrIssuer(x),
+    ].filter(Boolean));
+  }
+
+  function xrTiles(x) {
+    const l = x.latest, m = x.monitor, u = x.uptime;
+    const tiles = [];
+    tiles.push(el("div", { class: "tile" },
+      el("div", { class: "tile-head" }, el("span", { class: "label", text: "Mid · RLUSD per XRP" }),
+        l ? pill(l.fresh ? "ok" : "bad", l.age_s == null ? "–" : dur(l.age_s) + " old") : null),
+      el("div", { class: "big" + (l && l.valid ? "" : " muted"), text: l && l.mid ? fmt(l.mid, 6) : "–" }),
+      el("div", { class: "tile-sub" }, el("span", { class: "label", text: "Bid / ask" }),
+        el("span", { class: "num", text: l && l.valid ? fmt(l.best_bid, 6) + " / " + fmt(l.best_ask, 6) : "–" })),
+      el("div", { class: "tile-sub" }, el("span", { class: "label", text: "Spread" }),
+        el("span", { class: "num", text: l && l.spread_bp ? fmt(l.spread_bp, 2) + " bp" : "–" }),
+        el("span", { class: "muted small", text: l ? "ledger " + l.ledger_index : "" }))));
+    tiles.push(el("div", { class: "tile" },
+      el("div", { class: "tile-head" }, el("span", { class: "label", text: "Monitor" }), pill(MON_CHIP[m.state] || "", m.state)),
+      el("div", { class: "big", text: pct(u.all.share, 1) }, el("small", { text: "uptime" })),
+      el("div", { class: "tile-sub muted small", text: u.all.since ? "Since " + when(u.all.since) + ", " + fmt(u.all.up_hours, 2) + " of " + fmt(u.all.hours, 2) + " h. Last 24 h: " + pct(u.last_24h.share, 1) + "." : "" }),
+      el("div", { class: "tile-sub muted small", text: m.detail })));
+    const a = l && l.amm;
+    tiles.push(el("div", { class: "tile" },
+      el("div", { class: "tile-head" }, el("span", { class: "label", text: "AMM pool" }),
+        info("About the AMM pool", "The RLUSD/XRP automated market maker on the same ledger. Its price is before its trading fee, which a taker pays on top. Shown beside the book, never added to its depth.", true)),
+      el("div", { class: "big" + (a ? "" : " muted"), text: a ? fmt(a.price, 6) : "–" }),
+      el("div", { class: "tile-sub" }, el("span", { class: "label", text: "Fee" }), el("span", { class: "num", text: a ? fmt(a.fee_pct, 3) + "%" : "–" })),
+      el("div", { class: "tile-sub muted small", text: a ? fmt(a.xrp, 0) + " XRP + " + fmt(a.rlusd, 0) + " RLUSD" : "" })));
+    const f = x.fx;
+    tiles.push(el("div", { class: "tile" },
+      el("div", { class: "tile-head" }, el("span", { class: "label", text: "EUR/USD · ECB" }), f ? pill(f.stale ? "bad" : "ok", f.stale ? "stale" : f.obs_date) : null),
+      el("div", { class: "big" + (f ? "" : " muted"), text: f ? fmt(f.usd_per_eur, 4) : "–" }, el("small", { text: "USD per EUR" })),
+      el("div", { class: "tile-sub muted small", text: f ? "Euro figures use this rate and " + f.assumption + "." : "No rate stored yet." })));
+    return el("div", { class: "tiles" }, ...tiles);
+  }
+
+  function xrCheckTable(c) {
+    const verdict = (v) => pill(v === true ? "ok" : v === false ? "bad" : "", v === true ? "pass" : v === false ? "fail" : "not yet");
+    const value = (k, s) => k === 0 ? (s.both_sides_share == null ? "–" : pct(s.both_sides_share, 2))
+      : k === 1 ? (s.median_spread_bp == null ? "–" : fmt(s.median_spread_bp, 2) + " bp")
+      : (s.median_bid_eur_50bp == null ? "–" : "€" + fmt(s.median_bid_eur_50bp, 0) + " / €" + fmt(s.median_ask_eur_50bp, 0));
+    const rows = c.all.criteria.map((cr, k) => el("tr", {},
+      el("td", { text: cr.name }),
+      el("td", { class: "num", text: value(k, c.all) }), el("td", {}, verdict(cr.pass)),
+      el("td", { class: "num", text: value(k, c.last_24h) }), el("td", {}, verdict(c.last_24h.criteria[k].pass))));
+    rows.push(el("tr", {}, el("td", { class: "muted", text: "Ledgers read (deep reads)" }),
+      el("td", { class: "num muted", text: fmt(c.all.ledgers_read, 0) + " (" + fmt(c.all.deep_reads, 0) + ")" }), el("td", {}),
+      el("td", { class: "num muted", text: fmt(c.last_24h.ledgers_read, 0) + " (" + fmt(c.last_24h.deep_reads, 0) + ")" }), el("td", {})));
+    return tbl(["Criterion", "Since start", "", "Last 24 h", ""], [1, 3], rows);
+  }
+
+  function xrLevels(l) {
+    if (!l || !l.levels) return emptyRow("No levels stored for the latest snapshot.");
+    const n = Math.max(l.levels.bids.length, l.levels.asks.length);
+    const rows = [];
+    for (let i = 0; i < n; i++) {
+      const b = l.levels.bids[i], a = l.levels.asks[i];
+      rows.push(el("tr", {},
+        el("td", { class: "num", text: b ? fmt(b[1], 2) : "" }), el("td", { class: "num pos", text: b ? fmt(b[0], 6) : "" }),
+        el("td", { class: "num neg", text: a ? fmt(a[0], 6) : "" }), el("td", { class: "num", text: a ? fmt(a[1], 2) : "" })));
+    }
+    return tbl(["Bid size, XRP", "Bid", "Ask", "Ask size, XRP"], [0, 1, 2, 3], rows);
+  }
+
+  function xrDepth(d) {
+    if (!d) return emptyRow("No deep read yet (one every 50 ledgers, about 3 minutes).");
+    return tbl(["Within", "Bids, RLUSD", "Asks, RLUSD", ""], [1, 2], d.depth.map((b) => el("tr", {},
+      el("td", { class: "num", style: "text-align:left", text: b.band_bp + " bp" }),
+      el("td", { class: "num", text: fmt(b.bid_rlusd, 0) }), el("td", { class: "num", text: fmt(b.ask_rlusd, 0) }),
+      el("td", { class: "cell-sub", text: b.complete ? "" : "lower bound" }))));
+  }
+
+  function xrTrades(t) {
+    const counts = t.last_24h.length ? el("p", { class: "cell-sub", style: "padding: 8px 16px 0" , text: "Last 24 h: " +
+      t.last_24h.map((c) => c.venue + " · " + SIDE[c.taker_side] + ": " + fmt(c.trades, 0) + (c.trades === 1 ? " trade, " : " trades, ") + fmt(c.rlusd, 0) + " RLUSD").join("; ") }) : null;
+    if (!t.recent.length) return el("div", {}, counts, emptyRow("No trades recorded yet."));
+    return el("div", {}, counts, tbl(["Ledger", "Venue", "Side", "Price", "XRP", "RLUSD"], [3, 4, 5], t.recent.map((r) => el("tr", {},
+      el("td", { class: "code", text: String(r.ledger_index) }),
+      el("td", {}, pill(r.venue === "amm" ? "accent" : "", r.venue === "amm" ? "AMM" : "book")),
+      el("td", { class: "cell-sub", text: SIDE[r.taker_side] }),
+      el("td", { class: "num", text: fmt(r.price, 6) }),
+      el("td", { class: "num", text: fmt(r.xrp, 2) }),
+      el("td", { class: "num", text: fmt(r.rlusd, 2) })))));
+  }
+
+  function xrOutages(os) {
+    if (!os.length) return emptyRow("No outages recorded.");
+    return tbl(["Kind", "From (UTC)", "To", "Length", "Detail"], [3], os.map((o) => el("tr", {},
+      el("td", {}, pill(o.open ? "bad" : "warn", words(o.kind))),
+      el("td", { class: "num", style: "text-align:left", text: o.started_at.replace("T", " ").slice(0, 19) }),
+      el("td", { class: "num", style: "text-align:left", text: o.open ? "ongoing" : o.ended_at.replace("T", " ").slice(0, 19) }),
+      el("td", { class: "num", text: dur(o.seconds) }),
+      el("td", { class: "cell-sub wrap", text: o.detail }))));
+  }
+
+  function xrIssuer(x) {
+    const i = x.issuer, n = x.network;
+    const parts = [];
+    if (i) parts.push(pill(i.changes_seen ? "bad" : "ok", "RLUSD issuer"),
+      el("span", { text: "checked at ledger " + i.ledger_index + ": transfer fee " + i.settings.transfer_fee_pct + "%, tick size " + (i.settings.tick_size || "none")
+        + ", clawback " + (i.settings.flags.allowTrustLineClawback ? "on" : "off") + ", global freeze " + (i.settings.flags.globalFreeze ? "ON" : "off")
+        + (i.changes_seen ? "; settings changed " + i.changes_seen + " time(s), see events." : "; unchanged since monitoring started.") }));
+    if (n) parts.push(pill("", "Reserves"), el("span", { text: fmt(n.reserve_base_xrp, 1) + " XRP + " + fmt(n.reserve_inc_xrp, 1) + " per object; fee " + n.current_fee_drops + " drops." }));
+    const ev = (x.events || []).map((e) => el("div", { class: "cell-sub", text: e.at.replace("T", " ").slice(0, 19) + " · " + words(e.kind) + ": " + e.detail }));
+    return parts.length || ev.length ? el("div", { class: "stack" }, el("div", { class: "gate" }, ...parts), ...ev) : null;
+  }
 
   function marketMakerSection(mm) {
     const body = document.getElementById("mmBody"), meta = document.getElementById("mmMeta");

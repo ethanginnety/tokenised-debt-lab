@@ -21,6 +21,7 @@ class Settings:
     port: int
     holders_file: Path = ROOT / "config" / "holders.json"
     marketmaker_file: Path = ROOT / "config" / "marketmaker.json"
+    xrpl_db_path: Path = ROOT / "data" / "xrpl.sqlite3"  # the RLUSD/XRP monitor's own database (M7), read-only here
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -40,4 +41,5 @@ class Settings:
             port=int(os.getenv("DEBTLAB_PORT", "8000")),
             holders_file=Path(os.getenv("DEBTLAB_HOLDERS", str(ROOT / "config" / "holders.json"))),
             marketmaker_file=Path(os.getenv("DEBTLAB_MARKETMAKER", str(ROOT / "config" / "marketmaker.json"))),
+            xrpl_db_path=Path(os.getenv("DEBTLAB_XRPL_DB", str(ROOT / "data" / "xrpl.sqlite3"))),
         )
