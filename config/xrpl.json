@@ -1,0 +1,17 @@
+{
+  "_note": "RLUSD/XRP on the XRP Ledger mainnet, M7. READ-ONLY: no keys, no wallet, no signing. Every identifier here was verified on 1 Nov 2026; sources and on-ledger checks in XRPL_VERIFICATION.md.",
+  "network": "mainnet",
+  "rlusd": {
+    "currency": "RLUSD",
+    "currency_hex": "524C555344000000000000000000000000000000",
+    "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+    "toml_url": "https://ripple.com/.well-known/xrp-ledger.toml"
+  },
+  "known_lookalikes": {
+    "rLUSDtykL2NVz3HJe1Jqoc7dsxWFVcsmuK": "Issues a token with RLUSD's currency code and sets Domain to ripple.com, but is not listed in ripple.com's xrp-ledger.toml. Not RLUSD. Never use."
+  },
+  "endpoints": {
+    "json_rpc": ["https://xrplcluster.com/", "https://s2.ripple.com:51234/"],
+    "websocket": ["wss://xrplcluster.com/", "wss://s2.ripple.com/"]
+  }
+}

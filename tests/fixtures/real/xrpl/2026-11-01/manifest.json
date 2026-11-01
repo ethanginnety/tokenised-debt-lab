@@ -1,0 +1,21 @@
+{
+  "endpoint": "https://xrplcluster.com/",
+  "ledger_index": 108053087,
+  "fetched_utc": "2026-11-01T21:15:56+00:00",
+  "toml_url": "https://ripple.com/.well-known/xrp-ledger.toml",
+  "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+  "currency_hex": "524C555344000000000000000000000000000000",
+  "checked_accounts": [
+    "rLUSDtykL2NVz3HJe1Jqoc7dsxWFVcsmuK"
+  ],
+  "files": [
+    "account_info_rLUSDtykL2NVz3HJe1Jqoc7dsxWFVcsmuK.json",
+    "amm_info.json",
+    "book_asks_0.json",
+    "book_bids_0.json",
+    "issuer_account_info.json",
+    "issuer_gateway_balances.json",
+    "ripple_xrp-ledger.toml",
+    "server_state.json"
+  ]
+}

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0-dev — 1 Nov 2026
+
+Milestone 7, RLUSD/XRP read-only and paper, brought forward before M5 by Ethan on 1 Nov 2026. Plan approved the same day with three changes (see ROADMAP). Read-only and paper only: no keys, no wallet, no orders on any ledger.
+
+- **Verification (M7 step 1): GO.** [XRPL_VERIFICATION.md](XRPL_VERIFICATION.md): RLUSD's mainnet issuer `rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De` and currency code from Ripple's docs, confirmed both ways on the ledger (its `Domain` is ripple.com, and ripple.com's `xrp-ledger.toml` lists it as the RLUSD issuer); issuer settings from the ledger (clawback on, freeze power kept but not in force, no transfer fee, no tick size), with three differences from Ripple's settings document recorded; reserves (1 XRP + 0.2 per object) and fee (10 drops) from a validated ledger; order-book and AMM mechanics from xrpl.org; endpoints. On ledger 108053087 the order book had funded offers on both sides (best 1.248241 / 1.249899 RLUSD per XRP, 13.27 bp), so the stop point was passed. Whether depth is enough is decided at the step 4 checkpoint (decision C).
+- **A look-alike issuer found and excluded.** `rLUSDtykL2NVz3HJe1Jqoc7dsxWFVcsmuK` issues a token with RLUSD's exact currency code and sets its `Domain` to ripple.com, but ripple.com's toml doesn't list it, and its settings (master key on, no clawback, freeze given up) are unlike Ripple's. An explorer labelled it an RLUSD issuer. Recorded in `config/xrpl.json` as a known look-alike, checked by every probe.
+- **Read-only client.** `debtlab/xrpl_market/readonly.py`: only public read methods can be sent; every ledger read is pinned to one explicit validated ledger and rejected if unvalidated or from another ledger.
+- **No-signing guard.** `tests/test_xrpl_no_signing.py` scans every module in `debtlab/` and `scripts/` for xrpl-py wallet, signing or submit code, seeds or keys from the environment, and raw submit requests.
+- **Probe.** `scripts/xrpl_probe.py` reads the issuer, its outstanding RLUSD, both book sides, the AMM and the look-alikes at one validated ledger, fetches the toml, saves everything byte for byte with a manifest (`tests/fixtures/real/xrpl/2026-11-01/`), and prints the go/no-go; `--report-only` re-reads a saved folder offline. Endpoint fallback: xrplcluster.com, then s2.ripple.com. Each book side came back exactly at the 400-offer limit without a marker, so full pages are reported as possibly incomplete.
+- `xrpl-py==5.2.0` added (exact pin). Docs: ROADMAP order and M7 plan, RISK_REGISTER R16–R19 (R10 active), RUNBOOK multi-day runs on Windows, ASSUMPTIONS, ARCHITECTURE, TESTING.
+
 ## 0.4.0-dev — 30 Oct 2026
 
 Milestone 4, the simulated market maker: **done**, marked by Ethan on 1 Nov 2026 after checking the *Market maker* section in a browser. Plan approved by Ethan on 30 Oct 2026; see ROADMAP.

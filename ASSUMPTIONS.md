@@ -106,6 +106,21 @@ Terms approved by Ethan on 30 Oct 2026, with his two corrections (recovery on th
 | Quote model | Quotes are clean prices per 100. Centre = fair value − skew; skew = DV01 × 3 bp × imbalance, where imbalance runs from −1 (no inventory) through 0 (at the 1m target) to +1 (at the 2m limit). Half-spread = sum of components: **base** 1 bp of price; **duration** DV01 × 1 bp (yield move before the bot can react); **credit** DV01 × 0.5% of the credit spread (century 0.475 bp, short 0.55 bp); **data age** DV01 × 0.5 bp per day of curve age; **inventory** DV01 × 2 bp × \|imbalance\|; **illiquidity** 10 bp of price for the century bond, 2 bp for the short; **fees** 0.5 bp of the cash per fill; **long-end** as below. Bid rounded down and ask up to the tick. | Approved by Ethan on 30 Oct 2026. Expressing risks as yield moves × DV01 makes the century bond wider for the same risk, as it should be. Sized so the half-spreads (century ≈ 79 bp, short ≈ 8 bp on the real 29 Oct curves) give uninformed fill rates of about 21% and 43% with the approved k. |
 | Century long-end add-on (used from step 2) | Weight 0.5 × half the price gap between the "long-run forward −50 bp" and "+50 bp" cases. On the real 29 Oct curve: 0.5 × (91.2748 − 90.0543) / 2 = 0.31 per 100, about 34 bp of the price. The full extrapolation range (89.56 to 94.11) is shown as context only. | Decision 2 and the weight approved by Ethan on 30 Oct 2026. |
 
+## RLUSD/XRP (M7, read-only and paper)
+
+Plan approved by Ethan on 1 Nov 2026 (decisions A–G in ROADMAP). Facts and sources in [XRPL_VERIFICATION.md](XRPL_VERIFICATION.md).
+
+| Item | Assumption | Why |
+|---|---|---|
+| Read-only | No keys, wallet, signing or submitting anywhere. `ReadOnlyClient` sends only public read methods (`server_state`, `server_info`, `ledger`, `book_offers`, `amm_info`, `account_info`, `account_lines`, `gateway_balances`; `subscribe`/`unsubscribe` over websocket only). A test scans every module for xrpl-py wallet, signing or submit code and for seeds or keys read from the environment. | Ethan, 1 Nov 2026: read-only and paper only. |
+| RLUSD | Issuer `rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De`, currency `524C555344000000000000000000000000000000`, in `config/xrpl.json`. A token is identified by issuer **and** currency; the issuer by Ripple's docs **and** a two-way domain check (ripple.com's `xrp-ledger.toml` lists it). | A look-alike issuer uses the same currency code and `Domain`; only the toml tells them apart. |
+| One ledger per snapshot | Every ledger read is pinned to one explicit validated ledger index; a response not validated, or from another ledger, is rejected. Never `current` or `closed`. | Book sides, AMM and issuer settings must describe the same moment. |
+| Prices | RLUSD per XRP. A bid buys XRP (offer gives RLUSD); an ask sells XRP. Only funded amounts count; offers with nothing left on either side are skipped. | |
+| Book pages | A page that comes back exactly at the requested limit is treated as possibly incomplete, marker or not. | The server returned 400 of 400 with no marker on both sides on 1 Nov. |
+| Endpoints | JSON-RPC and websocket: `xrplcluster.com` first, `s2.ripple.com` as fallback. | Both listed by xrpl.org; xrplcluster.com also by Ripple's RLUSD page. |
+| Reserves and fees | Read from each validated ledger, never hard-coded (1 Nov 2026: 1 XRP base, 0.2 XRP per object, 10 drops). | Validators can vote them to change. |
+| xrpl-py | Pinned exactly, 5.2.0 (16 Sep 2026). JSON-RPC reads go through `httpx` in `ReadOnlyClient`, so the whitelist sits in our own code; xrpl-py is used for address checks now and the websocket monitor from step 3. | Easier to prove read-only when the request path is ours. |
+
 ## Pricing
 
 | Item | Assumption |
