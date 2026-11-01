@@ -9,12 +9,12 @@ A milestone is done only when its tests pass and its behaviour has been demonstr
 | M3 | Instruments and ledger | **Done** (30 Oct 2026) | Three instruments; simulated holder ledger; coupons, maturity and default with idempotent payments. |
 | M4 | Market maker (simulation) | **Done** (1 Nov 2026) | Quotes with full records; limits, pause and kill switch; simulated fills with adverse selection; P&L split. |
 | M7 | RLUSD/XRP read-only and paper | **In progress** (plan approved 1 Nov 2026) | Verified identifiers and depth; live book monitor; several days of paper results. |
+| M8 | €50 live | Gated (next after M7) | Only after Ethan's explicit approval and all safety tests passing; paper runs alongside on the same quotes and the report explains every difference. |
 | M5 | Private credit depth | Planned | Withdrawal windows, caps, queue and gates; NAV vs secondary price; discount tests. |
 | M6 | XRPL testnet | Planned | Bonds as labelled testnet tokens; coupon transfers on testnet; reconciliation. |
-| M8 | €50 live | Gated | Only after Ethan's explicit approval and all safety tests passing. |
 | M9 | Persistent deployment | Planned | Docker Compose, PostgreSQL, worker, scheduler, heartbeats, alerts, tested restart recovery. |
 
-**Order changed by Ethan on 1 Nov 2026:** M7 comes before M5 and M6. Milestone numbers are kept so earlier references stay valid; the table is in build order. This departs from the brief's order (PROMPT.md §1, §9), which is left as written. M7 stays read-only and paper only: no keys, no wallet, no signing, no orders on any ledger. M8 still needs everything in M7 plus Ethan's explicit approval.
+**Order changed by Ethan on 1 Nov 2026:** M7 comes before M5 and M6. **Changed again the same day: M7 → M8 → M5 → M6 → M9**, so the live €50 experiment follows straight after paper trading. Milestone numbers are kept so earlier references stay valid; the table is in build order. This departs from the brief's order (PROMPT.md §1, §9), which is left as written. M7 stays read-only and paper only: no keys, no wallet, no signing, no orders on any ledger. M8 still needs everything in M7 plus Ethan's explicit approval (see *M8 requirements*).
 
 ## M1 evidence
 
@@ -144,16 +144,29 @@ Approved by Ethan on 1 Nov 2026 with three changes (marked *Ethan*): AMM-routed 
 - **C. What "real depth" means, fixed before looking at the data.** Over the checkpoint period: both sides funded in at least 99% of validated ledgers; median spread at most 50 bp; median depth within 50 bp of mid at least €100 each side (ten times the €10 order cap). Approved; not to be changed after seeing the results.
 - **D. Euro conversion and paper balances.** RLUSD valued at 1 USD (an assumption: this pair can't show RLUSD's own USD price); EUR/USD from the ECB daily reference rate, stale after 96 hours like the curves; XRP at the book mid. Paper start: €50 in all, half XRP and half RLUSD at the opening mid, the reserve held back from the XRP half. Approved.
 - **E. Two paper fill rules, side by side** (*Ethan*). **Conservative:** a paper bid fills only when real validated trades go through a price strictly below it, up to the volume traded beyond our price (we'd be behind the queue at our own price). **Optimistic:** trades exactly at our price count too. Same for offers. Trades routed through the AMM count under both (decision B). The truth is presented as between the two. Limitations either way: paper orders aren't on the real book, so they have no impact and nobody reacts to them; latency isn't modelled.
-- **F. Run length.** At least 5 consecutive days including a weekend, with at least 95% uptime, run on Ethan's machine: until M9 nothing keeps a process alive, and Claude's environment can't. Sleep or network loss is logged as an outage, not hidden. Approved, with a RUNBOOK note on Windows sleep and update settings (*Ethan*).
+- **F. Run length.** **At least 2 days** (changed by Ethan on 1 Nov 2026, from 5 days including a weekend with 95% uptime), run on Ethan's machine: until M9 nothing keeps a process alive, and Claude's environment can't. Uptime recorded and reported honestly: sleep, restarts or network loss are logged as gaps, never hidden. RUNBOOK note on Windows sleep and update settings (*Ethan*).
 - **G. Passive only.** The paper bot only rests quotes; it never takes liquidity by crossing the spread. Approved.
 
 **Risks:** R16–R19 added to RISK_REGISTER on approval; R10 (thin book) is now active.
+
+## M8 requirements (set by Ethan, 1 Nov 2026)
+
+M8 comes straight after M7. Its step-by-step plan will be proposed for approval when M7 is done; these are fixed now. The brief's safety rules (PROMPT.md §7 stage 4, §8) are unchanged.
+
+- **Paper alongside live.** The paper venue keeps running in parallel on **exactly the same quotes** as the live venue, under both fill rules, so paper and live can be compared fill by fill. The final report explains every difference (queue position, other traders reacting to a real order, latency, fills the paper rules missed or invented).
+- **Keys.** Never in chat, code, logs or git, ever; never printed. The signing key is read from a local file that is git-ignored **and outside both the repository and OneDrive** (the repository sits in a OneDrive folder, so a git-ignored file there would still be uploaded to the cloud): for example `C:\debtlab-secrets\`, readable only by Ethan's Windows account. The code gets the file's path, never the key, and never logs either the key or its contents. This replaces the brief's "environment or a secure signer" (Ethan, 1 Nov 2026); `.env.example`'s `XRPL_SIGNING_KEY` line goes when M8 is built. Recommended in the RUNBOOK checklist: a regular key for the bot, so the master key stays offline and the bot's key can be revoked.
+- **Funding is Ethan's alone.** Ethan does all funding and wallet setup himself (RUNBOOK: *M8 preparation*). Claude never initiates a transfer, withdrawal or funding; the bot's code can only place and cancel offers, and a test enforces that no other transaction type can be built.
+- **Limits (defaults until Ethan changes them):** €10 maximum order, €5 maximum daily loss, €50 total, cancel everything if data is older than 30 s or the connection drops, kill switch; all in the execution layer and persisted, as in M4.
+- **Passive only:** every offer carries `tfPassive`, and the risk check refuses any offer priced at or through the opposite best price, so the bot never takes liquidity.
+- **Verified RLUSD issuer only:** `rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De`; any other issuer, including the look-alike, is refused.
+- **Approvals:** Ethan's explicit approval before the first live order and before any increase in risk (capital, limits, sizes).
+- **The M7 no-signing test** is relaxed for M8 only with Ethan's approval of the M8 plan, and only for the one module that signs.
 
 ## Where we are (resume point, 1 Nov 2026)
 
 Written so a fresh session (after `/clear`) can pick up exactly here. Read PROMPT.md, this file, ASSUMPTIONS.md and CHANGELOG.md first.
 
-**M1, M2, M3 and M4 are done.** 271 tests pass (151 at the end of M3). Next: **M7, RLUSD/XRP read-only and paper** (order changed by Ethan on 1 Nov 2026; plan above, approved 1 Nov), steps 1 (verification, GO) and 2 (book adapter) done on 1 Nov; next step 3, the live monitor; then M5. The M4 ideas above are still to weigh.
+**M1, M2, M3 and M4 are done.** 271 tests pass (151 at the end of M3). Next: **M7, RLUSD/XRP read-only and paper** (order changed by Ethan on 1 Nov 2026; plan above, approved 1 Nov), steps 1 (verification, GO) and 2 (book adapter) done on 1 Nov; next step 3, the live monitor; then M8 (gated; requirements above), then M5. The M4 ideas above are still to weigh.
 
 **M4, for reference (done):** the brief's §5 was the spec: quotes with full records (fair value, bid, ask, spread in currency and bp, data timestamps, inventory, limits in force, the reason for each adjustment); spread widening with duration, credit risk, data age, inventory, illiquidity and costs; tick size and minimum order size; limits enforced in the execution layer and persisted (inventory per instrument, portfolio exposure, order size, daily loss, open orders, data age, cash reserve, pause/resume, kill switch); quote nothing when data, valuation, balances or a risk check is invalid; simulated fills, fees, slippage and adverse selection; P&L split into spread captured, inventory mark-to-market and fees, on the dashboard. Strategy and risk sit behind interfaces shared with the paper and live adapters (M7, M8). Things M4 must respect from earlier milestones:
 - `risk_increasing_allowed()`: illustrative, missing or stale curves block quoting (re-applied on every read, `with_current_gate`).
