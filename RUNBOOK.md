@@ -113,3 +113,15 @@ For the live €50 experiment (M8). Claude never touches funds, never sees a see
 7. **Split XRP and RLUSD.** Swap about half the trading amount into RLUSD yourself, in the wallet app (it trades on the same ledger) or by buying RLUSD on the exchange and withdrawing it to the address. Aim for about €25 in each, leaving the 1.6 XRP reserve untouched. Claude will read the balances back.
 8. **Bot key (recommended: a regular key).** In the wallet app, set a **regular key** on the account: a second key pair the bot signs with, while the master secret stays on paper. If the bot's key is ever exposed, you remove it with the master key and the funds stay yours. Put the bot's secret in a file **outside the repository and outside OneDrive**, e.g. `C:\debtlab-secrets\xrpl-bot.key`, readable only by your account (`icacls C:\debtlab-secrets /inheritance:r /grant:r "%USERNAME%:F"`). Never open it in an app that syncs, and never paste it anywhere.
 9. **Stop and tell Claude it's done** (address only). M8's plan and safety tests come next; no order is placed until you approve the first one.
+
+## RLUSD/XRP monitor (M7, read-only)
+
+```bash
+python scripts/xrpl_monitor.py run --db C:\debtlab-data\xrpl.sqlite3     # until Ctrl+C
+python scripts/xrpl_monitor.py status --db C:\debtlab-data\xrpl.sqlite3  # in another window, any time
+python scripts/xrpl_monitor.py status --hours 24                          # just the last day
+```
+
+Read-only: it holds no key and can't place anything. Set `DEBTLAB_XRPL_DB` once instead of passing `--db` every time (keep the file outside OneDrive; see *Multi-day runs on Windows*). It prints a line every 50 ledgers (about 3 minutes) and a warning if the RLUSD issuer's settings change. If it loses the connection it records an outage and retries, switching endpoints. If it stops (crash, sleep, update restart), start it again: the gap is recorded as *not running*, and uptime in `status` includes it. Expect about 0.75 GB a day of download and about 50 MB a day of database.
+
+For the step 4 checkpoint, run it for at least 2 days, then send Claude the output of `status`.

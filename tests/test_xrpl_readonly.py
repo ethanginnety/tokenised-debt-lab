@@ -90,3 +90,23 @@ def test_http_failure_is_a_read_error():
     c = ReadOnlyClient("https://example.invalid/", transport=httpx.MockTransport(boom))
     with pytest.raises(XrplReadError):
         c.server()
+
+
+# --- the websocket client (M7 step 3) ----------------------------------------------------
+
+@pytest.mark.parametrize("method", WRITE_METHODS)
+def test_websocket_refuses_write_commands_before_sending(method):
+    import asyncio
+    from debtlab.xrpl_market.wsclient import ReadOnlyWebsocket
+    ws = ReadOnlyWebsocket("ws://127.0.0.1:9")      # never connected: refusal must come first
+    with pytest.raises(NotReadOnly):
+        asyncio.run(ws.command(method))
+
+
+@pytest.mark.parametrize("index", ["validated", "current", None])
+def test_websocket_ledger_reads_must_be_pinned(index):
+    import asyncio
+    from debtlab.xrpl_market.wsclient import ReadOnlyWebsocket
+    ws = ReadOnlyWebsocket("ws://127.0.0.1:9")
+    with pytest.raises(XrplReadError, match="validated ledger number"):
+        asyncio.run(ws.command("book_offers", ledger_index=index))

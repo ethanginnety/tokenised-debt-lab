@@ -11,7 +11,22 @@
     "rLUSDtykL2NVz3HJe1Jqoc7dsxWFVcsmuK": "Issues a token with RLUSD's currency code and sets Domain to ripple.com, but is not listed in ripple.com's xrp-ledger.toml. Not RLUSD. Never use."
   },
   "endpoints": {
-    "json_rpc": ["https://xrplcluster.com/", "https://s2.ripple.com:51234/"],
-    "websocket": ["wss://xrplcluster.com/", "wss://s2.ripple.com/"]
+    "json_rpc": [
+      "https://xrplcluster.com/",
+      "https://s2.ripple.com:51234/"
+    ],
+    "websocket": [
+      "wss://xrplcluster.com/",
+      "wss://s2.ripple.com/"
+    ]
+  },
+  "monitor": {
+    "_note": "Book read every validated ledger: top_limit offers per side; every deep_every_ledgers a deep read for depth bands. About 0.75 GB a day from the endpoint with these values.",
+    "top_limit": 20,
+    "deep_limit": 200,
+    "deep_every_ledgers": 50,
+    "issuer_every_ledgers": 1000,
+    "fx_every_hours": 6,
+    "save_raw_max": 40
   }
 }
