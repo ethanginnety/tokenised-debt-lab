@@ -119,6 +119,11 @@ Plan approved by Ethan on 1 Nov 2026 (decisions A–G in ROADMAP). Facts and sou
 | Book pages | A page that comes back exactly at the requested limit is treated as possibly incomplete, marker or not. | The server returned 400 of 400 with no marker on both sides on 1 Nov. |
 | Endpoints | JSON-RPC and websocket: `xrplcluster.com` first, `s2.ripple.com` as fallback. | Both listed by xrpl.org; xrplcluster.com also by Ripple's RLUSD page. |
 | Reserves and fees | Read from each validated ledger, never hard-coded (1 Nov 2026: 1 XRP base, 0.2 XRP per object, 10 drops). | Validators can vote them to change. |
+| Offer price and size | Price from the offer's own amounts (its exact quality); size from its funded amounts. An offer whose funded amount on either side is zero is left out and counted. | A partly funded offer still trades at its own rate. |
+| Depth bands | Funded RLUSD (and XRP) within 10, 25, 50 and 100 bp of the mid, each side. If a side was cut off (a full page) and the last offer read doesn't lie beyond a band, that band is a lower bound and says so. | Never present a truncated read as the whole book. |
+| Invalid book | No funded bid, no funded ask, or best bid at or above best ask (crossed or locked): no mid, no spread, reasons recorded. | Nothing should quote off a book like that. |
+| Cost of taking | Walk the side best price first until the RLUSD amount is used; cost = average price against the mid in bp (positive is worse). Sizes in RLUSD; euro sizes once the ECB EUR/USD rate is wired in (decision D, step 3). | |
+| AMM beside the book | XLS-30 swap formulas with equal weights: buying XRP with R' RLUSD gives X × (1 − R / (R + R' × (1 − fee))); selling XRP for R' RLUSD needs X × (R / (R − R') − 1) / (1 − fee), X and R the pool's XRP and RLUSD. Fee = `trading_fee` / 100,000. rippled's internal rounding not modelled; the monitor will compare with real swaps. Shown beside the book, never added to its depth (decision B). | The XLS-30 spec (status Final), read 1 Nov 2026. |
 | xrpl-py | Pinned exactly, 5.2.0 (16 Sep 2026). JSON-RPC reads go through `httpx` in `ReadOnlyClient`, so the whitelist sits in our own code; xrpl-py is used for address checks now and the websocket monitor from step 3. | Easier to prove read-only when the request path is ours. |
 
 ## Pricing

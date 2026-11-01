@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from decimal import Decimal
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -27,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 
 from debtlab.xrpl_market import load_config  # noqa: E402
 from debtlab.xrpl_market.readonly import ReadOnlyClient, XrplReadError  # noqa: E402
-from debtlab.xrpl_market import verify  # noqa: E402
+from debtlab.xrpl_market import book, verify  # noqa: E402
 
 MAX_BOOK_PAGES = 10
 BOOK_PAGE_LIMIT = 400
@@ -126,7 +127,36 @@ def report(out: Path) -> verify.GoNoGo:
     if not listed:
         g = verify.GoNoGo(False, g.reasons + ["issuer not confirmed by its domain's toml"])
     print("GO: the order book has funded offers on both sides" if g.go else "NO-GO: " + "; ".join(g.reasons))
+    book_report(out, a)
     return g
+
+
+def book_report(out: Path, pool: verify.Amm, sizes=(Decimal(10), Decimal(100), Decimal(1000), Decimal(10000))) -> None:
+    """Step 2's book adapter on the saved pages: depth bands and the cost of taking liquidity,
+    with the AMM beside it (never added to the book's figures). Sizes are in RLUSD; the euro
+    conversion (decision D) arrives with the ECB rate in a later step."""
+    m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    load = lambda name: [json.loads(p.read_text(encoding="utf-8"))["result"]  # noqa: E731
+                         for p in sorted(out.glob(f"book_{name}_*.json"))]
+    b = book.parse_book(load("bids"), load("asks"), m["currency_hex"], page_limit=BOOK_PAGE_LIMIT)
+    st = book.stats(b)
+    print(f"\nBook adapter, ledger {st.ledger_index}: {st.bid_offers} bids, {st.ask_offers} asks"
+          f" ({b.dropped} returned with nothing funded, left out)")
+    if not st.valid:
+        print("  INVALID: " + "; ".join(st.reasons))
+        return
+    print(f"  best bid {st.best_bid:.6f}, best ask {st.best_ask:.6f}, mid {st.mid:.6f}, spread {st.spread_bp:.2f} bp")
+    print("  depth within      bids RLUSD      asks RLUSD")
+    for d in st.depth:
+        print(f"  {d.band_bp:>5} bp     {d.bid_rlusd:>14,.0f}  {d.ask_rlusd:>14,.0f}{'' if d.complete else '  (lower bound: a side was cut off)'}")
+    print("  cost against mid (bp)   buy XRP: book / AMM      sell XRP: book / AMM")
+    for size in sizes:
+        cells = []
+        for action in ("buy", "sell"):
+            w, p = book.walk(b, action, size, st.mid), book.amm_walk(pool, action, size, st.mid)
+            bw = f"{w.cost_bp:.2f}" if w.filled else "not enough read"
+            cells.append(f"{bw:>10} / {p.cost_bp:.2f}")
+        print(f"  {size:>8,} RLUSD   {cells[0]:>22}   {cells[1]:>22}")
 
 
 def main() -> int:

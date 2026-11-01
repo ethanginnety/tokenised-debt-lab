@@ -92,7 +92,7 @@ One snapshot, for the go/no-go only. Depth is judged over days at the checkpoint
 
 - Spread **13.27 bp** around a mid of 1.249070 RLUSD per XRP.
 - AMM pool `rhWTXC2m2gGGA9WozUaoMm6kLAVPb1tcS3`: 1,871,457 XRP and 2,335,313 RLUSD, pool price 1.247858, fee 0.214%. Before its fee the pool price sits just below the book's best bid; with the fee, buying from the pool (about 1.2505) costs more than the book's best ask, and selling to it (about 1.2452) gets less than the best bid. So the book is the better price at the top, and the pool is context, as decision B says.
-- A rough, untested read of an earlier snapshot (ledger 108053012) found about 51,500 RLUSD of bids and 99,000 of asks within 50 bp of mid, far above decision C's €100. The tested depth bands come with the book adapter (step 2).
+- Depth from the tested book adapter (step 2; `python scripts/xrpl_probe.py --report-only tests/fixtures/real/xrpl/2026-11-01`): within 10 bp of mid, 1,224 RLUSD of bids and 1,828 of asks; within 50 bp, 49,911 and 96,884, far above decision C's €100. Taking 10 RLUSD costs 6.64 bp against the mid on the book either way, against 11.77 (buy) and 31.12 (sell) bp at the AMM.
 
 ## Still open
 
