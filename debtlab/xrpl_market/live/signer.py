@@ -7,8 +7,10 @@ can only reduce risk, so the kill switch never depends on reaching mainnet. The 
 only inside a closure: a `Signer` has no attribute holding it, won't pickle or copy, and
 this file has no print, logging or environment access (tested).
 
-`Submitter` checks its endpoint when created and the server's network before every submit.
-It sends only `server_info` and a signed blob.
+`Submitter` checks its endpoints when created and the server's network before every submit.
+It sends only `server_info` and a signed blob. If an endpoint doesn't answer before sending,
+the next is used. A signed blob is never resent: once it may have left, its outcome is
+unknown until a validated ledger says, and only the next transaction moves on.
 
 Every offer carries `tfPassive`, an `Expiration` and a `LastLedgerSequence`, on the verified
 pair. No post-only flag exists, so `tfPassive` alone doesn't promise we never take: the
@@ -163,13 +165,31 @@ def _load(key_file: Path | str, cfg: dict, account: str | None, acl: Callable, m
 
 
 class Submitter:
-    """Sends signed offers to one testnet endpoint, one at a time. Connects when first needed."""
+    """Sends signed offers to testnet, one at a time, moving to the next endpoint when one stops answering."""
 
-    def __init__(self, url: str, *, connect: Callable = ws_connect, timeout: float = 10.0):
-        self.url = guards.check_endpoint(url)
+    def __init__(self, url: str, *more: str, connect: Callable = ws_connect, timeout: float = 10.0):
+        self.urls = [guards.check_endpoint(u) for u in (url, *more)]
+        self._index = 0
         self._connect, self._timeout = connect, timeout
         self._conn = None
         self._ids = itertools.count(1)
+
+    @property
+    def url(self) -> str:
+        return self.urls[self._index]
+
+    def _next_endpoint(self) -> None:
+        self.close()
+        self._index = (self._index + 1) % len(self.urls)
+
+    def _server_info(self) -> dict | None:
+        """From the first endpoint that answers, starting at the current one. None if none do."""
+        for _ in self.urls:
+            try:
+                return self._request("server_info")
+            except Exception:
+                self._next_endpoint()
+        return None
 
     def close(self) -> None:
         if self._conn is not None:
@@ -192,25 +212,22 @@ class Submitter:
         return msg.get("result", {})
 
     def alive(self) -> bool:
-        """Is the endpoint answering, as testnet? Sends only `server_info`; another network raises."""
-        try:
-            info = self._request("server_info")
-        except Exception:
-            self.close()
+        """Is an endpoint answering, as testnet? Sends only `server_info`; another network raises."""
+        info = self._server_info()
+        if info is None:
             return False
         guards.check_network(info)
         return True
 
     def submit(self, signed: Signed) -> dict:
         """The server's preliminary answer. Only a validated ledger says what really happened."""
-        try:
-            info = self._request("server_info")
-        except Exception as e:
-            self.close()
-            raise SubmitFailed(f"server_info at {self.url}: {type(e).__name__}", sent=False) from None
+        info = self._server_info()
+        if info is None:
+            raise SubmitFailed(f"no testnet endpoint answered: {', '.join(self.urls)}", sent=False)
         guards.check_network(info)
         try:
             return self._request("submit", tx_blob=signed.blob)
         except Exception as e:
-            self.close()
-            raise SubmitFailed(f"submit at {self.url}: {type(e).__name__}", sent=True) from None
+            where = self.url
+            self._next_endpoint()
+            raise SubmitFailed(f"submit at {where}: {type(e).__name__}", sent=True) from None

@@ -37,7 +37,7 @@ def utcnow():
 
 
 class Rig:
-    def __init__(self, tmp_path, monkeypatch, mainnet="absent", resume_at=None):
+    def __init__(self, tmp_path, monkeypatch, mainnet="absent", resume_at=None, down_hosts=None):
         self.tmp, self.net = tmp_path, FakeNet()
         now = utcnow()
         self.mon = Monitor(tmp_path, t0=now - timedelta(hours=1), fx_date=now.date())
@@ -55,7 +55,7 @@ class Rig:
         monkeypatch.setattr(xrpl_testnet, "Submitter", partial(Submitter, connect=self.net))
         monkeypatch.setattr(xrpl_testnet, "KeepAwake", contextlib.nullcontext)
         monkeypatch.setattr(controls, "ROUND_PAUSE_SECONDS", 0.01)
-        transport = rpc_transport(self.net, mainnet=mainnet, on_read=self.on_read)
+        transport = rpc_transport(self.net, mainnet=mainnet, on_read=self.on_read, down_hosts=down_hosts)
         monkeypatch.setattr(ledger_module, "ReadOnlyClient", partial(ReadOnlyClient, transport=transport))
 
     def on_read(self):
@@ -191,3 +191,52 @@ def test_only_the_kill_command_uses_the_cancel_only_signer():
     assert "cancel_parts" not in run and "parts(args.key_file, cfg)" in run
     kill = text[text.index("def _kill("):text.index("def _run(")]
     assert "cancel_parts(args.key_file, cfg)" in kill and " parts(args.key_file" not in kill
+
+
+# --- a second endpoint -----------------------------------------------------------------------
+
+PRIMARY, CLIO = "testnet.xrpl-labs.com", "clio.altnet.rippletest.net"
+WSS_PRIMARY, WSS_CLIO = f"wss://{PRIMARY}/", f"wss://{CLIO}/"
+
+
+def test_run_works_on_the_second_endpoint_when_the_first_is_down(tmp_path, monkeypatch):
+    r = Rig(tmp_path, monkeypatch, resume_at=30, down_hosts={PRIMARY})
+    r.net.down_urls.add(WSS_PRIMARY)
+    assert r.cli("run", "--key-file", str(r.key), "--for", "4") == 0
+    assert r.net.blobs() and r.net.offers == {} and set(r.net.urls) == {WSS_CLIO} and set(r.net.read_hosts) == {CLIO}
+    assert "disagree" not in ldb.state(r.live())["reason"]
+
+
+def test_the_first_endpoint_dying_mid_run_doesnt_stop_it_or_upset_the_books(tmp_path, monkeypatch):
+    down = set()
+    r = Rig(tmp_path, monkeypatch, resume_at=30, down_hosts=down)
+    real = r.on_read
+
+    def on_read():
+        real()
+        if r.reads == 90:
+            down.add(PRIMARY)
+            r.net.down_urls.add(WSS_PRIMARY)
+    transport = rpc_transport(r.net, on_read=on_read, down_hosts=down)
+    monkeypatch.setattr(ledger_module, "ReadOnlyClient", partial(ReadOnlyClient, transport=transport))
+    assert r.cli("run", "--key-file", str(r.key), "--for", "4") == 0
+    assert {PRIMARY, CLIO} == set(r.net.read_hosts) and r.net.offers == {}
+    conn = r.live()
+    assert ldb.state(conn)["state"] == "running" and (D(r.net.xrp) / 1_000_000, r.net.rlusd) == book.balances(conn)
+
+
+def test_kill_works_on_the_second_endpoint(tmp_path, monkeypatch):
+    r = Rig(tmp_path, monkeypatch, mainnet="down", down_hosts={PRIMARY})
+    r.net.down_urls.add(WSS_PRIMARY)
+    unknown_offer(r.net)
+    assert r.cli("kill", "--key-file", str(r.key), "--reason", "test") == 0
+    assert r.net.offers == {} and set(r.net.urls) == {WSS_CLIO}
+
+
+def test_with_both_endpoints_down_kill_still_turns_on_and_says_so(tmp_path, monkeypatch, capsys):
+    r = Rig(tmp_path, monkeypatch, down_hosts={PRIMARY, CLIO})
+    r.net.down_urls |= {WSS_PRIMARY, WSS_CLIO}
+    unknown_offer(r.net)
+    monkeypatch.setattr(controls, "kill", partial(controls.kill, timeout=0.05))
+    assert r.cli("kill", "--key-file", str(r.key), "--reason", "test") == 1
+    assert ldb.state(r.live())["state"] == "killed" and "kill switch ON" in capsys.readouterr().out

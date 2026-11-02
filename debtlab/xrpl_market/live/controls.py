@@ -70,6 +70,9 @@ def read_ledger(conn: sqlite3.Connection, ledger: TestnetLedger, venue: LiveVenu
                 fee_drops: int, now: datetime) -> Read:
     """One validated read: books brought up to it, and the venue's sequence, fee and ledger set from it."""
     h = ledger.latest()
+    seen = book.cursor(conn)
+    if seen is not None and h.index < seen:     # an endpoint behind the one we were on
+        raise XrplReadError(f"server is at ledger {h.index}, behind ledger {seen} already read")
     address = venue.signer.address
     st = ledger.account(address, h.index)
     effects, problems = [], []

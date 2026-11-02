@@ -57,14 +57,14 @@ def parts(key_file: Path, cfg: dict):
     """The signer and connections. Tests replace this. The signer refuses a key whose account is on mainnet."""
     mainnet = load_config()["endpoints"]["json_rpc"]
     signer = open_signer(key_file, cfg, on_mainnet=lambda a: exists_on_mainnet(a, mainnet))
-    submitter = Submitter(cfg["endpoints"]["websocket"][0])
+    submitter = Submitter(*cfg["live"]["endpoints"]["websocket"])
     return signer, submitter, TestnetLedger(cfg), LiveVenue(signer, submitter, cfg)
 
 
 def cancel_parts(key_file: Path, cfg: dict):
     """For the kill switch: a signer that can only cancel, opened without reaching mainnet."""
     signer = open_cancel_signer(key_file, cfg)
-    submitter = Submitter(cfg["endpoints"]["websocket"][0])
+    submitter = Submitter(*cfg["live"]["endpoints"]["websocket"])
     return signer, submitter, TestnetLedger(cfg), LiveVenue(signer, submitter, cfg)
 
 

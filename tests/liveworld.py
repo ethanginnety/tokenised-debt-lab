@@ -75,11 +75,12 @@ class FakeNet:
         self._out: list[str] = []
         self.has_line = True
         self.fill_rounding = D(0)     # RLUSD: a balance moving by a hair more than the offer did
+        self.down_urls: set[str] = set()
 
     # --- the signer's connection ---------------------------------------------------------
 
     def __call__(self, url, **_):
-        if self.fail_connect:
+        if self.fail_connect or url in self.down_urls:
             raise ConnectionError("down")
         self.urls.append(url)
         return self
@@ -320,18 +321,24 @@ class Monitor:
                               xbook.parse_book([bids], [asks], RLUSD), pool)
 
 
-TESTNET_HOST = "testnet.xrpl-labs.com"
+TESTNET_HOSTS = {"testnet.xrpl-labs.com", "clio.altnet.rippletest.net"}
 
 
-def rpc_transport(net: FakeNet, *, mainnet="absent", on_read=None):
-    """The real read client over fake HTTP: the fake testnet answers in rippled's JSON-RPC layout.
-    Every other host counts as mainnet: `absent` says the account isn't there, `down` doesn't answer."""
-    net.mainnet_reads = []
+def rpc_transport(net: FakeNet, *, mainnet="absent", on_read=None, down_hosts=None):
+    """The real read client over fake HTTP: the fake testnet answers in rippled's JSON-RPC layout, on
+    both endpoints. Every other host counts as mainnet: `absent` says the account isn't there, `down`
+    doesn't answer. `down_hosts`: a set, changeable while running, of testnet hosts that don't answer."""
+    net.mainnet_reads, net.read_hosts = [], []
+    down_hosts = set() if down_hosts is None else down_hosts
 
     def handler(request):
         body = json.loads(request.content)
         method, params = body["method"], body["params"][0]
-        if request.url.host != TESTNET_HOST:
+        if request.url.host in down_hosts:
+            raise httpx.ConnectError("unreachable")
+        if request.url.host in TESTNET_HOSTS:
+            net.read_hosts.append(request.url.host)
+        else:
             net.mainnet_reads.append(request.url.host)
             if mainnet == "down":
                 raise httpx.ConnectError("unreachable")

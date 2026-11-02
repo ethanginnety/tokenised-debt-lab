@@ -13,9 +13,10 @@ from decimal import Decimal
 
 from debtlab.money import D, ZERO
 from debtlab.xrpl_market.live import guards
-from debtlab.xrpl_market.readonly import ReadOnlyClient, XrplReadError
+from debtlab.xrpl_market.readonly import NotReadOnly, ReadOnlyClient, Response, XrplReadError
 
 DROPS = Decimal(1_000_000)
+READ_TIMEOUT_SECONDS = 5.0
 PAGE = 200
 MAX_PAGES = 50
 
@@ -67,13 +68,66 @@ def parse_offer(o: dict, rlusd_hex: str, issuer: str) -> LedgerOffer | None:
     return LedgerOffer(int(o["seq"]), side, xrp, rlusd, None if exp is None else int(exp))
 
 
+class FailoverReads:
+    """The read client over several testnet endpoints. When one stops answering, the next is tried
+    and stays in use until it fails too. Each is checked to be testnet the first time it's used, and
+    every read keeps the read client's rules: a reply that isn't validated counts as a failed read."""
+
+    def __init__(self, urls: Iterable[str]):
+        self.urls = [guards.check_endpoint(u) for u in urls]
+        if not self.urls:
+            raise XrplReadError("no testnet read endpoints configured")
+        self._clients: dict[str, ReadOnlyClient] = {}
+        self._checked: set[str] = set()
+        self.index = 0
+
+    @property
+    def url(self) -> str:
+        return self.urls[self.index]
+
+    def _client(self, url: str) -> ReadOnlyClient:
+        if url not in self._clients:
+            self._clients[url] = ReadOnlyClient(url, timeout=READ_TIMEOUT_SECONDS)
+        return self._clients[url]
+
+    def _try(self, call: Callable[[ReadOnlyClient], object]):
+        last = None
+        for step in range(len(self.urls)):
+            i = (self.index + step) % len(self.urls)
+            c = self._client(self.urls[i])
+            try:
+                if self.urls[i] not in self._checked:
+                    guards.check_network(c.server("server_info").result)    # another network raises, and doesn't fail over
+                    self._checked.add(self.urls[i])
+                result = call(c)
+                self.index = i
+                return result
+            except NotReadOnly:
+                raise
+            except XrplReadError as e:
+                last = e
+        raise last
+
+    def validated_index(self) -> int:
+        return self._try(lambda c: c.validated_index())
+
+    def server(self, method: str = "server_state") -> Response:
+        return self._try(lambda c: c.server(method))
+
+    def at(self, method: str, params: dict, ledger_index: int) -> Response:
+        return self._try(lambda c: c.at(method, params, ledger_index))
+
+    def history(self, method: str, params: dict) -> Response:
+        return self._try(lambda c: c.history(method, params))
+
+
 class TestnetLedger:
     __test__ = False       # not a pytest class
 
-    def __init__(self, cfg: dict, client: ReadOnlyClient | None = None):
+    def __init__(self, cfg: dict, client: FailoverReads | None = None):
         guards.check_config(cfg)
         self.rlusd_hex, self.issuer = cfg["rlusd"]["currency_hex"], cfg["rlusd"]["issuer"]
-        self.client = client or ReadOnlyClient(cfg["endpoints"]["json_rpc"][0])
+        self.client = client or FailoverReads(cfg["live"]["endpoints"]["json_rpc"])
 
     def check_network(self) -> None:
         guards.check_network(self.client.server("server_info").result)

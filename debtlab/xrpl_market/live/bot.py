@@ -206,7 +206,7 @@ class LiveBot:
 
     def _read(self, m: mk.Market, now: datetime) -> tuple[controls.Read, bool]:
         index = self.ledger.client.validated_index()
-        if self.last_read is not None and index == self.synced:
+        if self.last_read is not None and index <= self.synced:   # the same ledger, or an endpoint a little behind
             return self.last_read, False
         read = controls.read_ledger(self.conn, self.ledger, self.venue, self.cfg, m.mid, self._fee_drops(m), now)
         self.last_read, self.synced = read, read.header.index

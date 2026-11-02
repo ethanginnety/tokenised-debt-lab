@@ -25,6 +25,11 @@
   },
   "live": {
     "_note": "How far from the best price and the AMM's price an offer must stay, so it never intends to take (decision C).",
-    "taker_margin_bp": "2"
+    "taker_margin_bp": "2",
+    "_endpoints": "The bot's own reads and sends, in order: it moves to the next when one stops answering. The monitor stays on `endpoints` above: Clio's book_offers reply has no `validated` field, and that check isn't relaxed. Verified 2 Nov (XRPL_VERIFICATION.md).",
+    "endpoints": {
+      "json_rpc": ["https://testnet.xrpl-labs.com/", "https://clio.altnet.rippletest.net/"],
+      "websocket": ["wss://testnet.xrpl-labs.com/", "wss://clio.altnet.rippletest.net/"]
+    }
   }
 }

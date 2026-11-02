@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 TESTNET_NETWORK_ID = 1
-TESTNET_HOSTS = frozenset({"testnet.xrpl-labs.com", "s.altnet.rippletest.net"})
+TESTNET_HOSTS = frozenset({"testnet.xrpl-labs.com", "s.altnet.rippletest.net", "clio.altnet.rippletest.net"})
 TESTNET_ISSUER = "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV"
 ENDPOINT_SCHEMES = frozenset({"wss", "https"})
 ENDPOINT_PORTS = frozenset({None, 443, 51233, 51234})
@@ -68,9 +68,10 @@ def check_config(cfg: dict) -> None:
     if cfg.get("network") != "testnet" or cfg.get("network_id") != TESTNET_NETWORK_ID:
         raise MainnetBlocked(f"config is for {cfg.get('network')!r}, not testnet")
     check_issuer(cfg["rlusd"]["issuer"])
-    for urls in cfg["endpoints"].values():
-        for url in urls:
-            check_endpoint(url)
+    for group in (cfg["endpoints"], cfg.get("live", {}).get("endpoints", {})):
+        for urls in group.values():
+            for url in urls:
+                check_endpoint(url)
 
 
 def check_not_on_mainnet(address: str, exists_on_mainnet: Callable[[str], bool]) -> None:

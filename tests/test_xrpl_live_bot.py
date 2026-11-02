@@ -743,3 +743,31 @@ def test_a_sequence_used_again_after_a_failed_send_gets_its_own_order(w):
     seqs = [o["sequence"] for o in w.orders("failed")]
     assert seqs and w.state() == "running" and len(w.orders("open", "pending")) >= 1
     assert not w.events("order_refused")
+
+
+# --- an endpoint that is a little behind ---------------------------------------------------------
+
+def behind(w, by=2):
+    """The next reads come from a server `by` ledgers back, as after moving to another endpoint."""
+    real, latest = w.ledger.client.validated_index, w.ledger.latest
+    w.ledger.client.validated_index = lambda: real() - by
+    w.ledger.latest = lambda: type(latest())(latest().index - by, latest().close_time, latest().resolution, latest().close_flags)
+
+
+def test_the_bot_waits_for_an_endpoint_that_is_behind(w):
+    w.running()
+    seen, cursor = w.bot.synced, book.cursor(w.conn)
+    n = len(w.net.blobs())
+    behind(w)
+    r = w.bot.tick(w.t + timedelta(seconds=1))
+    assert r["new_ledger"] is False and w.bot.synced == seen and book.cursor(w.conn) == cursor
+    assert w.state() == "running" and len(w.net.blobs()) == n
+
+
+def test_kill_doesnt_book_from_an_endpoint_that_is_behind(w):
+    w.running()
+    cursor = book.cursor(w.conn)
+    behind(w)
+    with pytest.raises(controls.XrplReadError, match="behind"):
+        controls.read_ledger(w.conn, w.ledger, w.venue, CFG, None, 10, w.t)
+    assert book.cursor(w.conn) == cursor

@@ -154,7 +154,7 @@ Test funds with no value, on testnet only. Do steps 1-4 yourself; Claude never s
 | A fill that takes liquidity stops it | Not forced: the margin should prevent it. Covered by tests, and the bot pauses if it ever happens. |
 | Kill leaves zero offers | `kill`, then check the address on a testnet explorer. |
 | Stale data | Stop the testnet monitor. After 30 s the bot cancels and stops quoting; it comes back when the monitor does. |
-| Dropped connection | Turn Wi-Fi off, wait a minute, turn it on. Offers expire by themselves meanwhile. |
+| Dropped connection | Turn Wi-Fi off, wait a minute, turn it on. Offers expire by themselves meanwhile. (The bot's own reads and sends move between `testnet.xrpl-labs.com` and `clio.altnet.rippletest.net` if only one is lost. The monitor uses only the first, so losing that one still stops quoting.) |
 | Each limit | `limit max_order_eur 1 --reason test` refuses orders; `limit max_daily_loss_eur 0.01 --reason test` pauses. Put them back the same way. |
 | Restart cleans up | Close the bot's window without Ctrl+C, start it again, and check it's paused with nothing left. |
 
