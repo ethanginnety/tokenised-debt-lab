@@ -28,5 +28,37 @@
     "issuer_every_ledgers": 1000,
     "fx_every_hours": 6,
     "save_raw_max": 40
+  },
+  "paper": {
+    "_note": "PAPER only (M7 steps 5-6): no key, no wallet, no order on any ledger. Starting values, to be agreed with Ethan before the paper run. Limits are copied into the paper database once and changed there with scripts/xrpl_paper.py (who and why recorded); editing this file never loosens a limit already set.",
+    "pair": "XRP/RLUSD",
+    "accounts": ["conservative", "optimistic"],
+    "driver_account": "conservative",
+    "start_eur": 50,
+    "trust_lines": 1,
+    "network_fallback": {"reserve_base_xrp": "1", "reserve_inc_xrp": "0.2", "fee_drops": "10"},
+    "strategy": {
+      "base_half_spread_bp": "5",
+      "min_half_spread_bp": "2",
+      "vol_window_minutes": 15,
+      "vol_min_samples": 30,
+      "vol_horizon_ledgers": 17,
+      "vol_mult": "1",
+      "age_bp_per_second": "0.5",
+      "inventory_skew_bp": "10",
+      "order_eur": "9",
+      "min_order_xrp": "1",
+      "price_decimals": 6,
+      "requote_bp": "2"
+    },
+    "markout_seconds": [60, 300],
+    "tick_seconds": 1,
+    "limits": {
+      "max_order_eur": "10",
+      "max_daily_loss_eur": "5",
+      "max_total_eur": "50",
+      "max_data_age_seconds": "30",
+      "max_open_orders": "2"
+    }
   }
 }

@@ -127,3 +127,19 @@ Read-only: it holds no key and can't place anything. Set `DEBTLAB_XRPL_DB` once 
 The dashboard's *RLUSD/XRP* section shows the same figures, refreshed every 10 s. Start the app with the same `DEBTLAB_XRPL_DB` as the monitor (or neither, for the default `data/xrpl.sqlite3`); the app only reads that file.
 
 For the step 4 checkpoint, run it for at least 2 days, then send Claude the output of `status`.
+
+## RLUSD/XRP paper bot (M7, PAPER; run only after Ethan's go)
+
+```bash
+python scripts/xrpl_paper.py status                          # any time
+python scripts/xrpl_paper.py resume --reason "start paper run"   # it starts paused
+python scripts/xrpl_paper.py run                             # until Ctrl+C; the monitor must be running
+python scripts/xrpl_paper.py pause  --reason WHY             # cancels every paper order
+python scripts/xrpl_paper.py kill   --reason WHY             # same, and stays on across restarts
+python scripts/xrpl_paper.py reset  --reason WHY             # kill switch off; leaves it paused
+python scripts/xrpl_paper.py limit max_order_eur 8 --reason WHY
+```
+
+PAPER: no key, no wallet, nothing reaches a ledger. It reads the monitor's database (`DEBTLAB_XRPL_DB`, or `--monitor-db`) and writes its own (`DEBTLAB_XRPL_PAPER_DB`, default `data/xrpl_paper.sqlite3`); keep both outside OneDrive, e.g. `C:\debtlab-data\`. Start the monitor first and leave it running: the paper bot never restarts or disturbs it. If the monitor stops or the data is older than 30 s, the paper bot cancels everything and waits. If the paper bot stops, start it again: it cancels whatever the last run left open, never uses trades from while it was down, and records the gap. `status` shows both fill rules side by side; the truth is between them.
+
+Before step 7: agree the strategy's starting values (`config/xrpl.json` `paper.strategy`, see ASSUMPTIONS) in the light of the checkpoint data.

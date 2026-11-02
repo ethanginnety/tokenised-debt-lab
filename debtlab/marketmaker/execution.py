@@ -23,24 +23,15 @@ from decimal import Decimal
 from debtlab import ledger
 from debtlab.audit.db import atomic, record_event
 from debtlab.marketmaker import controls, daily
-from debtlab.marketmaker.interfaces import RiskCheck, active_venue
+from debtlab.marketmaker.interfaces import Order, RiskCheck, active_venue  # noqa: F401  (Order lives there now)
 from debtlab.money import HUNDRED, ZERO, money, plain
 
 SIDES = ("buy", "sell")
 
 
 @dataclass(frozen=True)
-class Order:
-    id: str  # deterministic: placing the same order again does nothing
-    instrument_id: str
-    side: str  # buy | sell
-    price: Decimal  # clean, per 100 face
-    size: Decimal  # face
-
-
-@dataclass(frozen=True)
 class Mark:
-    """What the check needs to know about one instrument now."""
+    """What the bond check needs to know about one instrument now (an `interfaces.Mark`)."""
     currency: str
     dirty: Decimal  # fair value per 100, for market-value exposure
     accrued: Decimal  # per 100, as the ledger will charge it (zero when the bond trades flat)

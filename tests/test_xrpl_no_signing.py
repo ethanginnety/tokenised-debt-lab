@@ -26,7 +26,8 @@ FORBIDDEN = {
 
 def test_the_scan_sees_the_xrpl_code():
     names = {p.name for p in SOURCES}
-    assert {"readonly.py", "verify.py", "xrpl_probe.py", "wsclient.py", "monitor.py", "xrpl_monitor.py"} <= names
+    assert {"readonly.py", "verify.py", "xrpl_probe.py", "wsclient.py", "monitor.py", "xrpl_monitor.py",
+            "bot.py", "venue.py", "risk.py", "strategy.py", "xrpl_paper.py"} <= names
 
 
 @pytest.mark.parametrize("path", SOURCES, ids=lambda p: str(p.relative_to(ROOT)))
