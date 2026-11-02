@@ -6,3 +6,4 @@ data/
 .env
 test-results.xml
 snapshot.html
+*.key

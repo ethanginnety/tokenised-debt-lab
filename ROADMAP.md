@@ -167,7 +167,7 @@ M8 comes straight after M7. Its step-by-step plan will be proposed for approval 
 The testnet stage only: test funds with no value, never mainnet. This stage contains no way to sign for mainnet; that needs a separate plan and Ethan's approval, after the M7 paper run. It runs while the monitor collects data and doesn't touch the running monitor, the checkpoint or the paper run. The M8 requirements above apply.
 
 1. **Verify testnet.** Endpoint, RLUSD issuer, `xrpl-py` signing behaviour and close-time timing, in [XRPL_VERIFICATION.md](XRPL_VERIFICATION.md). (Done 2 Nov: **GO**, with the open items listed there.)
-2. **Safety tests first.** Mainnet block, key handling and the transaction-type limit, written before any signing code and failing without the guards.
+2. **Safety tests first.** Mainnet block, key handling and the transaction-type limit, written before any signing code and failing without the guards. (Done 2 Nov: `live/guards.py` and `tests/test_xrpl_testnet_safety.py`; the signer's tests are strict expected failures until step 3 builds it. No-signing scan: one file may sign, and transaction models are now forbidden elsewhere.)
 3. **Signer.** One module, `live/signer.py`, signs only `OfferCreate` and `OfferCancel`. The no-signing scan is relaxed for that file only (approved with this plan). `.env.example`'s `XRPL_SIGNING_KEY` line goes.
 4. **Testnet market data.** A separate monitor instance with its own config and database.
 5. **Venue and reconciliation.** The ledger is the source of truth; pending, unknown-outcome and rejected transactions are tracked; any unknown offer or balance mismatch cancels everything and pauses.
