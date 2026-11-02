@@ -47,6 +47,24 @@ def parse(s: str) -> datetime:
     return datetime.fromisoformat(s)
 
 
+def network(conn: sqlite3.Connection) -> str | None:
+    """Which network this database records. One with data but no label predates testnet (M8): mainnet."""
+    row = conn.execute("SELECT value FROM xrpl_meta WHERE key = 'network'").fetchone()
+    if row:
+        return row["value"]
+    return "mainnet" if conn.execute("SELECT 1 FROM xrpl_snapshots LIMIT 1").fetchone() else None
+
+
+def claim_network(conn: sqlite3.Connection, name: str) -> None:
+    """Label a database with its network, or refuse if it already records another one, so
+    testnet data can never land in the mainnet evidence, or the other way round."""
+    have = network(conn)
+    if have is not None and have != name:
+        raise WrongDatabase(f"this database records {have}, not {name}; use a separate database for each network")
+    conn.execute("INSERT OR IGNORE INTO xrpl_meta(key, value) VALUES ('network', ?)", (name,))
+    conn.commit()
+
+
 def open_db(path: Path | str) -> sqlite3.Connection:
     """Open (and create or migrate) the monitor's database. Refuses a bond database."""
     conn = connect(path)
