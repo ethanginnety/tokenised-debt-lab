@@ -211,6 +211,7 @@ def test_the_m7_paper_command_refuses_a_testnet_paper_database(tmp_path, capsys)
 def cli(tmp_path, monkeypatch):
     w = World(tmp_path)
     monkeypatch.setattr(xrpl_testnet, "parts", lambda key, cfg: (w.signer, w.sub, w.ledger, w.venue))
+    monkeypatch.setattr(xrpl_testnet, "cancel_parts", lambda key, cfg: (w.signer, w.sub, w.ledger, w.venue))
     monkeypatch.setattr(xrpl_testnet, "load_testnet_config", lambda: CFG)
     monkeypatch.setattr(xrpl_testnet.time, "sleep", lambda _: w.advance())
 

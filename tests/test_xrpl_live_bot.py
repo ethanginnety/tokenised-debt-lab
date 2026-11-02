@@ -544,12 +544,178 @@ def test_a_missing_monitor_is_a_clear_error(tmp_path):
         LiveBot(w.conn, tmp_path / "none.sqlite3", CFG, w.ledger, w.venue, w.sub, lambda m, n: {})
 
 
-def test_an_account_over_the_limit_pauses_with_the_reason(tmp_path):
-    w = World(tmp_path, xrp="1000", rlusd="0")
+def test_an_account_with_no_trust_line_pauses_with_the_reason(tmp_path):
+    w = World(tmp_path)
+    w.net.has_line = False
     w.bot.start(w.t)
     controls.resume(w.conn, "Ethan", "test", w.t)
     w.step()
-    assert w.state() == "paused" and "over the total limit" in ldb.state(w.conn)["reason"] and w.net.blobs() == []
+    assert w.state() == "paused" and "no RLUSD trust line" in ldb.state(w.conn)["reason"] and w.net.blobs() == []
+
+
+# --- the EUR 50 budget -----------------------------------------------------------------------
+
+def big_account(tmp_path, limit=None):
+    w = World(tmp_path, xrp="1000", rlusd="100")
+    if limit:
+        ldb.seed_limits(w.conn, CFG, w.t)
+        ldb.set_limit(w.conn, "max_total_eur", D(limit), "Ethan", "test", w.t)
+    return w.running()
+
+
+def test_a_big_account_isnt_refused_and_quotes_within_the_budget(tmp_path):
+    w = big_account(tmp_path)
+    assert w.state() == "running" and len(w.net.offers) == 2 and any("set aside" in x for x in w.lines)
+    assert not w.events("order_refused")
+
+
+def test_sizes_are_cut_to_the_budget_not_the_ledger(tmp_path):
+    w = big_account(tmp_path, limit="5")          # EUR 5 of EUR 160.71: about 31 XRP and 3.1 RLUSD
+    budget_x, budget_r = book.balances(w.conn)
+    assert budget_x < 32 and budget_r < D("3.2")
+    sizes = {o["side"]: D(o["size"]) for o in w.orders("open")}
+    assert sizes["sell"] < budget_x and sizes["buy"] * BID <= budget_r
+
+
+def test_pnl_and_the_daily_loss_ignore_what_is_set_aside(tmp_path):
+    w = big_account(tmp_path)
+    assert book.set_aside(w.conn)[0] > 600
+    w.step(1, bid="0.0775", ask="0.0785", amm_price="0.078")      # 2.5% on 1000 XRP would be EUR 1.79
+    p = book.pnl(w.conn, D("0.078"))
+    xrp = book.balances(w.conn)[0]
+    assert abs(p.inventory) < xrp * D("0.002") + D("0.01") and abs(p.inventory) < D(1000) * D("0.002") * D("0.5")
+
+
+def test_the_books_keep_matching_a_big_account_through_fills(tmp_path):
+    w = big_account(tmp_path)
+    w.net.hit(w.orders("open")[0]["sequence"], "2")
+    w.step(4)
+    assert w.state() == "running" and "disagree" not in ldb.state(w.conn)["reason"]
+    assert w.conn.execute("SELECT COUNT(*) FROM live_fills").fetchone()[0] == 1
+
+
+# --- a crash ----------------------------------------------------------------------------------
+
+def crash_after(w, ticks, error):
+    calls, real = [], w.bot.tick
+
+    def tick(now):
+        calls.append(1)
+        if len(calls) > ticks:
+            raise error
+        return real(now)
+    w.bot.tick = tick
+
+    def sleep(_):
+        if len(calls) == 1:
+            controls.resume(w.conn, "Ethan", "test", w.t)
+        w.advance()
+    return sleep
+
+
+def test_a_crash_pauses_cancels_everything_and_still_shows_the_error(w):
+    sleep = crash_after(w, 7, KeyError("unexpected field"))
+    with pytest.raises(KeyError, match="unexpected field"):
+        w.bot.run(clock=lambda: w.t, sleep=sleep)
+    assert w.net.blobs() and w.net.offers == {} and w.state() == "paused"
+    assert "crashed: KeyError" in ldb.state(w.conn)["reason"] and w.events("run_crashed")
+    assert w.conn.execute("SELECT stop_reason FROM live_runs ORDER BY id DESC").fetchone()[0].startswith("crashed")
+
+
+def test_a_crash_that_cant_cancel_still_pauses_and_shows_the_first_error(w):
+    sleep = crash_after(w, 7, KeyError("first"))
+    real = controls.cancel_until_zero
+
+    def broken(*a, **k):
+        raise ValueError("second")
+    controls.cancel_until_zero = broken
+    try:
+        with pytest.raises(KeyError, match="first"):
+            w.bot.run(clock=lambda: w.t, sleep=sleep)
+    finally:
+        controls.cancel_until_zero = real
+    assert w.state() == "paused" and any("couldn't finish cancelling" in x for x in w.lines)
+
+
+def test_a_crash_before_it_started_is_reported(w):
+    w.bot.start = lambda now: (_ for _ in ()).throw(RuntimeError("no start"))
+    with pytest.raises(RuntimeError, match="no start"):
+        w.bot.run(clock=lambda: w.t, sleep=lambda _: None)
+    assert any("crashed: RuntimeError" in x for x in w.lines)
+
+
+def test_another_network_seen_while_stopping_turns_the_kill_switch_on(w):
+    w.running()
+    w.bot.tick = lambda now: (_ for _ in ()).throw(KeyboardInterrupt())
+    w.net.network_id = 0
+    w.bot.start = lambda now: None
+    with pytest.raises(MainnetBlocked):
+        w.bot.run(clock=lambda: w.t, sleep=lambda _: w.advance())
+    assert w.state() == "killed"
+
+
+# --- kill alongside a running bot ----------------------------------------------------------------
+
+def second_process(w):
+    """What `kill` from another window has: its own database connection and connection to the server."""
+    conn = ldb.open_db(w.tmp / "live.sqlite3")
+    return conn, LiveVenue(w.signer, Submitter(CFG["endpoints"]["websocket"][0], connect=w.net), CFG)
+
+
+def test_kill_alongside_a_running_bot_reaches_zero_and_the_bot_places_nothing_more(w):
+    w.running()
+    conn, venue = second_process(w)
+    before = len(w.net.blobs())
+
+    def sleep(_):
+        w.advance()
+        w.bot.tick(w.t + timedelta(seconds=0.5))        # the bot carries on between kill's rounds
+    r = controls.kill(conn, w.ledger, venue, CFG, "Ethan", "test", 10, clock=w.clock, sleep=sleep)
+    assert r.zero and w.net.offers == {} and w.state() == "killed"
+    assert {t["TransactionType"] for t in w.net.blobs()[before:]} == {"OfferCancel"}
+    w.step(4)
+    assert w.net.offers == {} and {t["TransactionType"] for t in w.net.blobs()[before:]} == {"OfferCancel"}
+
+
+def test_kill_sharing_the_bots_ledger_doesnt_cancel_the_same_offer_twice(w):
+    w.running()
+    conn, venue = second_process(w)
+    before = len(w.net.blobs())
+    w.advance()
+    w.bot.tick(w.t)
+    controls.set_killed(conn, "Ethan", "test", w.t)
+    w.bot.tick(w.t + timedelta(seconds=0.5))                # the bot sees it first and sends the cancels
+    sent = [t for t in w.net.blobs()[before:] if t["TransactionType"] == "OfferCancel"]
+    assert sent
+    r = controls.kill(conn, w.ledger, venue, CFG, "Ethan", "test", 10, clock=w.clock, sleep=w.sleep)
+    assert r.zero
+    cancels = [t["OfferSequence"] for t in w.net.blobs()[before:] if t["TransactionType"] == "OfferCancel"]
+    assert len(cancels) == len(set(cancels))
+
+
+def test_kill_recovers_when_the_bot_takes_its_sequence_at_the_same_moment(w, monkeypatch):
+    w.running()
+    conn, venue = second_process(w)
+    real, done = controls.cancel_offers, []
+
+    def collide(c, v, read, reason, now, include_expired=False):
+        if not done and v is venue:
+            done.append(1)
+            controls.read_ledger(w.conn, w.ledger, w.venue, CFG, None, 10, now)    # the bot read the same Sequence
+            w.venue.cancel_offer(w.conn, read.account.offers[0].sequence, "the bot's own", now)
+        return real(c, v, read, reason, now, include_expired)
+    monkeypatch.setattr(controls, "cancel_offers", collide)
+    r = controls.kill(conn, w.ledger, venue, CFG, "Ethan", "test", 10, clock=w.clock, sleep=w.sleep)
+    assert done and r.zero and w.net.offers == {}
+    assert conn.execute("SELECT COUNT(*) FROM live_txs WHERE preliminary = 'tefPAST_SEQ'").fetchone()[0] >= 1
+
+
+def test_the_bot_carries_on_booking_after_a_kill_from_elsewhere(w):
+    w.running()
+    conn, venue = second_process(w)
+    controls.kill(conn, w.ledger, venue, CFG, "Ethan", "test", 10, clock=w.clock, sleep=w.sleep)
+    w.step(2)
+    assert w.bot.last_read.problems == ()
 
 
 def test_the_seed_goes_nowhere_across_a_full_scenario(w, capsys):

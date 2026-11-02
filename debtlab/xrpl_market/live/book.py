@@ -7,6 +7,12 @@
     marks orders expired once their Expiration has reached the latest close time
     returns every way the ledger disagrees with the books
 
+The bot works with a budget, not the whole account. An account worth more than the total
+limit when opened isn't refused: the bot takes the limit's worth, in the account's own mix of
+XRP and RLUSD, and sets the rest aside. The journal holds the budget only, so P&L and the
+daily loss cover what the bot uses, and the ledger is compared with the budget plus what's
+set aside. Raising the limit later doesn't release what's set aside.
+
 P&L walks the journal as the paper account does, so the parts add up exactly:
 spread + fees + inventory = total, with external moves taken out of the total: a faucet
 top-up isn't profit. A fill that took liquidity counts in spread like any other fill, at the
@@ -17,14 +23,18 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from dataclasses import replace
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_FLOOR, Decimal
 
 from debtlab.money import D, ZERO, plain
 from debtlab.xrpl_market.live import LABEL, reconcile
 from debtlab.xrpl_market.live.db import ControlError, event, iso, limits
 from debtlab.xrpl_market.live.ledger import AccountState, Header
 from debtlab.xrpl_market.live.reconcile import Effect
+
+DROP = Decimal("0.000001")
+IOU_STEP = Decimal("1E-10")
 
 
 def journal(conn: sqlite3.Connection, at: datetime, ledger: int, kind: str, xrp: Decimal, rlusd: Decimal, mid: Decimal,
@@ -81,22 +91,41 @@ def open_orders(conn: sqlite3.Connection, side: str | None = None) -> list[dict]
 
 
 def open_account(conn: sqlite3.Connection, st: AccountState, mid: Decimal, usd_per_eur: Decimal, now: datetime) -> None:
-    """Start the books from the account's first validated read. Refused if it's over the total limit."""
+    """Start the books from the account's first validated read, with at most the total limit's worth in the budget."""
     if account(conn):
         return
     cap = limits(conn).get("max_total_eur")
-    eur = (st.xrp * mid + st.rlusd) / usd_per_eur
-    if cap is None or eur > cap:
-        raise ControlError(f"the account is worth EUR {eur:.2f} at the testnet mid, over the total limit EUR {cap}: "
-                           "reduce it, or change the limit yourself, with a reason")
+    if cap is None:
+        raise ControlError("the limit max_total_eur is not set")
     if not st.has_trust_line:
         raise ControlError(f"account {st.address} has no RLUSD trust line to the verified issuer")
-    conn.execute("INSERT INTO live_account(id, address, opened_at, ledger_index, mid, usd_per_eur) VALUES (1,?,?,?,?,?)",
-                 (st.address, iso(now), st.ledger_index, plain(mid), plain(usd_per_eur)))
-    journal(conn, now, st.ledger_index, "open", st.xrp, st.rlusd, mid, "open", f"first read, ledger {st.ledger_index}")
+    eur = (st.xrp * mid + st.rlusd) / usd_per_eur
+    use_x, use_r = st.xrp, st.rlusd
+    if eur > cap:
+        scale = cap / eur
+        use_x = (st.xrp * scale).quantize(DROP, rounding=ROUND_FLOOR)
+        use_r = (st.rlusd * scale).quantize(IOU_STEP, rounding=ROUND_FLOOR)
+    aside_x, aside_r = st.xrp - use_x, st.rlusd - use_r
+    conn.execute("INSERT INTO live_account(id, address, opened_at, ledger_index, mid, usd_per_eur, aside_xrp, aside_rlusd)"
+                 " VALUES (1,?,?,?,?,?,?,?)", (st.address, iso(now), st.ledger_index, plain(mid), plain(usd_per_eur),
+                                               plain(aside_x), plain(aside_r)))
+    journal(conn, now, st.ledger_index, "open", use_x, use_r, mid, "open", f"first read, ledger {st.ledger_index}")
     set_cursor(conn, st.ledger_index)
-    event(conn, now, "account_opened", {"address": st.address, "xrp": plain(st.xrp), "rlusd": plain(st.rlusd),
+    event(conn, now, "account_opened", {"address": st.address, "ledger_xrp": plain(st.xrp), "ledger_rlusd": plain(st.rlusd),
+                                        "budget_xrp": plain(use_x), "budget_rlusd": plain(use_r), "worth_eur": plain(eur),
                                         "mid": plain(mid), "label": LABEL})
+
+
+def set_aside(conn: sqlite3.Connection) -> tuple[Decimal, Decimal]:
+    """XRP and RLUSD on the ledger that the bot doesn't use."""
+    a = account(conn)
+    return (D(a["aside_xrp"]), D(a["aside_rlusd"])) if a else (ZERO, ZERO)
+
+
+def within_budget(conn: sqlite3.Connection, st: AccountState) -> AccountState:
+    """The ledger's balances without what's set aside: all the risk check and sizing ever see."""
+    x, r = set_aside(conn)
+    return replace(st, xrp=st.xrp - x, rlusd=st.rlusd - r)
 
 
 def order_by_sequence(conn: sqlite3.Connection, seq: int) -> sqlite3.Row | None:
@@ -141,11 +170,10 @@ def apply(conn: sqlite3.Connection, e: Effect, mid: Decimal, now: datetime) -> N
     if e.took:
         side = "buy" if e.taker_xrp > 0 else "sell"
         _fill(conn, e, mine, "taker", side, abs(e.taker_xrp), abs(e.taker_rlusd), mid, now)
+    if e.rounding_rlusd:
+        journal(conn, now, e.ledger_index, "rounding", ZERO, e.rounding_rlusd, mid, e.hash, "the ledger's 16-digit rounding")
     if e.external:
-        journal(conn, now, e.ledger_index, "external", e.external_xrp, e.external_rlusd, mid, e.hash,
-                f"{e.tx_type} from outside the bot")
-        event(conn, now, "external_change", {"tx": e.hash, "type": e.tx_type, "xrp": plain(e.external_xrp),
-                                             "rlusd": plain(e.external_rlusd), "ledger": e.ledger_index})
+        _external(conn, e, mid, now)
 
     if mine is not None:
         if e.result != "tesSUCCESS":
@@ -172,6 +200,36 @@ def apply(conn: sqlite3.Connection, e: Effect, mid: Decimal, now: datetime) -> N
                 _close(conn, o["id"], "filled", "fully filled", e.ledger_index, now)
 
 
+def _external(conn: sqlite3.Connection, e: Effect, mid: Decimal, now: datetime) -> None:
+    """Outside money. Money out comes from what's set aside first. Money in counts towards the
+    budget only up to the limit; the rest is set aside, so the bot never uses it."""
+    if conn.execute("SELECT 1 FROM live_journal WHERE kind = 'external' AND ref = ?", (e.hash,)).fetchone():
+        return
+    aside_x, aside_r = set_aside(conn)
+    dx, dr = e.external_xrp, e.external_rlusd
+    if dx < 0:
+        take = min(aside_x, -dx)
+        aside_x, dx = aside_x - take, dx + take
+    if dr < 0:
+        take = min(aside_r, -dr)
+        aside_r, dr = aside_r - take, dr + take
+    a = account(conn)
+    cap = limits(conn).get("max_total_eur")
+    inflow = max(dx, ZERO) * mid + max(dr, ZERO)
+    room = ZERO if cap is None else max(cap - capital_eur(conn), ZERO) * D(a["usd_per_eur"])
+    if inflow > room:
+        scale = room / inflow
+        keep_x = (dx * scale).quantize(DROP, rounding=ROUND_FLOOR) if dx > 0 else dx
+        keep_r = (dr * scale).quantize(IOU_STEP, rounding=ROUND_FLOOR) if dr > 0 else dr
+        aside_x, aside_r, dx, dr = aside_x + dx - keep_x, aside_r + dr - keep_r, keep_x, keep_r
+    journal(conn, now, e.ledger_index, "external", dx, dr, mid, e.hash, f"{e.tx_type} from outside the bot")
+    conn.execute("UPDATE live_account SET aside_xrp = ?, aside_rlusd = ? WHERE id = 1", (plain(aside_x), plain(aside_r)))
+    event(conn, now, "external_change", {"tx": e.hash, "type": e.tx_type, "xrp": plain(e.external_xrp),
+                                         "rlusd": plain(e.external_rlusd), "ledger": e.ledger_index,
+                                         "in_budget_xrp": plain(dx), "in_budget_rlusd": plain(dr),
+                                         "set_aside_xrp": plain(aside_x), "set_aside_rlusd": plain(aside_r)})
+
+
 def settle_lapsed(conn: sqlite3.Connection, header: Header, now: datetime) -> list[str]:
     """Pending transactions whose last ledger has passed and that no validated ledger shows: they can never apply."""
     lapsed = []
@@ -183,6 +241,17 @@ def settle_lapsed(conn: sqlite3.Connection, header: Header, now: datetime) -> li
                                             "last_ledger": t["last_ledger"]})
         lapsed.append(t["hash"])
     return lapsed
+
+
+def settle_unopened(conn: sqlite3.Connection, txs: list[dict], address: str, header: Header, rlusd_hex: str, issuer: str,
+                    now: datetime) -> None:
+    """Cancels sent before the books opened (a kill on a fresh database): only their outcome matters.
+    Their fees are in the opening balance, read from the ledger later."""
+    for t in txs:
+        e = reconcile.effect(t, address, rlusd_hex, issuer)
+        conn.execute("UPDATE live_txs SET status = ?, result = ?, ledger_index = ?, resolved_at = ? WHERE hash = ? AND status = 'pending'",
+                     ("applied" if e.result == "tesSUCCESS" else "failed", e.result, e.ledger_index, iso(now), e.hash))
+    settle_lapsed(conn, header, now)
 
 
 def expire(conn: sqlite3.Connection, header: Header, now: datetime) -> int:
@@ -204,6 +273,8 @@ def sync(conn: sqlite3.Connection, txs: list[dict], st: AccountState, header: He
     expire(conn, header, now)
     set_cursor(conn, header.index)
     xrp, rlusd = balances(conn)
+    aside_x, aside_r = set_aside(conn)
+    xrp, rlusd = xrp + aside_x, rlusd + aside_r
     alive = {o["sequence"] for o in open_orders(conn)}
     # The bot is the only signer: an offer whose order just lapsed in the books but which the
     # ledger still holds would show here as unknown, which is what should happen.
@@ -245,7 +316,7 @@ def pnl(conn: sqlite3.Connection, mid_now: Decimal) -> LivePnl:
     for r in rows[1:]:
         mid, dx, dr = D(r["mid"]), D(r["xrp"]), D(r["rlusd"])
         inventory += xrp * (mid - prev)
-        if r["kind"] in ("maker_fill", "taker_fill"):
+        if r["kind"] in ("maker_fill", "taker_fill", "rounding"):
             spread += dx * mid + dr
             maker += r["kind"] == "maker_fill"
             taker += r["kind"] == "taker_fill"

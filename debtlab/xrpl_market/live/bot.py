@@ -127,9 +127,10 @@ class LiveBot:
         with ldb.tx(self.conn):
             ldb.event(self.conn, clock(), "run_stopped", {"run": self.run_id, "reason": reason, "zero_offers": cleared.zero,
                                                           "remaining": cleared.remaining})
-        ldb.stop_run(self.conn, self.run_id, clock(), reason)
-        if self.alongside:
-            self.alongside.stop(clock(), reason)
+        if self.run_id is not None:
+            ldb.stop_run(self.conn, self.run_id, clock(), reason)
+            if self.alongside:
+                self.alongside.stop(clock(), reason)
         return cleared
 
     # --- the stops -----------------------------------------------------------------------
@@ -226,6 +227,9 @@ class LiveBot:
             with ldb.tx(self.conn):
                 book.open_account(self.conn, read.account, m.mid, m.fx.usd_per_eur, now)
                 book.record_day_open(self.conn, m.mid, now)
+            x, r = book.set_aside(self.conn)
+            if x or r:
+                self.out(f"{LABEL}: the account holds more than the budget; {x} XRP and {r} RLUSD set aside, not used")
             return True
         except ldb.ControlError as e:
             self._pause(f"account not opened: {e}", now)
@@ -250,7 +254,8 @@ class LiveBot:
                     and expiry <= current["expiration"]:
                 continue
             replacing = frozenset(o["id"] for o in cur)
-            room = affordable(side, want.price, read.account, m, self.cfg, others_for(self.conn, "", replacing))
+            room = affordable(side, want.price, book.within_budget(self.conn, read.account), m, self.cfg,
+                              others_for(self.conn, "", replacing))
             size = min(want.size, room)
             if size < minimum:
                 size = want.size      # let the risk check say why
@@ -294,6 +299,26 @@ class LiveBot:
 
     # --- running -------------------------------------------------------------------------
 
+    def _refuse(self, e: MainnetBlocked, clock: Callable[[], datetime]) -> None:
+        controls.set_killed(self.conn, "bot", f"refused: {e}", clock())
+        if self.run_id is not None:
+            ldb.stop_run(self.conn, self.run_id, clock(), f"refused: {e}")
+        self.out(f"{LABEL}: REFUSED: {e}. Kill switch on; nothing more is sent.")
+
+    def _crashed(self, e: Exception, clock: Callable[[], datetime], sleep: Callable[[float], None]) -> None:
+        """Anything unexpected: pause, say so, and cancel as far as possible, then let the error show."""
+        why = f"crashed: {type(e).__name__}: {e}"
+        self.out(f"{LABEL}: {why}. Cancelling everything.")
+        try:
+            controls.pause(self.conn, "bot", why, clock())
+            with ldb.tx(self.conn):
+                ldb.event(self.conn, clock(), "run_crashed", {"run": self.run_id, "why": why})
+            cleared = self.stop(clock, why, sleep)
+            self.out(f"{LABEL}: " + ("no offers on the ledger." if cleared.zero else
+                     f"{cleared.remaining} offer(s) still listed; each expires by itself."))
+        except Exception as e2:
+            self.out(f"{LABEL}: couldn't finish cancelling ({type(e2).__name__}); each offer expires by itself within 30 s.")
+
     def run(self, until: datetime | None = None, clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
             sleep: Callable[[float], None] = time.sleep) -> str:
         reason = "finished (--for)"
@@ -308,12 +333,16 @@ class LiveBot:
         except KeyboardInterrupt:
             reason = "stopped by user"
         except MainnetBlocked as e:
-            controls.set_killed(self.conn, "bot", f"refused: {e}", clock())
-            if self.run_id is not None:
-                ldb.stop_run(self.conn, self.run_id, clock(), f"refused: {e}")
-            self.out(f"{LABEL}: REFUSED: {e}. Kill switch on; nothing more is sent.")
+            self._refuse(e, clock)
             raise
-        cleared = self.stop(clock, reason, sleep)
+        except Exception as e:
+            self._crashed(e, clock, sleep)
+            raise
+        try:
+            cleared = self.stop(clock, reason, sleep)
+        except MainnetBlocked as e:
+            self._refuse(e, clock)
+            raise
         self.out(f"{LABEL}: stopped ({reason}); " + ("no offers on the ledger." if cleared.zero else
                  f"{cleared.remaining} offer(s) still listed ({cleared.last_error}); each expires by itself."))
         return reason

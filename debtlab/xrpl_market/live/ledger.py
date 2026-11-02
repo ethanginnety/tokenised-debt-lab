@@ -125,12 +125,12 @@ class TestnetLedger:
         raise XrplReadError("account_tx: too many pages")
 
 
-def exists_on_mainnet(address: str, urls: Iterable[str], client: Callable[[str], ReadOnlyClient] = ReadOnlyClient) -> bool:
+def exists_on_mainnet(address: str, urls: Iterable[str], client: Callable[[str], ReadOnlyClient] | None = None) -> bool:
     """A READ of mainnet: does this account exist there? If no endpoint answers, this raises,
     and the signer doesn't open: not knowing is a refusal."""
     last = None
     for url in urls:
-        with client(url) as c:
+        with (client or ReadOnlyClient)(url) as c:
             try:
                 c.at("account_info", {"account": address}, c.validated_index())
                 return True

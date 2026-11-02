@@ -16,6 +16,7 @@ from types import SimpleNamespace
 
 from datetime import date, datetime, timedelta, timezone
 
+import httpx
 from xrpl.core import keypairs
 from xrpl.core.binarycodec import decode
 from xrpl.wallet import Wallet
@@ -73,6 +74,7 @@ class FakeNet:
         self.ntx = 0
         self._out: list[str] = []
         self.has_line = True
+        self.fill_rounding = D(0)     # RLUSD: a balance moving by a hair more than the offer did
 
     # --- the signer's connection ---------------------------------------------------------
 
@@ -246,6 +248,7 @@ class FakeNet:
             self.xrp -= int(q * DROPS)
             self.rlusd += r
             after = {"gets": str(int((total_x - q) * DROPS)), "pays": rl(total_r - r)}
+        self.rlusd += self.fill_rounding
         done = q >= total_x
         if done:
             before = self.offers.pop(seq)
@@ -300,13 +303,13 @@ T0 = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
 class Monitor:
     """A real testnet monitor database, written through `store`, for the bot to read."""
 
-    def __init__(self, tmp_path, network="testnet"):
+    def __init__(self, tmp_path, network="testnet", t0=T0, fx_date=date(2026, 10, 30)):
         self.path = tmp_path / "mon.sqlite3"
         self.conn = store.open_db(self.path)
         store.claim_network(self.conn, network)
-        store.record_fx(self.conn, FxRate(date(2026, 10, 30), D("1.12"), "ECB"), T0)
-        self.run = store.start_run(self.conn, T0)
-        store.record_network(self.conn, NetworkCosts(1000, D(1), D("0.2"), D(10), D(10)), T0)
+        store.record_fx(self.conn, FxRate(fx_date, D("1.12"), "ECB"), t0)
+        self.run = store.start_run(self.conn, t0)
+        store.record_network(self.conn, NetworkCosts(1000, D(1), D("0.2"), D(10), D(10)), t0)
 
     def snapshot(self, ledger, t, bid="0.0795", ask="0.0805", amm_price="0.08"):
         bid, ask, size = D(bid), D(ask), 100
@@ -315,3 +318,38 @@ class Monitor:
         pool = None if amm_price is None else Amm(ledger, "rAmm", D(1000), D(1000) * D(amm_price), D(amm_price), D("0.5"))
         store.record_snapshot(self.conn, self.run, "wss://testnet.xrpl-labs.com/", ledger, t - timedelta(seconds=1), t, "top",
                               xbook.parse_book([bids], [asks], RLUSD), pool)
+
+
+TESTNET_HOST = "testnet.xrpl-labs.com"
+
+
+def rpc_transport(net: FakeNet, *, mainnet="absent", on_read=None):
+    """The real read client over fake HTTP: the fake testnet answers in rippled's JSON-RPC layout.
+    Every other host counts as mainnet: `absent` says the account isn't there, `down` doesn't answer."""
+    net.mainnet_reads = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        method, params = body["method"], body["params"][0]
+        if request.url.host != TESTNET_HOST:
+            net.mainnet_reads.append(request.url.host)
+            if mainnet == "down":
+                raise httpx.ConnectError("unreachable")
+            if method == "server_state":
+                return httpx.Response(200, json={"result": {"status": "success", "state": {"validated_ledger": {"seq": 108000000}}}})
+            return httpx.Response(200, json={"result": {"status": "error", "error": "actNotFound"}})
+        if method == "server_state":
+            if on_read:
+                on_read()
+            result = {"state": {"validated_ledger": {"seq": net.index}}}
+        elif method == "server_info":
+            result = {"info": {"network_id": net.network_id}}
+        elif method == "account_tx":      # API v1's layout: hash and ledger inside `tx`
+            result = {"transactions": [{"meta": t["meta"], "validated": True,
+                                        "tx": {**t["tx"], "hash": t["hash"], "ledger_index": t["ledger_index"]}}
+                                       for t in net.history_read(params)]}
+        else:
+            result = {**net.at(method, params, params["ledger_index"]).result, "validated": True,
+                      "ledger_index": params["ledger_index"]}
+        return httpx.Response(200, json={"result": {"status": "success", **result}})
+    return httpx.MockTransport(handler)

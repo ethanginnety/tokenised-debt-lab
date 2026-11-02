@@ -12,7 +12,7 @@ state come from the live database each time. It assumes the worst: every open or
     whole drops; the RLUSD amount within 15 significant digits
     at most EUR 10 an order, at most 2 open orders, and capital in plus open orders within EUR 50
     the loss today under EUR 5
-    funds on the ledger after every open order fills, keeping the reserve and fees
+    funds on the ledger, within the budget, after every open order fills, keeping the reserve and fees
 """
 
 from __future__ import annotations
@@ -140,7 +140,7 @@ class LiveRiskCheck:
         day = book.daily_pnl_rlusd(conn, m.mid, now)
         if (cap := lim.get("max_daily_loss_eur")) is not None and day is not None and m.to_eur(day) <= -cap:
             reasons.append(f"daily loss EUR {-m.to_eur(day):.4f} has reached the maximum {cap}")
-        can = affordable(order.side, order.price, mark.account, m, self.cfg, others)
+        can = affordable(order.side, order.price, book.within_budget(conn, mark.account), m, self.cfg, others)
         if order.size > can:
             what = "RLUSD" if order.side == "buy" else "XRP"
             reasons.append(f"not enough {what} on the ledger: room for {can} XRP after open orders, the reserve and fees")

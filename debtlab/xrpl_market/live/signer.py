@@ -1,7 +1,9 @@
 """The only file that signs or submits (M8). TESTNET ONLY. It can only place and cancel offers.
 
 `open_signer` checks the config, then the key file's location and who can read it, reads
-the seed once, and refuses a key whose account exists on mainnet. The wallet then lives
+the seed once, and refuses a key whose account exists on mainnet. `open_cancel_signer` does
+the same but for the mainnet check, and can sign `OfferCancel` and nothing else: cancelling
+can only reduce risk, so the kill switch never depends on reaching mainnet. The wallet then lives
 only inside a closure: a `Signer` has no attribute holding it, won't pickle or copy, and
 this file has no print, logging or environment access (tested).
 
@@ -60,9 +62,11 @@ def _only_offers(tx) -> None:
         raise TypeError(f"only OfferCreate and OfferCancel can be signed, not {type(tx).__name__}")
 
 
-def _signing_function(wallet: Wallet) -> Callable:
+def _signing_function(wallet: Wallet, only: tuple[type, ...] = (OfferCreate, OfferCancel)) -> Callable:
     def signing(tx):
         _only_offers(tx)
+        if not isinstance(tx, only):
+            raise TypeError(f"this signer can only cancel, not sign a {type(tx).__name__}")
         return sign(tx, wallet)
     return signing
 
@@ -132,6 +136,22 @@ def open_signer(key_file: Path | str, cfg: dict, *, on_mainnet: Callable[[str], 
     """Config first, then the file's location, then the seed. `on_mainnet` is required: there is no way to skip it.
 
     `account`: the account a regular key signs for; without it, the seed's own account."""
+    wallet, own = _load(key_file, cfg, account, acl, me, repo_root)
+    for address in {wallet.address, own}:
+        guards.check_not_on_mainnet(address, on_mainnet)
+    return Signer(wallet.address, cfg["rlusd"]["issuer"], cfg["rlusd"]["currency_hex"], _signing_function(wallet))
+
+
+def open_cancel_signer(key_file: Path | str, cfg: dict, *, account: str | None = None, acl: Callable = guards.read_acl,
+                       me: Callable[[], str] = guards.current_user, repo_root: Path = ROOT) -> Signer:
+    """For the kill switch: every check but the mainnet one, and it can sign only `OfferCancel`."""
+    wallet, _ = _load(key_file, cfg, account, acl, me, repo_root)
+    return Signer(wallet.address, cfg["rlusd"]["issuer"], cfg["rlusd"]["currency_hex"],
+                  _signing_function(wallet, (OfferCancel,)))
+
+
+def _load(key_file: Path | str, cfg: dict, account: str | None, acl: Callable, me: Callable[[], str],
+          repo_root: Path) -> tuple[Wallet, str]:
     guards.check_config(cfg)
     path = guards.check_key_path(key_file, repo_root, acl=acl, me=me)
     try:
@@ -139,9 +159,7 @@ def open_signer(key_file: Path | str, cfg: dict, *, on_mainnet: Callable[[str], 
         own = Wallet.from_seed(path.read_text(encoding="utf-8").strip()).address
     except Exception:
         raise KeyFileRefused(f"{path} doesn't hold a valid seed") from None
-    for address in {wallet.address, own}:
-        guards.check_not_on_mainnet(address, on_mainnet)
-    return Signer(wallet.address, cfg["rlusd"]["issuer"], cfg["rlusd"]["currency_hex"], _signing_function(wallet))
+    return wallet, own
 
 
 class Submitter:

@@ -90,9 +90,50 @@ def test_the_books_open_from_the_ledger(r):
     assert book.balances(r.conn) == (D(300), D(20)) and book.cursor(r.conn) == 1000
 
 
-def test_an_account_over_the_total_limit_is_refused(tmp_path):
-    with pytest.raises(ldb.ControlError, match="over the total limit"):
-        Rig(tmp_path, xrp="1000", rlusd="0")
+def test_an_account_over_the_total_limit_opens_with_only_the_budget(tmp_path):
+    r = Rig(tmp_path, xrp="1000", rlusd="100")
+    xrp, rlusd = book.balances(r.conn)
+    assert abs((xrp * MID + rlusd) / D("1.12") - 50) < D("0.00001") and xrp / rlusd == pytest.approx(10, abs=1e-6)
+    assert book.set_aside(r.conn) == (D(1000) - xrp, D(100) - rlusd)
+    r.step()
+    assert r.problems == []
+
+
+def test_money_in_beyond_the_budget_is_set_aside(tmp_path):
+    r = Rig(tmp_path, xrp="1000", rlusd="100")
+    budget, aside = book.balances(r.conn), book.set_aside(r.conn)
+    r.net.payment(xrp="50")
+    r.step()
+    assert book.balances(r.conn) == budget and book.set_aside(r.conn) == (aside[0] + 50, aside[1]) and r.problems == []
+    assert book.capital_eur(r.conn) <= 50
+
+
+def test_money_in_fills_the_budget_and_only_then_is_set_aside(tmp_path):
+    r = Rig(tmp_path)                       # EUR 39.29 in; EUR 10.71 of room is 12 RLUSD
+    r.net.payment(rlusd="20")
+    r.step()
+    assert book.balances(r.conn)[1] == D(32) and book.set_aside(r.conn) == (0, D(8)) and r.problems == []
+
+
+def test_money_out_comes_from_what_is_set_aside_first(tmp_path):
+    r = Rig(tmp_path, xrp="1000", rlusd="100")
+    budget, aside = book.balances(r.conn), book.set_aside(r.conn)
+    r.net.payment(xrp="-10")
+    r.step()
+    assert book.balances(r.conn) == budget and book.set_aside(r.conn)[0] == aside[0] - 10 and r.problems == []
+
+
+def test_outside_money_is_only_booked_once_even_if_read_twice(tmp_path):
+    r = Rig(tmp_path, xrp="1000", rlusd="100")
+    r.net.payment(xrp="50")
+    r.net.close_ledger()
+    h = r.ledger.latest()
+    st = r.ledger.account(ADDRESS, h.index)
+    txs = r.ledger.transactions(ADDRESS, 1000, h.index)
+    with ldb.tx(r.conn):
+        book.sync(r.conn, txs, st, h, MID, RLUSD, ISSUER, r.t)
+        _, problems = book.sync(r.conn, txs, st, h, MID, RLUSD, ISSUER, r.t)
+    assert problems == []
 
 
 def test_an_account_with_no_trust_line_is_refused(tmp_path):
@@ -360,7 +401,7 @@ def test_the_parser_adds_up_on_every_saved_real_transaction():
             filled_x = sum((f.xrp if f.side == "buy" else -f.xrp for f in e.maker_fills), D(0))
             filled_r = sum((-f.rlusd if f.side == "buy" else f.rlusd for f in e.maker_fills), D(0))
             assert filled_x + e.taker_xrp + e.external_xrp - e.fee_xrp == e.xrp
-            assert filled_r + e.taker_rlusd + e.external_rlusd == e.rlusd
+            assert filled_r + e.taker_rlusd + e.external_rlusd + e.rounding_rlusd == e.rlusd
             checked += 1
     assert checked > 5
 
@@ -375,8 +416,39 @@ def test_a_real_makers_fill_matches_their_balance_change_when_nothing_else_moved
             found += 1
             assert not e.took
             exact += not e.external
-    print(f"{found} real maker fills, {exact} explained exactly by the offer change")
-    assert exact > 0
+    assert (found, exact) == (12, 12)
+
+
+def test_the_two_real_fills_that_differ_are_rounding_not_fees():
+    """Neither maker sent the transaction, so no fee is theirs; XRP is exact; only the 16th digit of RLUSD differs."""
+    seen = {}
+    for msg in real_txs():
+        for acct in makers(msg):
+            e = reconcile.effect(msg, acct, MAIN_RLUSD, MAIN_ISSUER)
+            if e.rounding_rlusd:
+                seen[acct] = (e.rounding_rlusd, e.ours, e.fee_xrp, e.external_xrp)
+    assert seen == {"r3nvf3hBcb54sGDLfX3aMWBWjq3XEwadqo": (D("-1E-13"), False, 0, 0),
+                    "rU8QEjAbNbXDnBR7kx9TLPXsAEng3axsz4": (D("5E-15"), False, 0, 0)}
+
+
+def test_rounding_on_a_fill_keeps_the_books_exact_and_doesnt_stop_the_bot(r):
+    a = r.place(price="0.0799", size="10")
+    r.step()
+    r.net.fill_rounding = D("-1E-13")
+    r.net.hit(r.order(a)["sequence"], "4")
+    (e,) = r.step()
+    assert e.rounding_rlusd == D("-1E-13") and not e.external and r.problems == []
+    p = book.pnl(r.conn, MID)
+    assert p.spread + p.fees + p.inventory == p.total and p.external == 0
+
+
+def test_a_difference_above_rounding_is_still_outside_money(r):
+    a = r.place(price="0.0799", size="10")
+    r.step()
+    r.net.fill_rounding = D("1E-8")
+    r.net.hit(r.order(a)["sequence"], "4")
+    (e,) = r.step()
+    assert e.external and e.external_rlusd == D("1E-8") and e.rounding_rlusd == 0 and r.problems == []
 
 
 @pytest.mark.parametrize("low_is_us,balance,expected", [(True, "5", D(5)), (False, "-5", D(5))])

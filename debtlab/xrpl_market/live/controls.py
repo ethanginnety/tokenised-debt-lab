@@ -21,7 +21,7 @@ from debtlab.xrpl_market.live.db import ControlError, event, set_state, state, t
 from debtlab.xrpl_market.live.ledger import AccountState, Header, TestnetLedger
 from debtlab.xrpl_market.live.reconcile import Effect
 from debtlab.xrpl_market.live.signer import MAX_FEE_DROPS
-from debtlab.xrpl_market.live.venue import Context, LiveVenue, next_sequence, unresolved
+from debtlab.xrpl_market.live.venue import LAST_LEDGER_AHEAD, Context, LiveVenue, next_sequence, unresolved
 from debtlab.xrpl_market.readonly import XrplReadError
 
 ROUND_PAUSE_SECONDS = 2.0
@@ -78,6 +78,12 @@ def read_ledger(conn: sqlite3.Connection, ledger: TestnetLedger, venue: LiveVenu
         txs = ledger.transactions(address, book.cursor(conn), h.index)
         with tx(conn):
             effects, problems = book.sync(conn, txs, st, h, use_mid, cfg["rlusd"]["currency_hex"], cfg["rlusd"]["issuer"], now)
+    else:
+        low = conn.execute("SELECT MIN(last_ledger) AS low FROM live_txs WHERE status = 'pending'").fetchone()["low"]
+        if low is not None:
+            txs = ledger.transactions(address, low - LAST_LEDGER_AHEAD - 1, h.index)
+            with tx(conn):
+                book.settle_unopened(conn, txs, address, h, cfg["rlusd"]["currency_hex"], cfg["rlusd"]["issuer"], now)
     venue.context = Context(h, next_sequence(conn, st.sequence), fee_drops, mid if mid is not None else Decimal(0))
     return Read(h, st, tuple(effects), tuple(problems))
 

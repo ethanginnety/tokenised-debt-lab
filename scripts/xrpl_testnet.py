@@ -35,7 +35,7 @@ from debtlab.xrpl_market.live.alongside import Alongside, open_testnet_paper  # 
 from debtlab.xrpl_market.live.bot import LiveBot  # noqa: E402
 from debtlab.xrpl_market.live.guards import KeyFileRefused, MainnetBlocked  # noqa: E402
 from debtlab.xrpl_market.live.ledger import TestnetLedger, exists_on_mainnet  # noqa: E402
-from debtlab.xrpl_market.live.signer import Submitter, open_signer  # noqa: E402
+from debtlab.xrpl_market.live.signer import Submitter, open_cancel_signer, open_signer  # noqa: E402
 from debtlab.xrpl_market.live.venue import LiveVenue  # noqa: E402
 from debtlab.xrpl_market.monitor import KeepAwake  # noqa: E402
 from debtlab.xrpl_market.paper import controls as pcontrols  # noqa: E402
@@ -61,6 +61,13 @@ def parts(key_file: Path, cfg: dict):
     return signer, submitter, TestnetLedger(cfg), LiveVenue(signer, submitter, cfg)
 
 
+def cancel_parts(key_file: Path, cfg: dict):
+    """For the kill switch: a signer that can only cancel, opened without reaching mainnet."""
+    signer = open_cancel_signer(key_file, cfg)
+    submitter = Submitter(cfg["endpoints"]["websocket"][0])
+    return signer, submitter, TestnetLedger(cfg), LiveVenue(signer, submitter, cfg)
+
+
 def fee_drops(monitor_db: Path, cfg: dict) -> int:
     fallback = int(cfg["paper"]["network_fallback"]["fee_drops"])
     if not monitor_db.exists():
@@ -78,7 +85,10 @@ def status(conn, monitor_db: Path, cfg: dict) -> str:
     if not a:
         return "\n".join(lines + ["account: not opened yet"])
     xrp, rlusd = book.balances(conn)
-    lines.append(f"account: {a['address']}  {xrp} XRP, {rlusd} RLUSD in the books")
+    lines.append(f"account: {a['address']}  budget {xrp} XRP, {rlusd} RLUSD")
+    aside_x, aside_r = book.set_aside(conn)
+    if aside_x or aside_r:
+        lines.append(f"set aside, over the budget and not used: {aside_x} XRP, {aside_r} RLUSD")
     hb = conn.execute("SELECT at FROM live_heartbeat WHERE id = 1").fetchone()
     lines.append(f"last alive: {hb['at'] if hb else 'never'}")
     mid = None
@@ -182,7 +192,7 @@ def _kill(args, cfg: dict, conn, paper) -> int:
     pcontrols.kill(paper, args.by, args.reason, now(), _market_or_none(args.monitor_db, cfg))
     print(f"{LABEL}: kill switch ON. Offers can't be replaced, and each expires by itself within 30 s.")
     try:
-        _, submitter, ledger, venue = parts(args.key_file, cfg)
+        _, submitter, ledger, venue = cancel_parts(args.key_file, cfg)
         r = controls.kill(conn, ledger, venue, cfg, args.by, args.reason, fee_drops(args.monitor_db, cfg), clock=now, sleep=time.sleep)
     except (KeyFileRefused, MainnetBlocked, XrplReadError) as e:
         print(f"{LABEL}: couldn't cancel: {e}")

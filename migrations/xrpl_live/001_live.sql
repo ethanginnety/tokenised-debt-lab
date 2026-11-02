@@ -44,16 +44,18 @@ CREATE TABLE live_account (
     opened_at TEXT NOT NULL,
     ledger_index INTEGER NOT NULL,
     mid TEXT NOT NULL,
-    usd_per_eur TEXT NOT NULL
+    usd_per_eur TEXT NOT NULL,
+    aside_xrp TEXT NOT NULL DEFAULT '0',     -- on the ledger, over the budget: the bot doesn't use it
+    aside_rlusd TEXT NOT NULL DEFAULT '0'
 );
 
--- Every change to the account's balances, from validated ledgers, append-only.
+-- Every change to the budget's balances, from validated ledgers, append-only.
 -- external: moved by something other than the bot's own trading (a faucet, a wallet payment).
 CREATE TABLE live_journal (
     id INTEGER PRIMARY KEY,
     at TEXT NOT NULL,
     ledger_index INTEGER NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('open', 'maker_fill', 'taker_fill', 'fee', 'external')),
+    kind TEXT NOT NULL CHECK (kind IN ('open', 'maker_fill', 'taker_fill', 'fee', 'external', 'rounding')),
     xrp TEXT NOT NULL,
     rlusd TEXT NOT NULL,
     mid TEXT NOT NULL,

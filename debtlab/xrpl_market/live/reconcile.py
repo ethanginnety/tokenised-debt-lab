@@ -10,7 +10,10 @@ fields before and after. From those:
     which of our offers it created or removed
 
 Everything left after the fills and the fee counts as external, so the parts always add up
-to the balance change, and an unexplained change can't hide.
+to the balance change, and an unexplained change can't hide. The one exception is rounding.
+RLUSD amounts hold 16 significant digits, so a balance can move by a hair more or less than
+the offer did: 1E-13 and 5E-15 RLUSD on the saved real fills, with XRP exact. On a fill, a
+difference up to `ROUNDING_RLUSD` is booked as rounding. Anything larger is still external.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from debtlab.xrpl_market.live.ledger import AccountState
 from debtlab.xrpl_market.trades import _tx_parts, _xrp_or_token
 
 DROPS = Decimal(1_000_000)
+ROUNDING_RLUSD = Decimal("1E-9")
 
 
 @dataclass(frozen=True)
@@ -49,6 +53,7 @@ class Effect:
     taker_rlusd: Decimal = ZERO
     external_xrp: Decimal = ZERO
     external_rlusd: Decimal = ZERO
+    rounding_rlusd: Decimal = ZERO
     created: int | None = None              # our offer left resting by this transaction
     removed: tuple[int, ...] = field(default=())   # our offers it removed, whatever the reason
 
@@ -122,10 +127,13 @@ def effect(msg: dict, account: str, rlusd_hex: str, issuer: str) -> Effect:
     filled_r = sum((-f.rlusd if f.side == "buy" else f.rlusd for f in fills), ZERO)
     rest_x, rest_r = dx + fee - filled_x, dr - filled_r
     trading = ours and tx.get("TransactionType") == "OfferCreate" and result == "tesSUCCESS"
+    rounding = ZERO
+    if (fills or trading) and rest_x == 0 and rest_r != 0 and abs(rest_r) <= ROUNDING_RLUSD:
+        rounding, rest_r = rest_r, ZERO
     return Effect(h, li, tx.get("TransactionType", ""), result, ours, int(tx["Sequence"]) if ours and "Sequence" in tx else None,
                   fee, dx, dr, tuple(fills),
                   rest_x if trading else ZERO, rest_r if trading else ZERO,
-                  ZERO if trading else rest_x, ZERO if trading else rest_r,
+                  ZERO if trading else rest_x, ZERO if trading else rest_r, rounding,
                   created, tuple(removed))
 
 
