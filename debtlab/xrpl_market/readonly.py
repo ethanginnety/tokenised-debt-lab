@@ -16,13 +16,15 @@ import httpx
 
 # Methods that read ledger state at a ledger index.
 LEDGER_METHODS = frozenset({
-    "ledger", "book_offers", "amm_info", "account_info", "account_lines", "gateway_balances",
+    "ledger", "book_offers", "amm_info", "account_info", "account_lines", "account_offers", "gateway_balances",
 })
+# Methods reading an account's validated history (M8); each entry says whether it's validated.
+HISTORY_METHODS = frozenset({"account_tx", "tx"})
 # Methods about the server, not a ledger.
 SERVER_METHODS = frozenset({"server_state", "server_info"})
 # Websocket only (M7 step 3); refused over JSON-RPC.
 STREAM_METHODS = frozenset({"subscribe", "unsubscribe"})
-ALLOWED = LEDGER_METHODS | SERVER_METHODS | STREAM_METHODS
+ALLOWED = LEDGER_METHODS | HISTORY_METHODS | SERVER_METHODS | STREAM_METHODS
 
 
 class XrplReadError(Exception):
@@ -77,6 +79,11 @@ class ReadOnlyClient:
         if method not in SERVER_METHODS:
             raise NotReadOnly(f"{method!r} is not a server method")
         return self._post(method, {})
+
+    def history(self, method: str, params: dict) -> Response:
+        if method not in HISTORY_METHODS:
+            raise NotReadOnly(f"{method!r} is not a history method")
+        return self._post(method, params)
 
     def validated_index(self) -> int:
         """The latest validated ledger this server has."""

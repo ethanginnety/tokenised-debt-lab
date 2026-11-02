@@ -1,0 +1,141 @@
+"""What the validated testnet ledger says about the account. READ-ONLY: public reads only.
+
+The ledger is the source of truth (M8): the bot's own records are checked against this on
+every ledger. Every read names a validated ledger number, through `readonly.ReadOnlyClient`,
+which can't send anything but a public read.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from decimal import Decimal
+
+from debtlab.money import D, ZERO
+from debtlab.xrpl_market.live import guards
+from debtlab.xrpl_market.readonly import ReadOnlyClient, XrplReadError
+
+DROPS = Decimal(1_000_000)
+PAGE = 200
+MAX_PAGES = 50
+
+
+@dataclass(frozen=True)
+class Header:
+    index: int
+    close_time: int          # Ripple-epoch seconds, rounded by the network
+    resolution: int
+    close_flags: int
+
+
+@dataclass(frozen=True)
+class LedgerOffer:
+    sequence: int
+    side: str                # ours: buy (we give RLUSD for XRP) or sell
+    xrp: Decimal
+    rlusd: Decimal
+    expiration: int | None
+
+
+@dataclass(frozen=True)
+class AccountState:
+    address: str
+    ledger_index: int
+    xrp: Decimal
+    rlusd: Decimal
+    sequence: int
+    owner_count: int
+    has_trust_line: bool
+    offers: tuple[LedgerOffer, ...]
+
+
+def parse_offer(o: dict, rlusd_hex: str, issuer: str) -> LedgerOffer | None:
+    """An `account_offers` entry as one of ours. None if it isn't on the verified pair."""
+    gets, pays = o.get("taker_gets"), o.get("taker_pays")
+
+    def token(a) -> Decimal | None:
+        if isinstance(a, dict) and a.get("currency") == rlusd_hex and a.get("issuer") == issuer:
+            return D(a["value"])
+        return None
+    if isinstance(gets, str) and token(pays) is not None:
+        side, xrp, rlusd = "sell", D(gets) / DROPS, token(pays)
+    elif isinstance(pays, str) and token(gets) is not None:
+        side, xrp, rlusd = "buy", D(pays) / DROPS, token(gets)
+    else:
+        return None
+    exp = o.get("expiration")
+    return LedgerOffer(int(o["seq"]), side, xrp, rlusd, None if exp is None else int(exp))
+
+
+class TestnetLedger:
+    __test__ = False       # not a pytest class
+
+    def __init__(self, cfg: dict, client: ReadOnlyClient | None = None):
+        guards.check_config(cfg)
+        self.rlusd_hex, self.issuer = cfg["rlusd"]["currency_hex"], cfg["rlusd"]["issuer"]
+        self.client = client or ReadOnlyClient(cfg["endpoints"]["json_rpc"][0])
+
+    def check_network(self) -> None:
+        guards.check_network(self.client.server("server_info").result)
+
+    def latest(self) -> Header:
+        i = self.client.validated_index()
+        led = self.client.at("ledger", {}, i).result["ledger"]
+        return Header(i, int(led["close_time"]), int(led["close_time_resolution"]), int(led.get("close_flags", 0)))
+
+    def account(self, address: str, ledger_index: int) -> AccountState:
+        data = self.client.at("account_info", {"account": address}, ledger_index).result["account_data"]
+        lines = self.client.at("account_lines", {"account": address, "peer": self.issuer}, ledger_index).result.get("lines", [])
+        line = next((ln for ln in lines if ln.get("currency") == self.rlusd_hex), None)
+        offers = []
+        marker = None
+        for _ in range(MAX_PAGES):
+            params = {"account": address, "limit": PAGE, **({"marker": marker} if marker else {})}
+            r = self.client.at("account_offers", params, ledger_index).result
+            offers += r.get("offers", [])
+            marker = r.get("marker")
+            if not marker:
+                break
+        else:
+            raise XrplReadError("account_offers: too many pages")
+        parsed = []
+        for o in offers:
+            p = parse_offer(o, self.rlusd_hex, self.issuer)
+            # An offer on anything else stays visible as an unknown one, so the bot stops.
+            parsed.append(p or LedgerOffer(int(o["seq"]), "other", ZERO, ZERO, o.get("expiration")))
+        return AccountState(address, ledger_index, D(data["Balance"]) / DROPS, D(line["balance"]) if line else ZERO,
+                            int(data["Sequence"]), int(data.get("OwnerCount", 0)), line is not None, tuple(parsed))
+
+    def transactions(self, address: str, after_ledger: int, upto_ledger: int) -> list[dict]:
+        """Every validated transaction touching the account in (after, upto], oldest first."""
+        if upto_ledger <= after_ledger:
+            return []
+        out, marker = [], None
+        for _ in range(MAX_PAGES):
+            params = {"account": address, "ledger_index_min": after_ledger + 1, "ledger_index_max": upto_ledger,
+                      "forward": True, "limit": PAGE, **({"marker": marker} if marker else {})}
+            r = self.client.history("account_tx", params).result
+            for t in r.get("transactions", []):
+                if t.get("validated") is not True:
+                    raise XrplReadError("account_tx returned an unvalidated transaction")
+                out.append(t)
+            marker = r.get("marker")
+            if not marker:
+                return out
+        raise XrplReadError("account_tx: too many pages")
+
+
+def exists_on_mainnet(address: str, urls: Iterable[str], client: Callable[[str], ReadOnlyClient] = ReadOnlyClient) -> bool:
+    """A READ of mainnet: does this account exist there? If no endpoint answers, this raises,
+    and the signer doesn't open: not knowing is a refusal."""
+    last = None
+    for url in urls:
+        with client(url) as c:
+            try:
+                c.at("account_info", {"account": address}, c.validated_index())
+                return True
+            except XrplReadError as e:
+                if "actNotFound" in str(e):
+                    return False
+                last = e
+    raise XrplReadError(f"couldn't check mainnet for {address}: {last}")
