@@ -1,0 +1,362 @@
+[
+ {
+  "ledger_index": "22015119",
+  "close_time": 846949341,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015118",
+  "close_time": 846949340,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015117",
+  "close_time": 846949332,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015116",
+  "close_time": 846949331,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015115",
+  "close_time": 846949330,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015114",
+  "close_time": 846949322,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015113",
+  "close_time": 846949321,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015112",
+  "close_time": 846949320,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015111",
+  "close_time": 846949311,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015110",
+  "close_time": 846949310,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015109",
+  "close_time": 846949302,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015108",
+  "close_time": 846949301,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015107",
+  "close_time": 846949300,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015106",
+  "close_time": 846949292,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015105",
+  "close_time": 846949291,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015104",
+  "close_time": 846949290,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015103",
+  "close_time": 846949282,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015102",
+  "close_time": 846949281,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015101",
+  "close_time": 846949280,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015100",
+  "close_time": 846949272,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015099",
+  "close_time": 846949271,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015098",
+  "close_time": 846949270,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015097",
+  "close_time": 846949262,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015096",
+  "close_time": 846949261,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015095",
+  "close_time": 846949260,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015094",
+  "close_time": 846949252,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015093",
+  "close_time": 846949251,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015092",
+  "close_time": 846949250,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015091",
+  "close_time": 846949242,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015090",
+  "close_time": 846949241,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015089",
+  "close_time": 846949240,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015088",
+  "close_time": 846949231,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015087",
+  "close_time": 846949230,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015086",
+  "close_time": 846949223,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015085",
+  "close_time": 846949222,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015084",
+  "close_time": 846949221,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015083",
+  "close_time": 846949220,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015082",
+  "close_time": 846949212,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015081",
+  "close_time": 846949211,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015080",
+  "close_time": 846949210,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015079",
+  "close_time": 846949202,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015078",
+  "close_time": 846949201,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015077",
+  "close_time": 846949200,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015076",
+  "close_time": 846949191,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015075",
+  "close_time": 846949190,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015074",
+  "close_time": 846949182,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015073",
+  "close_time": 846949181,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015072",
+  "close_time": 846949180,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015071",
+  "close_time": 846949172,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015070",
+  "close_time": 846949171,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015069",
+  "close_time": 846949170,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015068",
+  "close_time": 846949162,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015067",
+  "close_time": 846949161,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015066",
+  "close_time": 846949160,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015065",
+  "close_time": 846949152,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015064",
+  "close_time": 846949151,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015063",
+  "close_time": 846949150,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015062",
+  "close_time": 846949141,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015061",
+  "close_time": 846949140,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ },
+ {
+  "ledger_index": "22015060",
+  "close_time": 846949132,
+  "close_time_resolution": 10,
+  "close_flags": 0
+ }
+]

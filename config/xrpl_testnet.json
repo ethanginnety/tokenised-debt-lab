@@ -1,0 +1,26 @@
+{
+  "_note": "M8 TESTNET ONLY: test funds with no value, never mainnet. Verified 2 Nov 2026 (XRPL_VERIFICATION.md). Nothing here is a key.",
+  "network": "testnet",
+  "network_id": 1,
+  "rlusd": {
+    "currency": "RLUSD",
+    "currency_hex": "524C555344000000000000000000000000000000",
+    "issuer": "rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV"
+  },
+  "refused_issuers": {
+    "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De": "Mainnet RLUSD issuer. Never on testnet.",
+    "rLUSDtykL2NVz3HJe1Jqoc7dsxWFVcsmuK": "Mainnet look-alike. Never use."
+  },
+  "endpoints": {
+    "json_rpc": ["https://testnet.xrpl-labs.com/"],
+    "websocket": ["wss://testnet.xrpl-labs.com/"]
+  },
+  "offer_expiry": {
+    "_note": "Expiration rule (closetimes.py). Measured on 4,596 mainnet boundaries, 1-2 Nov 2026; re-measure before any mainnet plan.",
+    "close_time_resolution_seconds": 10,
+    "expiry_ahead_seconds": 15,
+    "last_execution_after_expiry_seconds": "9.39",
+    "close_time_ahead_of_receipt_seconds": "2.54",
+    "max_live_seconds": 30
+  }
+}

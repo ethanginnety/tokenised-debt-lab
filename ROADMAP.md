@@ -9,7 +9,7 @@ A milestone is done only when its tests pass and its behaviour has been demonstr
 | M3 | Instruments and ledger | **Done** (30 Oct 2026) | Three instruments; simulated holder ledger; coupons, maturity and default with idempotent payments. |
 | M4 | Market maker (simulation) | **Done** (1 Nov 2026) | Quotes with full records; limits, pause and kill switch; simulated fills with adverse selection; P&L split. |
 | M7 | RLUSD/XRP read-only and paper | **In progress** (plan approved 1 Nov 2026) | Verified identifiers and depth; live book monitor; several days of paper results. |
-| M8 | €50 live | Gated (next after M7) | Only after Ethan's explicit approval and all safety tests passing; paper runs alongside on the same quotes and the report explains every difference. |
+| M8 | €50 live | Testnet stage in progress (plan approved 2 Nov 2026); mainnet gated | Mainnet only after Ethan's explicit approval and all safety tests passing; paper runs alongside on the same quotes and the report explains every difference. |
 | M5 | Private credit depth | Planned | Withdrawal windows, caps, queue and gates; NAV vs secondary price; discount tests. |
 | M6 | XRPL testnet | Planned | Bonds as labelled testnet tokens; coupon transfers on testnet; reconciliation. |
 | M9 | Persistent deployment | Planned | Docker Compose, PostgreSQL, worker, scheduler, heartbeats, alerts, tested restart recovery. |
@@ -157,14 +157,47 @@ M8 comes straight after M7. Its step-by-step plan will be proposed for approval 
 - **Keys.** Never in chat, code, logs or git, ever; never printed. The signing key is read from a local file that is git-ignored **and outside both the repository and OneDrive** (the repository sits in a OneDrive folder, so a git-ignored file there would still be uploaded to the cloud): for example `C:\debtlab-secrets\`, readable only by Ethan's Windows account. The code gets the file's path, never the key, and never logs either the key or its contents. This replaces the brief's "environment or a secure signer" (Ethan, 1 Nov 2026); `.env.example`'s `XRPL_SIGNING_KEY` line goes when M8 is built. Recommended in the RUNBOOK checklist: a regular key for the bot, so the master key stays offline and the bot's key can be revoked.
 - **Funding is Ethan's alone.** Ethan does all funding and wallet setup himself (RUNBOOK: *M8 preparation*). Claude never initiates a transfer, withdrawal or funding; the bot's code can only place and cancel offers, and a test enforces that no other transaction type can be built.
 - **Limits (defaults until Ethan changes them):** €10 maximum order, €5 maximum daily loss, €50 total, cancel everything if data is older than 30 s or the connection drops, kill switch; all in the execution layer and persisted, as in M4.
-- **Passive only:** every offer carries `tfPassive`, and the risk check refuses any offer priced at or through the opposite best price, so the bot never takes liquidity.
+- **Passive only, never intends to take, and stops if it does** (reworded by Ethan, 2 Nov 2026; XRPL has no post-only flag, and `tfPassive` only skips offers at exactly the same price). Every offer carries `tfPassive` and the risk check refuses any offer within a price margin of the opposite best price or the AMM's price. The book can still move before an offer lands, so the bot records any fill that takes liquidity and pauses on the first one.
 - **Verified RLUSD issuer only:** `rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De`; any other issuer, including the look-alike, is refused.
 - **Approvals:** Ethan's explicit approval before the first live order and before any increase in risk (capital, limits, sizes).
 - **The M7 no-signing test** is relaxed for M8 only with Ethan's approval of the M8 plan, and only for the one module that signs.
 
+## M8 testnet plan (approved by Ethan, 2 Nov 2026)
+
+The testnet stage only: test funds with no value, never mainnet. This stage contains no way to sign for mainnet; that needs a separate plan and Ethan's approval, after the M7 paper run. It runs while the monitor collects data and doesn't touch the running monitor, the checkpoint or the paper run. The M8 requirements above apply.
+
+1. **Verify testnet.** Endpoint, RLUSD issuer, `xrpl-py` signing behaviour and close-time timing, in [XRPL_VERIFICATION.md](XRPL_VERIFICATION.md). (Done 2 Nov: **GO**, with the open items listed there.)
+2. **Safety tests first.** Mainnet block, key handling and the transaction-type limit, written before any signing code and failing without the guards.
+3. **Signer.** One module, `live/signer.py`, signs only `OfferCreate` and `OfferCancel`. The no-signing scan is relaxed for that file only (approved with this plan). `.env.example`'s `XRPL_SIGNING_KEY` line goes.
+4. **Testnet market data.** A separate monitor instance with its own config and database.
+5. **Venue and reconciliation.** The ledger is the source of truth; pending, unknown-outcome and rejected transactions are tracked; any unknown offer or balance mismatch cancels everything and pauses.
+6. **Limits and controls.** The paper risk check reused, limits persisted; `kill` cancels from the ledger's offer list, works with the bot down, and retries until zero offers remain.
+7. **Paper alongside.** Both fill rules on exactly the same quotes, compared fill by fill.
+8. **Testnet run (gated).** A few hours. **Ethan's explicit go before the first testnet order, and Ethan starts it himself.**
+
+Steps 1-7 use no real key and send nothing signed to any network.
+
+**Acceptance for step 8:** offers placed, replaced and cancelled, matching the ledger throughout; at least one real fill booked correctly and compared with paper; the kill switch leaves zero offers on the ledger; a breach of each limit, stale data and a forced disconnect behave as specified; a restart cleans up leftover offers; no key in any log or database.
+
+**Mainnet block:** a test fails if a signed submit reaches anything but the testnet allowlist (a spy on the network layer across a full bot scenario). Every mainnet endpoint is refused before the key file is opened; an allowed hostname reporting another network is refused before each submit; the bot refuses to start if the testnet account also exists on mainnet, because a signed transaction names no network and could replay; the mainnet issuer and the look-alike are refused; control tests remove each guard and confirm the tests catch it. Every transaction carries `LastLedgerSequence`.
+
+**Keys:** `C:\debtlab-secrets\xrpl-testnet.key`, separate from any mainnet key, its path given on the command line. The bot refuses a file inside the repository or OneDrive, or readable by other accounts. A test runs a fake key through the whole flow and checks it never reaches a log, the database, output or an error message. Claude never opens the file.
+
+**Ethan's decisions:**
+
+- **A. Wallet setup is Ethan's alone:** faucet, trust line, test RLUSD and putting the testnet secret in the key file. No setup code. Plain steps go in the RUNBOOK when it's time.
+- **B. Self-expiring offers, worst-case live time within 30 s,** allowing for close-time resolution. Replacement uses `OfferCreate`'s `OfferSequence`, cancel and replace in one transaction. The rule, from the measurements in XRPL_VERIFICATION.md: Expiration is the latest 10 s boundary at most 15 s after the latest validated close time. Worst case 26.93 s from the data it was priced from. Quoting stops if a ledger's close-time resolution isn't 10 s or it closed without consensus on its time.
+- **C. Pause on the first fill that takes liquidity,** keep a price margin, and the rule reads "never intends to take, and stops if it does".
+- **D. A test-only crossing helper** in `tests/`, locked to testnet, with a second testnet key, which Ethan runs. Deliberately not passive; the bot can't import it.
+- **E. Ethan's go before the first testnet order;** he starts it himself.
+
+**Testnet results prove the plumbing only.** Testnet prices aren't real (about 0.08 RLUSD per XRP, against about 1.25 on mainnet), so they say nothing about profit and never feed into strategy values.
+
 ## Where we are (resume point, 1 Nov 2026)
 
 Written so a fresh session (after `/clear`) can pick up exactly here. Read PROMPT.md, this file, ASSUMPTIONS.md and CHANGELOG.md first.
+
+**M8's testnet stage started on 2 Nov (plan above); step 1 done.** **The checkpoint counts 48 hours of actual monitor uptime** (Ethan, 2 Nov), not 48 hours on the clock.
 
 **M1, M2, M3 and M4 are done.** 271 tests pass (151 at the end of M3). Next: **M7, RLUSD/XRP read-only and paper** (order changed by Ethan on 1 Nov 2026; plan above, approved 1 Nov), steps 1 (verification, GO), 2 (book adapter) and 3 (live monitor) done on 1 Nov; step 4 (read-only API and dashboard section) built on 1 Nov, waiting for Ethan's browser check; steps 5 and 6 (paper strategy, venue, fill rules, accounts, risk check) built on 2 Nov but not run; next the checkpoint, moved by Ethan to the evening of Wed 4 Nov (the laptop lost power while in standby on 2 Nov: lid closed 13:01:30, unclean reboot 13:42, monitor back 14:08:16 UTC, a gap of 66 min recorded as `not_running`; nine shorter standby gaps on 1-2 Nov are recorded too, and uptime stood at 74% when this was written) (Ethan runs the monitor for at least 2 days and sends `status`; Claude reports against decision C; Ethan decides), then agreeing the paper parameters and step 7, the paper run (`scripts/xrpl_paper.py run`, only after Ethan's go); then M8 (gated; requirements above), then M5. The M4 ideas above are still to weigh.
 

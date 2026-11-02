@@ -138,7 +138,7 @@ Then open http://127.0.0.1:8001. The `$env:` values last only for that window, s
 
 *Couldn't load the RLUSD/XRP monitor: Failed to fetch* means **the app** has stopped, not the monitor: a page left open keeps asking every 10 s and gets no answer. Start the app again and the section recovers by itself within 10 s. A fault in `/api/xrpl` itself would show `HTTP 500` instead.
 
-For the step 4 checkpoint, run it for at least 2 days, then send Claude the output of `status`. Checkpoint moved by Ethan to the evening of Wednesday 4 Nov 2026 (it was due after 22:50 on 3 Nov) because of the gaps listed in ROADMAP.
+For the step 4 checkpoint, run it until `status` shows at least **48 hours of actual uptime** (Ethan, 2 Nov 2026: hours up, not hours on the clock), then send Claude the output of `status`. Checkpoint moved by Ethan to the evening of Wednesday 4 Nov 2026 (it was due after 22:50 on 3 Nov) because of the gaps listed in ROADMAP.
 
 ## RLUSD/XRP paper bot (M7, PAPER; run only after Ethan's go)
 

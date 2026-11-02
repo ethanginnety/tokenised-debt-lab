@@ -16,7 +16,7 @@ Two independent confirmations: Ripple's or the XRP Ledger's own published source
 |---|---|---|---|
 | Issuer (mainnet) | `rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De` | Ripple docs, [RLUSD on the XRP Ledger](https://docs.ripple.com/products/stablecoin/developer-resources/rlusd-on-the-xrpl) ("Issuer account address") and [Token addresses](https://docs.ripple.com/products/stablecoin/overview/token-addresses) ("For XRPL: Issuer address"). Both agree. | Account exists; `Domain` = `https://ripple.com/`; **and** `https://ripple.com/.well-known/xrp-ledger.toml` lists it under `[[ISSUERS]]` (name "RLUSD") and `[[TOKENS]]` (currency "RLUSD", name "Ripple USD"). Two-way confirmed. |
 | Currency code | `524C555344000000000000000000000000000000` (hex of "RLUSD", padded to 40 hex characters: codes longer than 3 characters must be hex) | Ripple docs, same page. | The issuer's only obligation in that code: 711,828,559.43 RLUSD outstanding at ledger 108053087 (`gateway_balances`). |
-| Testnet issuer (not used in M7) | `rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV` | Ripple docs, same page. | Not checked (mainnet read-only only). |
+| Testnet issuer (not used in M7) | `rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV` | Ripple docs, same page. | Checked for M8 on 2 Nov: see *M8: testnet* below. |
 
 ### A look-alike issuer: do not use
 
@@ -94,6 +94,60 @@ One snapshot, for the go/no-go only. Depth is judged over days at the checkpoint
 - Spread **13.27 bp** around a mid of 1.249070 RLUSD per XRP.
 - AMM pool `rhWTXC2m2gGGA9WozUaoMm6kLAVPb1tcS3`: 1,871,457 XRP and 2,335,313 RLUSD, pool price 1.247858, fee 0.214%. Before its fee the pool price sits just below the book's best bid; with the fee, buying from the pool (about 1.2505) costs more than the book's best ask, and selling to it (about 1.2452) gets less than the best bid. So the book is the better price at the top, and the pool is context, as decision B says.
 - Depth from the tested book adapter (step 2; `python scripts/xrpl_probe.py --report-only tests/fixtures/real/xrpl/2026-11-01`): within 10 bp of mid, 1,224 RLUSD of bids and 1,828 of asks; within 50 bp, 49,911 and 96,884, far above decision C's €100. Taking 10 RLUSD costs 6.64 bp against the mid on the book either way, against 11.77 (buy) and 31.12 (sell) bp at the AMM.
+
+## M8: testnet (step 1, 2 Nov 2026)
+
+**Result: GO for building against testnet,** with the open items below. Read-only: public read methods only, no key, nothing signed or sent. Raw responses are in [`tests/fixtures/real/xrpl_testnet/2026-11-02/`](tests/fixtures/real/xrpl_testnet/2026-11-02/), checked offline by `tests/test_xrpl_testnet_verify.py`. Reproduce with `scripts/xrpl_testnet_probe.py`.
+
+| Fact | Value | Source |
+|---|---|---|
+| Network | `network_id` 1, rippled 3.4.1, ledger 22015119 | `server_info` |
+| Endpoint | `wss://` and `https://testnet.xrpl-labs.com/` (port 443) | Answered here. **It is the only testnet endpoint reachable from this network:** xrpl.org's `s.altnet.rippletest.net` timed out on ports 51233, 51234 and 443, as did `clio.altnet` on 51233, so there's no second endpoint yet, and its answers couldn't be compared with another server's |
+| RLUSD issuer | `rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV`, currency code as on mainnet | [Ripple docs](https://docs.ripple.com/products/stablecoin/developer-resources/rlusd-on-the-xrpl); on the ledger: `Domain` ripple.com, master key disabled, clawback on, no transfer fee, tick size 7 (mainnet sets none, so testnet rounds prices differently), 1,254,511,280.91 outstanding. Not in ripple.com's toml, so unlike mainnet there's no two-way domain check: Ripple's docs and the ledger are the two confirmations |
+| Reserves and fee | 1 + 0.2 XRP, 10 drops: same as mainnet | `server_state` |
+| Liquidity | AMM 1,472,269 XRP + 117,874 RLUSD; book 6 and 100 offers | **About 0.08 RLUSD per XRP, against about 1.25 on mainnet.** Testnet proves plumbing, never profit |
+
+**`xrpl-py` 5.2.0, pinned by tests with a throwaway in-memory key:**
+
+- A signed offer carries no `NetworkID`, so nothing in it ties it to testnet: hence separate keys, the refusal if the account exists on mainnet, and a `LastLedgerSequence` on every transaction (testnet's ledger numbers, about 22 million, are far below mainnet's, about 108 million).
+- `Wallet` hides the seed from `str` and `repr` but **not** from `vars()`: the signer must hide its wallet and never log its attributes.
+- It signs whatever it's given, even an XRP-for-XRP offer: our own code must check the pair.
+- `tfPassive`, `Expiration`, `OfferSequence` and `LastLedgerSequence` all reach the signed transaction.
+
+**Book mechanics ([OfferCreate](https://xrpl.org/docs/references/protocol/transactions/types/offercreate), [offers](https://xrpl.org/docs/concepts/tokens/decentralized-exchange/offers)):** `tfPassive` skips only offers at exactly the same price and still consumes better-priced ones; there is no post-only flag; offers can also execute against the AMM ([AMMs](https://xrpl.org/docs/concepts/tokens/decentralized-exchange/automated-market-makers)).
+
+### Self-expiring offers: the 30 s budget
+
+[Close times](https://xrpl.org/docs/concepts/ledgers/ledger-close-times) are rounded, "currently 10 seconds", and forced to increase by 1 s when rounding would repeat one. In 60 ledgers on each network every resolution was 10 and every `close_flags` 0, and close times bunch just after each boundary (seconds ending 0, 1, 2 and occasionally 3). An offer is expired once its Expiration is at or before the **previous** ledger's close time, so the first ledger whose close time reaches the Expiration is the last that can execute it.
+
+Measured from the monitor's recording of mainnet, 1-2 Nov (4,639 boundaries by the final run; the rule's constants were fixed at 4,596 and didn't change). All times are when the ledger was seen validated, which runs later than the true close, so they lean cautious:
+
+| Measure | Median | Worst |
+|---|---|---|
+| Last ledger able to execute, seen after the Expiration | 0.51 s | 9.39 s |
+| Close time ahead of our receipt of that ledger | | 2.54 s |
+
+Five-minute live samples (30 boundaries each) stayed inside this: testnet worst 2.39 s, mainnet 4.61 s.
+
+**The rule:** Expiration = the latest 10 s boundary at most 15 s after the latest validated close time, computed from ledger time, not this machine's clock.
+
+**Worst case, from receiving the data an offer was priced from:** 15 + 9.39 + 2.54 = **26.93 s**, leaving about 3 s inside the 30 s limit.
+
+It is a measurement over about 17 hours, not a guarantee, so:
+
+- Quoting stops and everything is cancelled if a ledger's close-time resolution isn't 10 s (it is documented only as "currently") or it closed without consensus on its time (`close_flags` not 0).
+- The measurement is repeated on the checkpoint data, and again before any mainnet plan.
+- A network that stops closing ledgers can't fill an offer, since only a closing ledger executes anything.
+
+**What it costs:** an offer rests about 10 s or less, so each side is replaced about every 10 s even if nothing moves, losing queue position each time. In network fees that's about 17,280 transactions a day, or 0.173 XRP (about €0.19) on mainnet. This replaces the earlier rough estimate of €0.10 a day at a 20 s refresh, which didn't allow for the rounding.
+
+### M8 open items
+
+- **Replace behaviour on the ledger:** the docs say `OfferCancel` of a missing offer succeeds, but not what `OfferCreate` does when its `OfferSequence` names a missing offer, or whether the old offer is still removed when the new one fails. Observed in step 8; until then the bot trusts only reconciliation against the ledger.
+- **A second testnet endpoint:** none reachable from this network. With one endpoint, losing it means the bot goes quiet and offers expire by themselves.
+- **Xaman and the key file:** Xaman's [testnet guide](https://help.xaman.app/app/learning-more-about-xaman/how-to-access-testnet-on-xrp-ledger) covers developer mode and funding, but not exporting or importing a secret. To be checked before the RUNBOOK steps are written.
+- **Testnet account size:** that guide funds 1,000 XRP, about 80 RLUSD or €72 at testnet's price, above the €50 total. To be settled before step 8.
+- **The M7 paper fees don't include the 10 s refresh:** paper charges a fee per requote, so its fees run up to about €0.19 a day under live. To be reported alongside the paper results; strategy values aren't affected.
 
 ## Still open
 
