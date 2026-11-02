@@ -14,12 +14,17 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
+from datetime import date, datetime, timedelta, timezone
+
 from xrpl.core import keypairs
 from xrpl.core.binarycodec import decode
 from xrpl.wallet import Wallet
 
 from debtlab.money import plain
-from debtlab.xrpl_market import load_testnet_config
+from debtlab.xrpl_market import book as xbook
+from debtlab.xrpl_market import load_testnet_config, store
+from debtlab.xrpl_market.fx import FxRate
+from debtlab.xrpl_market.verify import Amm, NetworkCosts
 from debtlab.xrpl_market.readonly import XrplReadError
 
 D = Decimal
@@ -287,3 +292,26 @@ def client_for(net: FakeNet):
     c = SimpleNamespace(validated_index=net.validated_index, server=net.server, at=net.at)
     c.history = lambda method, params: resp({"transactions": net.history_read(params)})
     return c
+
+
+T0 = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+
+
+class Monitor:
+    """A real testnet monitor database, written through `store`, for the bot to read."""
+
+    def __init__(self, tmp_path, network="testnet"):
+        self.path = tmp_path / "mon.sqlite3"
+        self.conn = store.open_db(self.path)
+        store.claim_network(self.conn, network)
+        store.record_fx(self.conn, FxRate(date(2026, 10, 30), D("1.12"), "ECB"), T0)
+        self.run = store.start_run(self.conn, T0)
+        store.record_network(self.conn, NetworkCosts(1000, D(1), D("0.2"), D(10), D(10)), T0)
+
+    def snapshot(self, ledger, t, bid="0.0795", ask="0.0805", amm_price="0.08"):
+        bid, ask, size = D(bid), D(ask), 100
+        bids = {"ledger_index": ledger, "validated": True, "offers": [{"TakerGets": rl(bid * size), "TakerPays": str(size * DROPS)}]}
+        asks = {"ledger_index": ledger, "validated": True, "offers": [{"TakerGets": str(size * DROPS), "TakerPays": rl(ask * size)}]}
+        pool = None if amm_price is None else Amm(ledger, "rAmm", D(1000), D(1000) * D(amm_price), D(amm_price), D("0.5"))
+        store.record_snapshot(self.conn, self.run, "wss://testnet.xrpl-labs.com/", ledger, t - timedelta(seconds=1), t, "top",
+                              xbook.parse_book([bids], [asks], RLUSD), pool)

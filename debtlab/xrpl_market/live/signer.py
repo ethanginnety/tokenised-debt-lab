@@ -173,6 +173,16 @@ class Submitter:
             raise RuntimeError(f"{command}: {msg.get('error')} {msg.get('error_message', '')}".strip())
         return msg.get("result", {})
 
+    def alive(self) -> bool:
+        """Is the endpoint answering, as testnet? Sends only `server_info`; another network raises."""
+        try:
+            info = self._request("server_info")
+        except Exception:
+            self.close()
+            return False
+        guards.check_network(info)
+        return True
+
     def submit(self, signed: Signed) -> dict:
         """The server's preliminary answer. Only a validated ledger says what really happened."""
         try:

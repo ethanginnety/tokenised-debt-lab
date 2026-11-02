@@ -41,6 +41,22 @@ def balances(conn: sqlite3.Connection) -> tuple[Decimal, Decimal]:
     return xrp, rlusd
 
 
+def last_mid(conn: sqlite3.Connection) -> Decimal:
+    """The latest price in the journal: for booking when the monitor is down (the kill switch still works)."""
+    r = conn.execute("SELECT mid FROM live_journal ORDER BY id DESC LIMIT 1").fetchone()
+    return D(r["mid"]) if r else ZERO
+
+
+def capital_eur(conn: sqlite3.Connection) -> Decimal:
+    """What has been put in: the opening value plus every outside move, at the prices then, in EUR."""
+    a = account(conn)
+    if a is None:
+        return ZERO
+    total = sum((D(r["xrp"]) * D(r["mid"]) + D(r["rlusd"]) for r in conn.execute(
+        "SELECT xrp, rlusd, mid FROM live_journal WHERE kind IN ('open', 'external')")), ZERO)
+    return total / D(a["usd_per_eur"])
+
+
 def account(conn: sqlite3.Connection) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM live_account WHERE id = 1").fetchone()
 
@@ -83,8 +99,10 @@ def open_account(conn: sqlite3.Connection, st: AccountState, mid: Decimal, usd_p
                                         "mid": plain(mid), "label": LABEL})
 
 
-def _order_by_sequence(conn: sqlite3.Connection, seq: int) -> sqlite3.Row | None:
-    return conn.execute("SELECT * FROM live_orders WHERE sequence = ?", (seq,)).fetchone()
+def order_by_sequence(conn: sqlite3.Connection, seq: int) -> sqlite3.Row | None:
+    """A Sequence can be used again after a send that never left: the one that reached a ledger counts."""
+    return conn.execute("SELECT * FROM live_orders WHERE sequence = ? ORDER BY applied_ledger IS NULL, rowid DESC LIMIT 1",
+                        (seq,)).fetchone()
 
 
 def _close(conn: sqlite3.Connection, oid: str, status: str, reason: str, ledger: int, now: datetime) -> None:
@@ -117,9 +135,9 @@ def apply(conn: sqlite3.Connection, e: Effect, mid: Decimal, now: datetime) -> N
         conn.execute("UPDATE live_txs SET status = ?, result = ?, ledger_index = ?, resolved_at = ? WHERE hash = ?",
                      ("applied" if e.result == "tesSUCCESS" else "failed", e.result, e.ledger_index, iso(now), e.hash))
     for f in e.maker_fills:
-        _fill(conn, e, _order_by_sequence(conn, f.sequence), "maker", f.side, f.xrp, f.rlusd, mid, now)
+        _fill(conn, e, order_by_sequence(conn, f.sequence), "maker", f.side, f.xrp, f.rlusd, mid, now)
 
-    mine = _order_by_sequence(conn, e.sequence) if e.ours and e.tx_type == "OfferCreate" and e.sequence else None
+    mine = conn.execute("SELECT * FROM live_orders WHERE tx_hash = ?", (e.hash,)).fetchone() if e.ours else None
     if e.took:
         side = "buy" if e.taker_xrp > 0 else "sell"
         _fill(conn, e, mine, "taker", side, abs(e.taker_xrp), abs(e.taker_rlusd), mid, now)
@@ -139,7 +157,7 @@ def apply(conn: sqlite3.Connection, e: Effect, mid: Decimal, now: datetime) -> N
             conn.execute("UPDATE live_orders SET applied_ledger = ? WHERE id = ?", (e.ledger_index, mine["id"]))
 
     for seq in e.removed:
-        o = _order_by_sequence(conn, seq)
+        o = order_by_sequence(conn, seq)
         if o is None or o["status"] not in ("pending", "open"):
             continue
         fresh = conn.execute("SELECT size, filled_xrp FROM live_orders WHERE id = ?", (o["id"],)).fetchone()
@@ -148,7 +166,7 @@ def apply(conn: sqlite3.Connection, e: Effect, mid: Decimal, now: datetime) -> N
         else:
             _close(conn, o["id"], "cancelled", f"removed by {e.tx_type}", e.ledger_index, now)
     for f in e.maker_fills:
-        o = _order_by_sequence(conn, f.sequence)
+        o = order_by_sequence(conn, f.sequence)
         if o is not None and o["status"] in ("pending", "open") and f.sequence not in e.removed:
             if D(o["filled_xrp"]) >= D(o["size"]):
                 _close(conn, o["id"], "filled", "fully filled", e.ledger_index, now)

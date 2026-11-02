@@ -22,5 +22,9 @@
     "last_execution_after_expiry_seconds": "9.39",
     "close_time_ahead_of_receipt_seconds": "2.54",
     "max_live_seconds": 30
+  },
+  "live": {
+    "_note": "How far from the best price and the AMM's price an offer must stay, so it never intends to take (decision C).",
+    "taker_margin_bp": "2"
   }
 }

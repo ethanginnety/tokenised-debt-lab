@@ -69,6 +69,7 @@ class LiveVenue:
         self.signer, self.submitter, self.expiry = signer, submitter, cfg["offer_expiry"]
         self.name = f"XRPL testnet ({signer.address})"
         self.context: Context | None = None
+        self.down: str | None = None     # why the last send lost its connection; the bot stops quoting on it
 
     def _ctx(self) -> Context:
         if self.context is None:
@@ -85,10 +86,11 @@ class LiveVenue:
         status, prelim, resolved = "pending", None, False
         try:
             prelim = self.submitter.submit(signed).get("engine_result")
+            self.down = None
             if (prelim or "").startswith(NEVER_APPLIES):
                 status, resolved = "failed", True
         except SubmitFailed as e:
-            prelim = str(e)
+            prelim = self.down = str(e)
             if not e.sent:
                 status, resolved = "failed", True
         with tx(conn):
