@@ -93,7 +93,7 @@ Milestone 1 places no orders, so stopping the process is enough. A persisted kil
 
 The RLUSD/XRP monitor and the paper run (M7) need the machine awake and online for days. Until M9 nothing restarts them for you. Before a run:
 
-1. **Plug in and stop sleep.** Settings → System → Power & battery → Screen, sleep & hibernate timeouts: *When plugged in, put my device to sleep after* **Never** (the screen may turn off; that's fine). Or in a terminal: `powercfg /change standby-timeout-ac 0` and `powercfg /change hibernate-timeout-ac 0`. On a laptop, Control Panel → Power Options → *Choose what closing the lid does* → **Do nothing** when plugged in. The monitor will also ask Windows not to sleep while it runs, but these settings cover the time it isn't running.
+1. **Plug in and stop sleep.** Settings → System → Power & battery → Screen, sleep & hibernate timeouts: *When plugged in, put my device to sleep after* **Never** (the screen may turn off; that's fine). Or in a terminal: `powercfg /change standby-timeout-ac 0` and `powercfg /change hibernate-timeout-ac 0`. On a laptop, Control Panel → Power Options → *Choose what closing the lid does* → **Do nothing** when plugged in. The monitor also asks Windows not to sleep while it runs, **but that doesn't stop standby on this laptop, so these settings are required.** On 1-2 Nov all 10 gaps over 30 s began as the laptop entered standby, six on closing the lid and four on an idle timeout (three of those while plugged in). Leave it plugged in: the "plugged in" settings do nothing on battery.
 2. **Keep Windows Update from restarting the machine.** Settings → Windows Update → *Pause updates* for the length of the run. Install anything pending and restart *before* starting. Set *Active hours* to cover as much of the day as allowed, as a second guard.
 3. **Keep the network up.** Prefer a cable. Device Manager → Network adapters → your adapter → Power Management: untick *Allow the computer to turn off this device to save power*.
 4. **Keep the database out of OneDrive's way.** This repository lives in a OneDrive folder, and syncing a SQLite database while it is being written can lock or conflict. Point the monitor's `--db` at a folder outside OneDrive, such as `C:\debtlab-data\xrpl.sqlite3` (recommended), or pause OneDrive syncing for the run (it resumes by itself after at most 24 hours, so renew it).
@@ -124,9 +124,21 @@ python scripts/xrpl_monitor.py status --hours 24                          # just
 
 Read-only: it holds no key and can't place anything. Set `DEBTLAB_XRPL_DB` once instead of passing `--db` every time (keep the file outside OneDrive; see *Multi-day runs on Windows*). It prints a line every 50 ledgers (about 3 minutes) and a warning if the RLUSD issuer's settings change. If it loses the connection it records an outage and retries, switching endpoints. If it stops (crash, sleep, update restart), start it again: the gap is recorded as *not running*, and uptime in `status` includes it. Expect about 0.75 GB a day of download and about 50 MB a day of database.
 
-The dashboard's *RLUSD/XRP* section shows the same figures, refreshed every 10 s. Start the app with the same `DEBTLAB_XRPL_DB` as the monitor (or neither, for the default `data/xrpl.sqlite3`); the app only reads that file.
+The dashboard's *RLUSD/XRP* section shows the same figures, refreshed every 10 s. Start the app with the same `DEBTLAB_XRPL_DB` as the monitor (or neither, for the default `data/xrpl.sqlite3`); the app only reads that file. On Windows, in its own PowerShell window, which stays open:
 
-For the step 4 checkpoint, run it for at least 2 days, then send Claude the output of `status`.
+```powershell
+cd "C:\Users\ethan\OneDrive\Documents\tokenised-debt-lab\tokenised-debt-lab"
+$env:DEBTLAB_XRPL_DB="C:\debtlab-data\xrpl.sqlite3"
+$env:DEBTLAB_DATA_MODE="offline"
+$env:DEBTLAB_PORT="8001"
+.\.venv\Scripts\python.exe -m debtlab.api
+```
+
+Then open http://127.0.0.1:8001. The `$env:` values last only for that window, so set them again each time.
+
+*Couldn't load the RLUSD/XRP monitor: Failed to fetch* means **the app** has stopped, not the monitor: a page left open keeps asking every 10 s and gets no answer. Start the app again and the section recovers by itself within 10 s. A fault in `/api/xrpl` itself would show `HTTP 500` instead.
+
+For the step 4 checkpoint, run it for at least 2 days, then send Claude the output of `status`. Checkpoint moved by Ethan to the evening of Wednesday 4 Nov 2026 (it was due after 22:50 on 3 Nov) because of the gaps listed in ROADMAP.
 
 ## RLUSD/XRP paper bot (M7, PAPER; run only after Ethan's go)
 
