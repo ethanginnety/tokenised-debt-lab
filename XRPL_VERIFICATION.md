@@ -145,8 +145,8 @@ It is a measurement over about 17 hours, not a guarantee, so:
 
 - **Replace behaviour on the ledger:** the docs say `OfferCancel` of a missing offer succeeds, but not what `OfferCreate` does when its `OfferSequence` names a missing offer, or whether the old offer is still removed when the new one fails. Observed in step 8; until then the bot trusts only reconciliation against the ledger.
 - **A second testnet endpoint:** none reachable from this network. With one endpoint, losing it means the bot goes quiet and offers expire by themselves.
-- **Xaman and the key file:** Xaman's [testnet guide](https://help.xaman.app/app/learning-more-about-xaman/how-to-access-testnet-on-xrp-ledger) covers developer mode and funding, but not exporting or importing a secret. To be checked before the RUNBOOK steps are written.
-- **Testnet account size:** that guide funds 1,000 XRP, about 80 RLUSD or €72 at testnet's price, above the €50 total. To be settled before step 8.
+- **Xaman and the key file:** Xaman's [testnet guide](https://help.xaman.app/app/learning-more-about-xaman/how-to-access-testnet-on-xrp-ledger) covers developer mode and funding, but not exporting or importing a secret. Checked: Xaman can't export a secret but can import a family seed, so the RUNBOOK starts from the xrpl.org faucet's secret and imports it into Xaman. Not yet tried end to end: Ethan's steps will show.
+- **Testnet account size:** that guide funds 1,000 XRP, about 80 RLUSD or €72 at testnet's price, above the €50 total. The bot refuses to open an account over the limit and says why; the RUNBOOK uses the xrpl.org faucet instead. What that faucet pays out isn't confirmed. **Ethan to settle before step 8.**
 - **The M7 paper fees don't include the 10 s refresh:** paper charges a fee per requote, so its fees run up to about €0.19 a day under live. To be reported alongside the paper results; strategy values aren't affected.
 
 ## Still open

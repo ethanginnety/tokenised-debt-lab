@@ -59,7 +59,7 @@ Quotes = Callable[[mk.Market, datetime], dict[str, Want | None]]
 
 class LiveBot:
     def __init__(self, conn: sqlite3.Connection, monitor_path: Path | str, cfg: dict, ledger: TestnetLedger, venue: LiveVenue,
-                 submitter: Submitter, quotes: Quotes, out: Callable[[str], None] = print):
+                 submitter: Submitter, quotes: Quotes, out: Callable[[str], None] = print, alongside=None):
         guards.check_config(cfg)
         if not Path(monitor_path).exists():
             raise FileNotFoundError(f"no monitor database at {monitor_path}: start the testnet monitor first")
@@ -68,7 +68,7 @@ class LiveBot:
             self.mon.close()
             raise ldb.WrongDatabase(f"{monitor_path} doesn't record testnet; use the testnet monitor's database")
         self.conn, self.cfg, self.ledger, self.venue, self.submitter = conn, cfg, ledger, venue, submitter
-        self.quotes, self.out = quotes, out
+        self.quotes, self.out, self.alongside = quotes, out, alongside
         self.risk = LiveRiskCheck(cfg)
         self.max_age = D(cfg["paper"]["limits"]["max_data_age_seconds"])
         self.last_read: controls.Read | None = None
@@ -108,6 +108,8 @@ class LiveBot:
         read = controls.read_ledger(self.conn, self.ledger, self.venue, self.cfg, m.mid, self._fee_drops(m), now)
         self._stops(read, m, now)
         self.last_read, self.synced = read, read.header.index
+        if self.alongside:
+            self.alongside.start(now)
         n = controls.cancel_offers(self.conn, self.venue, read, "restart: left by the previous run", now, include_expired=True)
         if n:
             self.out(f"{LABEL}: cancelling {n} offer(s) left by the previous run")
@@ -126,6 +128,8 @@ class LiveBot:
             ldb.event(self.conn, clock(), "run_stopped", {"run": self.run_id, "reason": reason, "zero_offers": cleared.zero,
                                                           "remaining": cleared.remaining})
         ldb.stop_run(self.conn, self.run_id, clock(), reason)
+        if self.alongside:
+            self.alongside.stop(clock(), reason)
         return cleared
 
     # --- the stops -----------------------------------------------------------------------
@@ -160,6 +164,8 @@ class LiveBot:
         ldb.heartbeat(self.conn, self.run_id, now)
         m, amm = self._market(now)
         out = {"ledger": m.ledger_index, "new_ledger": False, "placed": 0, "cancels": 0, "problems": []}
+        if self.alongside and (why := self.alongside.tick(now, m)):
+            self._pause(why, now)
         try:
             read, new = self._read(m, now)
         except XrplReadError as e:

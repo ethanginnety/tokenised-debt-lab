@@ -114,6 +114,50 @@ For the live €50 experiment (M8). Claude never touches funds, never sees a see
 8. **Bot key (recommended: a regular key).** In the wallet app, set a **regular key** on the account: a second key pair the bot signs with, while the master secret stays on paper. If the bot's key is ever exposed, you remove it with the master key and the funds stay yours. Put the bot's secret in a file **outside the repository and outside OneDrive**, e.g. `C:\debtlab-secrets\xrpl-bot.key`, readable only by your account (`icacls C:\debtlab-secrets /inheritance:r /grant:r "%USERNAME%:F"`). Never open it in an app that syncs, and never paste it anywhere.
 9. **Stop and tell Claude it's done** (address only). M8's plan and safety tests come next; no order is placed until you approve the first one.
 
+## M8 testnet run: Ethan's steps
+
+Test funds with no value, on testnet only. Do steps 1-4 yourself; Claude never sees or opens a key. **Nothing is ordered until you start it at step 7, after your own go.** Don't use any testnet secret for anything else, and never put a mainnet secret in these files. Commands run from the repository with the virtual environment active. Keep the laptop plugged in.
+
+1. **Make the bot's testnet account.** On the [XRP Ledger faucets page](https://xrpl.org/resources/dev-tools/xrp-faucets), choose **Testnet** and generate credentials. It shows an address (starts with `r`) and a secret (starts with `s`).
+2. **Put the secret in the key file.** Create the folder `C:\debtlab-secrets`. In Notepad, paste only the secret and save it as `C:\debtlab-secrets\xrpl-testnet.key` (check it didn't become `.key.txt`). Then lock it in PowerShell:
+   ```
+   icacls C:\debtlab-secrets\xrpl-testnet.key /inheritance:r /grant:r "${env:USERNAME}:R"
+   ```
+   The bot refuses a key file inside the repository or OneDrive, or one other accounts can read, and tells you which.
+3. **Trust line and test RLUSD.** In Xaman: turn on developer mode and switch to **XRPL Testnet**, then under Settings > Accounts add an account by importing the **family seed** from step 1, and check the `r` address matches. Add a trust line for **RLUSD**, issuer **`rQhWct2fv4Vc4KRjRgMrxa8xPN9Zx9iLKV`**, checked character by character. Get test RLUSD from [tryrlusd.com](https://tryrlusd.com). Don't fund the account from Xaman's own button: 1,000 XRP is about €72 at testnet's price, over the €50 total.
+4. **A second account, for the crossing helper.** Repeat steps 1-3 and save its secret as `C:\debtlab-secrets\xrpl-testnet-taker.key`, locked the same way.
+5. **Start the testnet monitor,** in its own window. It doesn't touch the mainnet monitor or its data:
+   ```
+   python scripts/xrpl_monitor.py run --network testnet --db C:\debtlab-data\xrpl_testnet.sqlite3
+   ```
+6. **Tell Claude the two `r` addresses, nothing else,** so the balances can be read back and the value checked against €50.
+7. **After your go, start the bot,** in another window. It starts paused and places nothing yet. It refuses to start if the account also exists on mainnet.
+   ```
+   python scripts/xrpl_testnet.py --db C:\debtlab-data\xrpl_live.sqlite3 --paper-db C:\debtlab-data\xrpl_testnet_paper.sqlite3 --monitor-db C:\debtlab-data\xrpl_testnet.sqlite3 run --key-file C:\debtlab-secrets\xrpl-testnet.key
+   ```
+   All the commands below take the same three `--db` options before the command name. **The first order comes from this one:**
+   ```
+   python scripts/xrpl_testnet.py ... resume --reason "first testnet orders"
+   ```
+   Quotes appear after about two minutes: the strategy needs 30 price changes first. If the account is worth more than €50 it pauses and says so. Then either send the excess away, or change the limit yourself with `limit max_total_eur VALUE --reason WHY`.
+8. **Watch it:** `status`, and `compare` for live against paper.
+9. **Stop it at any time:**
+   - `kill --key-file C:\debtlab-secrets\xrpl-testnet.key --reason WHY` cancels from the ledger's own list until none remain, with the bot running or not, and stays on until `reset --reason WHY`. If it can't reach the network, each offer still expires by itself within 30 s.
+   - `pause --reason WHY`: a running bot cancels on its next tick.
+   - Ctrl+C in the bot's window cancels everything and stops. Starting it again leaves it paused.
+
+**What the run has to show (ROADMAP, acceptance for step 8):**
+
+| Check | How |
+|---|---|
+| A real fill, booked and compared | Copy the bot's bid from `status`, then `python tests/live_testnet/taker.py --key-file C:\debtlab-secrets\xrpl-testnet-taker.key --bot-account rBOT --side sell --price BID --size 5`. Then `status` and `compare`. |
+| A fill that takes liquidity stops it | Not forced: the margin should prevent it. Covered by tests, and the bot pauses if it ever happens. |
+| Kill leaves zero offers | `kill`, then check the address on a testnet explorer. |
+| Stale data | Stop the testnet monitor. After 30 s the bot cancels and stops quoting; it comes back when the monitor does. |
+| Dropped connection | Turn Wi-Fi off, wait a minute, turn it on. Offers expire by themselves meanwhile. |
+| Each limit | `limit max_order_eur 1 --reason test` refuses orders; `limit max_daily_loss_eur 0.01 --reason test` pauses. Put them back the same way. |
+| Restart cleans up | Close the bot's window without Ctrl+C, start it again, and check it's paused with nothing left. |
+
 ## RLUSD/XRP monitor (M7, read-only)
 
 ```bash

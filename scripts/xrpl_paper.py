@@ -79,6 +79,9 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = load_config()
     conn = pdb.open_db(args.db or default_paper_db())
+    if conn.execute("SELECT 1 FROM paper_meta WHERE key = 'network' AND value = 'testnet'").fetchone():
+        print(f"PAPER: refused: {args.db or default_paper_db()} is the testnet bot's paper database; M7 uses its own")
+        return 2
     mon_db = args.monitor_db or default_monitor_db()
     pdb.seed_limits(conn, cfg, now())
     try:
