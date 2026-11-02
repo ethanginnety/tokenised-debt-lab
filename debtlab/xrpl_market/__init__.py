@@ -1,8 +1,9 @@
-"""RLUSD/XRP on the XRP Ledger (M7): read-only market data, then paper trading.
+"""RLUSD/XRP on the XRP Ledger: read-only market data and paper trading (M7), the testnet venue (M8).
 
-READ-ONLY. Nothing in this package holds a key, builds a wallet, signs or submits a
-transaction. `readonly.ReadOnlyClient` only sends public read methods, and
-tests/test_xrpl_no_signing.py fails if any module imports xrpl-py's signing code.
+Everything is READ-ONLY except `live.signer`, which is the only module that holds a key,
+signs or submits, and only on testnet. `readonly.ReadOnlyClient` only sends public read
+methods, and tests/test_xrpl_no_signing.py fails if any other module imports xrpl-py's
+signing code.
 """
 
 import json

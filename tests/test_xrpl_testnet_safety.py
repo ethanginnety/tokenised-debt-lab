@@ -26,7 +26,6 @@ MAINNET_URLS = sorted({*MAINNET["endpoints"]["websocket"], *MAINNET["endpoints"]
                        "wss://s1.ripple.com/", "wss://xrpl.ws/", "https://s1.ripple.com:51234/"})
 FAKE_SEED = keypairs.generate_seed(entropy="00" * 16)
 SIGNER_FILE = ROOT / "debtlab" / "xrpl_market" / "live" / "signer.py"
-needs_signer = pytest.mark.xfail(raises=(ImportError, FileNotFoundError), strict=True, reason="step 3 builds the signer")
 nobody_else = {"acl": lambda p: [], "me": lambda: "me"}
 
 
@@ -158,12 +157,12 @@ def test_a_key_in_the_repository_is_refused(tmp_path):
 def test_a_key_in_onedrive_is_refused(tmp_path, monkeypatch):
     p = tmp_path / "OneDrive" / "a.key"
     p.parent.mkdir()
-    p.write_text("x")
+    p.write_text("x", encoding="utf-8")
     with pytest.raises(KeyFileRefused, match="OneDrive"):
         guards.check_key_path(p, ROOT, **nobody_else)
     q = tmp_path / "Synced" / "a.key"
     q.parent.mkdir()
-    q.write_text("x")
+    q.write_text("x", encoding="utf-8")
     monkeypatch.setenv("OneDriveConsumer", str(tmp_path / "Synced"))
     with pytest.raises(KeyFileRefused, match="OneDrive"):
         guards.check_key_path(q, ROOT, **nobody_else)
@@ -171,7 +170,7 @@ def test_a_key_in_onedrive_is_refused(tmp_path, monkeypatch):
 
 def test_the_mainnet_key_name_is_refused(tmp_path):
     p = tmp_path / "xrpl-bot.key"
-    p.write_text("x")
+    p.write_text("x", encoding="utf-8")
     with pytest.raises(KeyFileRefused, match="mainnet"):
         guards.check_key_path(p, ROOT, **nobody_else)
 
@@ -204,9 +203,8 @@ def test_secrets_are_kept_out_of_git():
     assert "XRPL_SIGNING_KEY" not in (ROOT / ".env.example").read_text(encoding="utf-8")
 
 
-# --- the signer: written before it exists ---------------------------------------------------
+# --- the signer: written before it existed (strict expected failures until M8 step 3) -----------
 
-@needs_signer
 @pytest.mark.parametrize("url", MAINNET_URLS)
 def test_a_submitter_never_connects_to_mainnet(url):
     from debtlab.xrpl_market.live.signer import Submitter
@@ -216,7 +214,6 @@ def test_a_submitter_never_connects_to_mainnet(url):
     assert spy.urls == []
 
 
-@needs_signer
 @pytest.mark.parametrize("network_id", [0, 2, None])
 def test_an_allowed_host_on_another_network_gets_nothing_signed(key_file, network_id):
     from debtlab.xrpl_market.live.signer import Submitter
@@ -227,7 +224,6 @@ def test_an_allowed_host_on_another_network_gets_nothing_signed(key_file, networ
     assert spy.blobs() == []
 
 
-@needs_signer
 def test_the_network_is_checked_before_every_submit_not_once(key_file):
     from debtlab.xrpl_market.live.signer import Submitter
     spy = Spy()
@@ -242,7 +238,6 @@ def test_the_network_is_checked_before_every_submit_not_once(key_file):
     assert [m["command"] for m in spy.sent] == ["server_info", "submit", "server_info"]
 
 
-@needs_signer
 def test_a_testnet_submit_goes_through_as_a_blob_only(key_file):
     from debtlab.xrpl_market.live.signer import Submitter
     spy = Spy()
@@ -252,7 +247,6 @@ def test_a_testnet_submit_goes_through_as_a_blob_only(key_file):
     assert set(m) == {"id", "command", "tx_blob"} and FAKE_SEED not in json.dumps(spy.sent)
 
 
-@needs_signer
 def test_the_config_is_refused_before_the_key_file_is_looked_at(tmp_path):
     missing = tmp_path / "no-such.key"
     with pytest.raises(MainnetBlocked):    # not KeyFileRefused: it never got that far
@@ -260,20 +254,17 @@ def test_the_config_is_refused_before_the_key_file_is_looked_at(tmp_path):
         open_signer(missing, {**TESTNET, "endpoints": MAINNET["endpoints"]}, on_mainnet=not_on_mainnet, **nobody_else)
 
 
-@needs_signer
 def test_a_key_with_a_mainnet_account_opens_no_signer(key_file):
     with pytest.raises(MainnetBlocked):
         signer_for(key_file, on_mainnet=lambda a: True)
 
 
-@needs_signer
 def test_the_mainnet_check_is_not_optional(key_file):
     from debtlab.xrpl_market.live.signer import open_signer
     with pytest.raises(TypeError):
         open_signer(key_file, TESTNET, **nobody_else)
 
 
-@needs_signer
 @pytest.mark.parametrize("side,gets_is_xrp", [("buy", False), ("sell", True)])
 def test_every_offer_is_passive_expiring_and_on_the_verified_pair(key_file, side, gets_is_xrp):
     tx = decode(offer(signer_for(key_file), side=side).blob)
@@ -284,7 +275,6 @@ def test_every_offer_is_passive_expiring_and_on_the_verified_pair(key_file, side
     assert token["currency"] == TESTNET["rlusd"]["currency_hex"]
 
 
-@needs_signer
 def test_a_buy_gives_rlusd_for_xrp_at_the_price(key_file):
     tx = decode(offer(signer_for(key_file), side="buy", price="0.08", size="10").blob)
     assert tx["TakerPays"] == "10000000" and float(tx["TakerGets"]["value"]) == pytest.approx(0.8)
@@ -292,34 +282,29 @@ def test_a_buy_gives_rlusd_for_xrp_at_the_price(key_file):
     assert tx["TakerGets"] == "10000000" and float(tx["TakerPays"]["value"]) == pytest.approx(0.8)
 
 
-@needs_signer
 @pytest.mark.parametrize("missing", ["expiration", "last_ledger"])
 def test_an_offer_without_an_expiry_or_a_last_ledger_cant_be_signed(key_file, missing):
     with pytest.raises(ValueError):
         offer(signer_for(key_file), **{missing: None})
 
 
-@needs_signer
 def test_replacing_carries_the_old_offers_sequence_in_one_transaction(key_file):
     tx = decode(offer(signer_for(key_file), replaces=4).blob)
     assert tx["OfferSequence"] == 4 and tx["TransactionType"] == "OfferCreate"
     assert "OfferSequence" not in decode(offer(signer_for(key_file)).blob)
 
 
-@needs_signer
 def test_a_cancel_names_only_the_offer(key_file):
     tx = decode(signer_for(key_file).cancel_offer(offer_sequence=4, sequence=6, last_ledger=1000, fee_drops=10).blob)
     assert tx["TransactionType"] == "OfferCancel" and tx["OfferSequence"] == 4 and tx["LastLedgerSequence"] == 1000
 
 
-@needs_signer
 @pytest.mark.parametrize("kw", [{"side": "both"}, {"price": "0"}, {"size": "-1"}, {"fee_drops": 100_000}])
 def test_nonsense_offers_cant_be_signed(key_file, kw):
     with pytest.raises(ValueError):
         offer(signer_for(key_file), **kw)
 
 
-@needs_signer
 def test_only_offers_can_be_built():
     tree = ast.parse(SIGNER_FILE.read_text(encoding="utf-8"))
     names = {a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
@@ -330,7 +315,6 @@ def test_only_offers_can_be_built():
         mod._only_offers(Wallet)      # anything else is refused at the point of signing, whatever the caller
 
 
-@needs_signer
 def test_the_signer_module_cant_print_log_or_read_the_environment():
     tree = ast.parse(SIGNER_FILE.read_text(encoding="utf-8"))
     imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
@@ -340,7 +324,6 @@ def test_the_signer_module_cant_print_log_or_read_the_environment():
     assert not calls & {"print", "eval", "exec", "vars"}
 
 
-@needs_signer
 def test_the_key_never_shows(key_file, caplog, capsys):
     caplog.set_level(logging.DEBUG)
     s = signer_for(key_file)
@@ -352,14 +335,12 @@ def test_the_key_never_shows(key_file, caplog, capsys):
     assert s.address == Wallet.from_seed(FAKE_SEED).address
 
 
-@needs_signer
 def test_a_signer_cant_be_pickled_or_copied(key_file):
     s = signer_for(key_file)
     with pytest.raises(TypeError):
         pickle.dumps(s)
 
 
-@needs_signer
 def test_a_bad_key_file_doesnt_echo_its_contents(tmp_path):
     p = tmp_path / "bad.key"
     p.write_text("not-a-seed-CANARY", encoding="utf-8")
@@ -368,8 +349,70 @@ def test_a_bad_key_file_doesnt_echo_its_contents(tmp_path):
     assert "CANARY" not in str(e.value) and e.value.__cause__ is None and e.value.__suppress_context__
 
 
-@needs_signer
 def test_a_regular_key_signs_for_its_account(key_file):
     s = signer_for(key_file, account="rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")
     tx = decode(offer(s).blob)
     assert s.address == tx["Account"] == "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"
+
+
+# --- controls: take a guard away and the tests above would catch it -------------------------
+
+def off(monkeypatch, name):
+    monkeypatch.setattr(guards, name, lambda *a, **k: a[0] if a else None)
+
+
+def test_control_without_the_endpoint_guard_a_mainnet_connection_happens(monkeypatch, key_file):
+    from debtlab.xrpl_market.live.signer import Submitter
+    off(monkeypatch, "check_endpoint")
+    spy = Spy()
+    Submitter(MAINNET["endpoints"]["websocket"][0], connect=spy).submit(offer(signer_for(key_file)))
+    assert spy.urls == [MAINNET["endpoints"]["websocket"][0]] and len(spy.blobs()) == 1
+
+
+def test_control_without_the_network_guard_a_blob_is_sent(monkeypatch, key_file):
+    from debtlab.xrpl_market.live.signer import Submitter
+    off(monkeypatch, "check_network")
+    spy = Spy(network_id=0)
+    Submitter(TESTNET["endpoints"]["websocket"][0], connect=spy).submit(offer(signer_for(key_file)))
+    assert len(spy.blobs()) == 1
+
+
+def test_control_without_the_config_guard_the_key_file_is_reached(monkeypatch, tmp_path):
+    from debtlab.xrpl_market.live.signer import open_signer
+    off(monkeypatch, "check_config")
+    with pytest.raises(KeyFileRefused):
+        open_signer(tmp_path / "no-such.key", {**TESTNET, "endpoints": MAINNET["endpoints"]},
+                    on_mainnet=not_on_mainnet, **nobody_else)
+
+
+def test_control_without_the_mainnet_account_guard_a_signer_opens(monkeypatch, key_file):
+    off(monkeypatch, "check_not_on_mainnet")
+    assert signer_for(key_file, on_mainnet=lambda a: True).address
+
+
+def test_control_without_the_location_guard_a_key_anywhere_is_read(monkeypatch, tmp_path, key_file):
+    from debtlab.xrpl_market.live.signer import open_signer
+    monkeypatch.setattr(guards, "check_key_path", lambda p, *a, **k: Path(p))
+    assert open_signer(key_file, TESTNET, on_mainnet=not_on_mainnet, acl=lambda p: ["Everyone"], me=lambda: "me").address
+
+
+def test_a_failed_connection_says_whether_the_transaction_may_have_been_sent(key_file):
+    from debtlab.xrpl_market.live.signer import SubmitFailed, Submitter
+
+    class Breaks(Spy):
+        def __init__(self, on):
+            super().__init__()
+            self.on = on
+
+        def send(self, raw):
+            if json.loads(raw)["command"] == self.on:
+                raise ConnectionError("gone")
+            super().send(raw)
+
+    url = TESTNET["endpoints"]["websocket"][0]
+    with pytest.raises(SubmitFailed) as e:
+        Submitter(url, connect=Breaks("server_info")).submit(offer(signer_for(key_file)))
+    assert e.value.sent is False
+    with pytest.raises(SubmitFailed) as e:
+        Submitter(url, connect=Breaks("submit")).submit(offer(signer_for(key_file)))
+    assert e.value.sent is True
