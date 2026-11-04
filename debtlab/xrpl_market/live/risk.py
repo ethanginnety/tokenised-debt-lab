@@ -7,8 +7,9 @@ state come from the live database each time. It assumes the worst: every open or
     the market is usable: data no older than the limit, monitor connected, book valid, fresh rate
     the close-time budget holds (decision B)
     never intends to take (decision C): a bid at least `taker_margin_bp` below the best offer
-        AND the AMM's price, an offer that far above the best bid and the AMM's price, and
-        neither crossing our own other offer. An unknown AMM price is a refusal
+        AND what the AMM charges with its fee, an offer that far above the best bid and what the
+        AMM pays with its fee, and neither crossing our own other offer. An unknown AMM price is
+        a refusal. The monitor must be leaving this account's offers out of the prices
     whole drops; the RLUSD amount within 15 significant digits
     at most EUR 10 an order, at most 2 open orders, and capital in plus open orders within EUR 50
     the loss today under EUR 5
@@ -21,11 +22,12 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import ROUND_FLOOR, Decimal
-from typing import Mapping
+from typing import Mapping, NamedTuple
 
 from debtlab.marketmaker.interfaces import Order
 from debtlab.money import D, ZERO
 from debtlab.xrpl_market import closetimes
+from debtlab.xrpl_market.book import amm_quotes
 from debtlab.xrpl_market.live import book
 from debtlab.xrpl_market.live.db import limits, state
 from debtlab.xrpl_market.live.ledger import AccountState, Header
@@ -38,22 +40,34 @@ BP = Decimal(10_000)
 DROP = Decimal("0.000001")
 
 
+class AmmQuotes(NamedTuple):
+    bid: Decimal      # what the pool pays for XRP, its fee taken off
+    ask: Decimal      # what the pool charges for XRP, its fee added
+
+
 @dataclass(frozen=True)
 class LiveMark:
     market: Market
     header: Header
     account: AccountState
-    amm_price: Decimal | None
+    amm: AmmQuotes | None
     currency: str = "RLUSD"
 
 
-def amm_price(mon: sqlite3.Connection, now: datetime) -> Decimal | None:
-    """The AMM's price in the monitor's latest snapshot."""
-    r = mon.execute("SELECT amm_xrp, amm_rlusd FROM xrpl_snapshots WHERE received_at <= ? ORDER BY ledger_index DESC LIMIT 1",
-                    (iso(now),)).fetchone()
-    if r is None or not r["amm_xrp"] or not r["amm_rlusd"] or D(r["amm_xrp"]) <= 0:
+def amm_prices(mon: sqlite3.Connection, now: datetime) -> AmmQuotes | None:
+    """What the AMM would pay and charge, in the monitor's latest snapshot."""
+    r = mon.execute("SELECT amm_xrp, amm_rlusd, amm_fee_pct FROM xrpl_snapshots WHERE received_at <= ?"
+                    " ORDER BY ledger_index DESC LIMIT 1", (iso(now),)).fetchone()
+    if r is None or not r["amm_xrp"] or not r["amm_rlusd"] or r["amm_fee_pct"] is None or D(r["amm_xrp"]) <= 0:
         return None
-    return D(r["amm_rlusd"]) / D(r["amm_xrp"])
+    return AmmQuotes(*amm_quotes(D(r["amm_rlusd"]) / D(r["amm_xrp"]), D(r["amm_fee_pct"])))
+
+
+def own_offers_problem(m: Market, address: str) -> str | None:
+    """The bot must never price from its own quotes, so the monitor has to be leaving them out."""
+    if m.ledger_index is None or m.excluded_account == address:
+        return None
+    return f"the monitor isn't leaving out {address}'s offers: start it with --exclude-account {address}"
 
 
 def others_for(conn: sqlite3.Connection, order_id: str, replacing: frozenset[str]) -> list[dict]:
@@ -117,7 +131,9 @@ class LiveRiskCheck:
             reasons.append(f"size {order.size} XRP isn't whole drops")
         if not iou_ok(order.size * order.price):
             reasons.append(f"RLUSD amount {order.size * order.price} has more than {IOU_DIGITS} significant digits")
-        reasons += self._never_take(order, m, mark.amm_price)
+        if (why := own_offers_problem(m, mark.account.address)):
+            reasons.append(why)
+        reasons += self._never_take(order, m, mark.amm)
         others = others_for(conn, order.id, replacing)
         for o in others:
             if o["side"] != order.side and ((order.side == "buy" and order.price >= D(o["price"])) or
@@ -146,17 +162,17 @@ class LiveRiskCheck:
             reasons.append(f"not enough {what} on the ledger: room for {can} XRP after open orders, the reserve and fees")
         return reasons
 
-    def _never_take(self, order: Order, m: Market, amm: Decimal | None) -> list[str]:
+    def _never_take(self, order: Order, m: Market, amm: AmmQuotes | None) -> list[str]:
         out = []
         if amm is None:
             out.append("the AMM's price is unknown, so the margin against taking can't be checked")
         room = self.margin / BP
         if order.side == "buy":
-            for what, p in (("best offer", m.best_ask), ("AMM price", amm)):
+            for what, p in (("best offer", m.best_ask), ("AMM's price with its fee", amm.ask if amm else None)):
                 if p is not None and order.price > p * (1 - room):
                     out.append(f"bid {order.price} within {self.margin} bp of the {what} {p}: it could take liquidity")
         else:
-            for what, p in (("best bid", m.best_bid), ("AMM price", amm)):
+            for what, p in (("best bid", m.best_bid), ("AMM's price with its fee", amm.bid if amm else None)):
                 if p is not None and order.price < p * (1 + room):
                     out.append(f"offer {order.price} within {self.margin} bp of the {what} {p}: it could take liquidity")
         return out

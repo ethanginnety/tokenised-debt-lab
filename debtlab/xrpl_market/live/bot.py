@@ -34,7 +34,7 @@ from debtlab.xrpl_market.live import LABEL, book, controls, guards
 from debtlab.xrpl_market.live import db as ldb
 from debtlab.xrpl_market.live.guards import MainnetBlocked
 from debtlab.xrpl_market.live.ledger import TestnetLedger
-from debtlab.xrpl_market.live.risk import LiveMark, LiveRiskCheck, affordable, amm_price, others_for
+from debtlab.xrpl_market.live.risk import AmmQuotes, LiveMark, LiveRiskCheck, affordable, amm_prices, others_for, own_offers_problem
 from debtlab.xrpl_market.live.signer import Submitter
 from debtlab.xrpl_market.live.venue import LiveOrder, LiveVenue, unresolved
 from debtlab.xrpl_market.paper import PAIR
@@ -79,10 +79,10 @@ class LiveBot:
 
     # --- reading -------------------------------------------------------------------------
 
-    def _market(self, now: datetime) -> tuple[mk.Market, Decimal | None]:
+    def _market(self, now: datetime) -> tuple[mk.Market, AmmQuotes | None]:
         self.mon.execute("BEGIN")
         try:
-            return mk.read_market(self.mon, now, self.cfg), amm_price(self.mon, now)
+            return mk.read_market(self.mon, now, self.cfg), amm_prices(self.mon, now)
         finally:
             self.mon.execute("ROLLBACK")
 
@@ -182,6 +182,8 @@ class LiveBot:
                 book.record_day_open(self.conn, m.mid, now)
         self._daily_loss(m, now)
         problems = m.problems(self.max_age)
+        if (why := own_offers_problem(m, self.venue.signer.address)):
+            problems.append(why)
         if self.venue.down and not self.submitter.alive():
             problems.append(f"connection: {self.venue.down}")
         elif self.venue.down:
@@ -237,7 +239,7 @@ class LiveBot:
 
     # --- quoting -------------------------------------------------------------------------
 
-    def _quote(self, read: controls.Read, m: mk.Market, amm: Decimal | None, now: datetime) -> tuple[int, int]:
+    def _quote(self, read: controls.Read, m: mk.Market, amm: AmmQuotes | None, now: datetime) -> tuple[int, int]:
         wants = self.quotes(m, now)
         mark = LiveMark(m, read.header, read.account, amm)
         expiry = closetimes.expiration_for(read.header.close_time, self.cfg["offer_expiry"])

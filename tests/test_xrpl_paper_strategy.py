@@ -108,7 +108,7 @@ def test_no_quote_on_a_crossed_book_a_stale_rate_or_little_history(tmp_path):
     controls.resume(w.paper, "Ethan", "test", w.at())
     assert any("only 2 mid changes in the last 15 min; need 30" in r for r in _reasons(w, w.at()))
     w.close(bid="1.252", ask="1.251")
-    assert any(r.startswith("book invalid: book crossed") for r in _reasons(w, w.at()))
+    assert any(r.startswith("book invalid: prices crossed") for r in _reasons(w, w.at()))
     w2 = World(tmp_path / "old", fx_date=date(2026, 10, 27))
     w2.warm()
     controls.resume(w2.paper, "Ethan", "test", w2.at())

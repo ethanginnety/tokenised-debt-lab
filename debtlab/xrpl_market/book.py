@@ -9,6 +9,8 @@ Pure functions, no I/O. Prices are RLUSD per XRP. Sizes are what is funded now.
                  offers in price order: average and worst price, cost against the mid in bp
     amm_*        the AMM pool beside the book (never mixed into the book figures, decision B):
                  its price and what the same trade would cost there
+    reference    the prices the bot quotes from: the book without the given account's offers and
+                 without expired ones, and the AMM at what it really charges, its fee included
 
 An offer's own amounts give its price exactly (its "quality"); its funded amounts give
 how much of it can trade now. Offers with nothing funded are left out.
@@ -38,6 +40,7 @@ class Level:
     rlusd: Decimal      # funded RLUSD
     owner: str
     offer_id: str
+    expiration: int | None = None     # Ripple seconds, if the offer has one
 
 
 @dataclass(frozen=True)
@@ -64,7 +67,7 @@ def _level(o: dict, rlusd_hex: str) -> tuple[str, Level | None]:
         price, xrp, rlusd = gets / pays, fpays, fgets
     else:               # owner gives XRP, wants RLUSD
         price, xrp, rlusd = pays / gets, fgets, fpays
-    return side, Level(price, xrp, rlusd, o.get("Account", ""), o.get("index", ""))
+    return side, Level(price, xrp, rlusd, o.get("Account", ""), o.get("index", ""), o.get("Expiration"))
 
 
 def _complete(result: dict, page_limit: int | None) -> bool:
@@ -196,6 +199,58 @@ def walk(book: Book, action: str, rlusd: Decimal, mid: Decimal | None = None) ->
 def amm_fee(pool: Amm) -> Decimal:
     """The trading fee as a fraction (0.214% -> 0.00214)."""
     return pool.trading_fee_pct / D(100)
+
+
+def amm_quotes(price: Decimal, fee_pct: Decimal) -> tuple[Decimal, Decimal]:
+    """What the pool would really pay for XRP and charge for it, on the smallest trade: its price less
+    and plus its fee. Between the two, nothing trades with it."""
+    f = D(fee_pct) / D(100)
+    return price * (ONE - f), price * (ONE + f)
+
+
+@dataclass(frozen=True)
+class Reference:
+    """The prices to quote from. `mid` is None, with the reasons, when there is no usable price."""
+    bid: Decimal | None
+    ask: Decimal | None
+    mid: Decimal | None
+    reasons: tuple[str, ...]
+    own_left_out: int
+    expired_left_out: int
+
+
+def reference(b: Book, pool: Amm | None, close_time: int, exclude: str | None = None) -> Reference:
+    """The best bid and offer, leaving out `exclude`'s offers, so the bot can't price from its own quotes, and
+    offers expired by this ledger's `close_time` (Ripple seconds), which the ledger lists but can't execute.
+    The AMM counts at its prices with the fee: it only moves a price when it beats what's left of the book,
+    and it gives a price when a side is empty."""
+    own = expired = 0
+
+    def keep(levels: tuple[Level, ...]) -> list[Level]:
+        nonlocal own, expired
+        out = []
+        for lv in levels:
+            if exclude and lv.owner == exclude:
+                own += 1
+            elif lv.expiration is not None and lv.expiration <= close_time:
+                expired += 1
+            else:
+                out.append(lv)
+        return out
+
+    bids, asks = keep(b.bids), keep(b.asks)
+    amm_bid, amm_ask = amm_quotes(pool.price, pool.trading_fee_pct) if pool else (None, None)
+    bid = max((p for p in (bids[0].price if bids else None, amm_bid) if p is not None), default=None)
+    ask = min((p for p in (asks[0].price if asks else None, amm_ask) if p is not None), default=None)
+    reasons = []
+    if bid is None:
+        reasons.append("no bid from anyone else and no AMM")
+    if ask is None:
+        reasons.append("no offer from anyone else and no AMM")
+    if bid is not None and ask is not None and bid >= ask:
+        reasons.append(f"prices crossed: bid {bid} >= offer {ask}")
+    mid = None if reasons else (bid + ask) / 2
+    return Reference(bid, ask, mid, tuple(reasons), own, expired)
 
 
 def amm_walk(pool: Amm, action: str, rlusd: Decimal, mid: Decimal | None = None) -> Walk:

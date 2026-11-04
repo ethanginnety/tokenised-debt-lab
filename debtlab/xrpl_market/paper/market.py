@@ -7,6 +7,9 @@ recorded data in tests without seeing the future.
 "Connected" means the monitor is alive (heartbeat within the data-age limit) and no
 monitor outage is open at `now`. A monitor that stops, loses its connection or gets no
 validated ledger therefore makes the paper bot cancel everything, as the live rule says.
+
+Prices are the snapshot's reference prices (`book.reference`), not the raw book. A database
+the monitor hasn't recorded them in yet, and rows from before, are read as the raw book.
 """
 
 from __future__ import annotations
@@ -44,6 +47,7 @@ class Market:
     fee_xrp: Decimal                      # network fee for one transaction (place or cancel)
     network_source: str
     currency: str = field(default="RLUSD")  # an `interfaces.Mark`: prices and values are in RLUSD
+    excluded_account: str | None = None   # whose offers the monitor left out of these prices
 
     @property
     def age_s(self) -> float | None:
@@ -84,8 +88,11 @@ def read_market(mon: sqlite3.Connection, now: datetime, cfg: dict) -> Market:
     snap = mon.execute("SELECT * FROM xrpl_snapshots WHERE received_at <= ? ORDER BY ledger_index DESC LIMIT 1",
                        (t,)).fetchone()
     window = iso(now - timedelta(minutes=p["strategy"]["vol_window_minutes"]))
-    mids = tuple(D(r["mid"]) for r in mon.execute(
-        "SELECT mid FROM xrpl_snapshots WHERE valid = 1 AND received_at > ? AND received_at <= ? ORDER BY ledger_index",
+    has_ref = any(c[1] == "ref_mid" for c in mon.execute("PRAGMA table_info(xrpl_snapshots)"))
+    col, usable = (("COALESCE(ref_mid, mid)", "ref_mid IS NOT NULL OR (ref_reasons IS NULL AND valid = 1)")
+                   if has_ref else ("mid", "valid = 1"))
+    mids = tuple(D(r[0]) for r in mon.execute(
+        f"SELECT {col} FROM xrpl_snapshots WHERE ({usable}) AND received_at > ? AND received_at <= ? ORDER BY ledger_index",
         (window, t)))
     fxr = mon.execute("SELECT * FROM fx_rates WHERE fetched_at <= ? ORDER BY obs_date DESC LIMIT 1", (t,)).fetchone()
     fx = None if fxr is None else FxRate(datetime.fromisoformat(fxr["obs_date"]).date(), D(fxr["rate"]), fxr["source"])
@@ -103,6 +110,10 @@ def read_market(mon: sqlite3.Connection, now: datetime, cfg: dict) -> Market:
         return Market(now, None, None, False, ("no snapshot",), None, None, None, connected, why, fx, mids,
                       base, inc, fee, source)
     dec = (lambda x: None if x is None else D(x))
+    if has_ref and snap["ref_reasons"] is not None:
+        return Market(now, snap["ledger_index"], parse(snap["received_at"]), snap["ref_mid"] is not None,
+                      tuple(json.loads(snap["ref_reasons"])), dec(snap["ref_bid"]), dec(snap["ref_ask"]), dec(snap["ref_mid"]),
+                      connected, why, fx, mids, base, inc, fee, source, excluded_account=snap["excluded_account"])
     return Market(now, snap["ledger_index"], parse(snap["received_at"]), bool(snap["valid"]),
                   tuple(json.loads(snap["reasons"])), dec(snap["best_bid"]), dec(snap["best_ask"]), dec(snap["mid"]),
                   connected, why, fx, mids, base, inc, fee, source)

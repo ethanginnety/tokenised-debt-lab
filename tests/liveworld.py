@@ -304,8 +304,9 @@ T0 = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
 class Monitor:
     """A real testnet monitor database, written through `store`, for the bot to read."""
 
-    def __init__(self, tmp_path, network="testnet", t0=T0, fx_date=date(2026, 10, 30)):
+    def __init__(self, tmp_path, network="testnet", t0=T0, fx_date=date(2026, 10, 30), exclude=ADDRESS):
         self.path = tmp_path / "mon.sqlite3"
+        self.exclude = exclude
         self.conn = store.open_db(self.path)
         store.claim_network(self.conn, network)
         store.record_fx(self.conn, FxRate(fx_date, D("1.12"), "ECB"), t0)
@@ -318,7 +319,7 @@ class Monitor:
         asks = {"ledger_index": ledger, "validated": True, "offers": [{"TakerGets": str(size * DROPS), "TakerPays": rl(ask * size)}]}
         pool = None if amm_price is None else Amm(ledger, "rAmm", D(1000), D(1000) * D(amm_price), D(amm_price), D("0.5"))
         store.record_snapshot(self.conn, self.run, "wss://testnet.xrpl-labs.com/", ledger, t - timedelta(seconds=1), t, "top",
-                              xbook.parse_book([bids], [asks], RLUSD), pool)
+                              xbook.parse_book([bids], [asks], RLUSD), pool, self.exclude)
 
 
 TESTNET_HOSTS = {"testnet.xrpl-labs.com", "clio.altnet.rippletest.net"}

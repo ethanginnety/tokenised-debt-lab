@@ -128,7 +128,7 @@ Test funds with no value, on testnet only. Do steps 1-4 yourself; Claude never s
 4. **A second account, for the crossing helper.** Repeat steps 1-3 and save its secret as `C:\debtlab-secrets\xrpl-testnet-taker.key`, locked the same way.
 5. **Start the testnet monitor,** in its own window. It doesn't touch the mainnet monitor or its data:
    ```
-   python scripts/xrpl_monitor.py run --network testnet --db C:\debtlab-data\xrpl_testnet.sqlite3
+   python scripts/xrpl_monitor.py run --network testnet --db C:\debtlab-data\xrpl_testnet.sqlite3 --exclude-account rBOT
    ```
 6. **Tell Claude the two `r` addresses, nothing else,** so the balances can be read back.
 7. **After your go, start the bot,** in another window. It starts paused and places nothing yet. It refuses to start if the account also exists on mainnet.

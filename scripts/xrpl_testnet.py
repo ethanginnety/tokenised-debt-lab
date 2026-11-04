@@ -35,6 +35,7 @@ from debtlab.xrpl_market.live.alongside import Alongside, open_testnet_paper  # 
 from debtlab.xrpl_market.live.bot import LiveBot  # noqa: E402
 from debtlab.xrpl_market.live.guards import KeyFileRefused, MainnetBlocked  # noqa: E402
 from debtlab.xrpl_market.live.ledger import TestnetLedger, exists_on_mainnet  # noqa: E402
+from debtlab.xrpl_market.live.risk import own_offers_problem  # noqa: E402
 from debtlab.xrpl_market.live.signer import Submitter, open_cancel_signer, open_signer  # noqa: E402
 from debtlab.xrpl_market.live.venue import LiveVenue  # noqa: E402
 from debtlab.xrpl_market.monitor import KeepAwake  # noqa: E402
@@ -110,6 +111,8 @@ def status(conn, monitor_db: Path, cfg: dict) -> str:
         m = read_market(open_readonly(monitor_db), now(), cfg)
         mid = m.mid
         problems = m.problems(ldb.limits(conn).get("max_data_age_seconds", Decimal(30)))
+        if (why := own_offers_problem(m, a["address"])):
+            problems.append(why)
         lines.append("market: " + (f"mid {m.mid}" if m.mid else "no price") + ("; " + "; ".join(problems) if problems else ""))
     p = book.pnl(conn, mid if mid is not None else book.last_mid(conn))
     lines.append(f"P&L, RLUSD: total {p.total} = spread {p.spread} + fees {p.fees} + inventory {p.inventory}; "

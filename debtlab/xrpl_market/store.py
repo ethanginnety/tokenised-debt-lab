@@ -28,6 +28,7 @@ from debtlab.xrpl_market.trades import Trade
 from debtlab.xrpl_market.verify import IssuerSettings, NetworkCosts
 
 MIGRATIONS = Path(__file__).resolve().parent.parent.parent / "migrations" / "xrpl"
+RIPPLE_EPOCH = 946_684_800    # 2000-01-01 UTC, in Unix seconds
 FRESH_SECONDS = 30            # the brief's live rule: data older than 30 s is stale
 LEVELS_KEPT = 10              # top levels stored per side
 THIN_AFTER = timedelta(days=3)
@@ -147,9 +148,10 @@ def event(conn: sqlite3.Connection, at: datetime, kind: str, detail: str) -> Non
 # --- snapshots and trades --------------------------------------------------------------
 
 def record_snapshot(conn: sqlite3.Connection, run_id: int, endpoint: str, ledger_index: int, close_time: datetime,
-                    received_at: datetime, kind: str, b: book.Book, pool) -> book.Stats:
+                    received_at: datetime, kind: str, b: book.Book, pool, exclude: str | None = None) -> book.Stats:
     """Store the book at one ledger, close any outage, and record a gap if ledgers were missed."""
     st = book.stats(b)
+    ref = book.reference(b, pool, int(close_time.timestamp()) - RIPPLE_EPOCH, exclude)
     levels = {"bids": [[str(lv.price), str(lv.xrp)] for lv in b.bids[:LEVELS_KEPT]],
               "asks": [[str(lv.price), str(lv.xrp)] for lv in b.asks[:LEVELS_KEPT]]}
     depth = [{k: (str(v) if isinstance(v, Decimal) else v) for k, v in asdict(d).items()} for d in st.depth]
@@ -169,13 +171,15 @@ def record_snapshot(conn: sqlite3.Connection, run_id: int, endpoint: str, ledger
         conn.execute(
             "INSERT OR IGNORE INTO xrpl_snapshots(ledger_index, run_id, endpoint, close_time, received_at, kind, valid,"
             " reasons, best_bid, best_ask, mid, spread_bp, bid_offers, ask_offers, dropped, bids_complete,"
-            " asks_complete, depth_json, levels_json, amm_xrp, amm_rlusd, amm_fee_pct)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " asks_complete, depth_json, levels_json, amm_xrp, amm_rlusd, amm_fee_pct, ref_bid, ref_ask, ref_mid,"
+            " ref_reasons, excluded_account, own_left_out, expired_left_out)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (ledger_index, run_id, endpoint, iso(close_time), iso(received_at), kind, int(st.valid),
              json.dumps(list(st.reasons)), s(st.best_bid), s(st.best_ask), s(st.mid), s(st.spread_bp),
              len(b.bids), len(b.asks), b.dropped, int(b.bids_complete), int(b.asks_complete),
              json.dumps(depth), json.dumps(levels),
-             s(pool.xrp if pool else None), s(pool.rlusd if pool else None), s(pool.trading_fee_pct if pool else None)))
+             s(pool.xrp if pool else None), s(pool.rlusd if pool else None), s(pool.trading_fee_pct if pool else None),
+             s(ref.bid), s(ref.ask), s(ref.mid), json.dumps(list(ref.reasons)), exclude, ref.own_left_out, ref.expired_left_out))
         _close_open(conn, received_at)
         _heartbeat(conn, run_id, received_at, ledger_index)
     return st

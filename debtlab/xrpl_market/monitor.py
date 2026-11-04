@@ -46,8 +46,9 @@ class KeepAwake:
 
 class Monitor:
     def __init__(self, conn, cfg: dict, *, until: datetime | None = None, save_raw: Path | None = None,
-                 out=print, fetch_fx=fx.fetch_ecb_eurusd):
+                 out=print, fetch_fx=fx.fetch_ecb_eurusd, exclude: str | None = None):
         self.conn, self.cfg, self.until, self.out = conn, cfg, until, out
+        self.exclude = exclude
         self.fetch_fx = fetch_fx
         self.m = cfg["monitor"]
         r = cfg["rlusd"]
@@ -154,7 +155,7 @@ class Monitor:
             return False
         b = book.parse_book([bids], [asks], self.rlusd_hex, page_limit=limit)
         st = store.record_snapshot(self.conn, self.run_id, url, li, close, now(), "deep" if deep else "top", b,
-                                   verify.amm(pool, self.rlusd_hex))
+                                   verify.amm(pool, self.rlusd_hex), self.exclude)
         self.ledgers += 1
         if li % self.m["issuer_every_ledgers"] == 0:
             await self.check_issuer(ws, li)

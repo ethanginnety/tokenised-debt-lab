@@ -14,7 +14,7 @@ from debtlab.xrpl_market.live import db as ldb
 from debtlab.xrpl_market.live.bot import LiveBot, Want
 from debtlab.xrpl_market.live.guards import MainnetBlocked
 from debtlab.xrpl_market.live.ledger import TestnetLedger
-from debtlab.xrpl_market.live.risk import LiveMark, LiveRiskCheck
+from debtlab.xrpl_market.live.risk import AmmQuotes, LiveMark, LiveRiskCheck, amm_prices
 from debtlab.xrpl_market.live.signer import Submitter, open_signer
 from debtlab.xrpl_market.live.venue import LiveOrder, LiveVenue
 from debtlab.xrpl_market.paper import market as mk
@@ -401,7 +401,7 @@ def check(w, side="buy", price="0.0799", size="100", issuer=ISSUER, amm="0.08", 
     h = type(h)(h.index, h.close_time, resolution, h.close_flags)
     st = w.ledger.account(ADDRESS, h.index)
     return w.bot.risk.check(w.conn, LiveOrder(oid, "XRP/RLUSD", side, D(price), D(size), issuer=issuer),
-                            {"XRP/RLUSD": LiveMark(m, h, st, None if amm is None else D(amm))}, now, replacing=replacing)
+                            {"XRP/RLUSD": LiveMark(m, h, st, None if amm is None else AmmQuotes(D(amm), D(amm)))}, now, replacing=replacing)
 
 
 @pytest.fixture
@@ -431,9 +431,32 @@ def test_each_limit_refuses(quiet):
 
 def test_the_margin_against_taking_covers_the_book_and_the_amm(quiet):
     assert any("best offer" in r for r in check(quiet, price="0.08049", size="100"))
-    assert any("AMM price" in r for r in check(quiet, price="0.0799", amm="0.0798"))
+    assert any("AMM's price" in r for r in check(quiet, price="0.0799", amm="0.0798"))
     assert any("best bid" in r for r in check(quiet, side="sell", price="0.0795"))
-    assert any("AMM price" in r for r in check(quiet, side="sell", price="0.0801", amm="0.0802"))
+    assert any("AMM's price" in r for r in check(quiet, side="sell", price="0.0801", amm="0.0802"))
+
+
+def test_the_amm_margin_is_against_what_it_really_charges_with_its_fee(quiet):
+    """The pool is at 0.08 with a 0.5% fee, so it pays 0.0796 and charges 0.0804: nothing between trades with it."""
+    now = quiet.t + timedelta(seconds=0.5)
+    amm = amm_prices(quiet.bot.mon, now)
+    assert amm == (D("0.0796"), D("0.0804"))
+    m = mk.read_market(quiet.bot.mon, now, CFG)
+    never = quiet.bot.risk._never_take
+    order = lambda side, price: LiveOrder("X", "XRP/RLUSD", side, D(price), D(10), issuer=ISSUER)  # noqa: E731
+    assert never(order("buy", "0.0802"), m, amm) == []             # above the pool's price, below what it charges
+    assert never(order("sell", "0.0798"), m, amm) == []            # below the pool's price, above what it pays
+    assert any("AMM's price" in r for r in never(order("buy", "0.08039"), m, amm))     # inside the 2 bp margin
+    assert any("AMM's price" in r for r in never(order("sell", "0.07961"), m, amm))
+
+
+def test_no_quoting_unless_the_monitor_leaves_our_offers_out(quiet):
+    quiet.want = {"buy": Want(D("0.0799"), D(10)), "sell": None}
+    quiet.mon.exclude = None
+    quiet.step()
+    assert quiet.bot.tick(quiet.t)["placed"] == 0
+    assert any("isn't leaving out" in r for r in check(quiet))
+    assert any("isn't leaving out" in p for p in quiet.bot.tick(quiet.t)["problems"])
 
 
 def test_expired_offers_on_the_ledger_count_towards_the_reserve(quiet):
