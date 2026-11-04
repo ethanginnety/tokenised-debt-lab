@@ -111,7 +111,7 @@ For the live €50 experiment (M8). Claude never touches funds, never sees a see
 5. **Tell Claude the address.** Claude reads it read-only (balance, reserve, trust lines) to confirm the setup. Only the address, nothing else.
 6. **RLUSD trust line.** In the wallet app, add a trust line for currency **RLUSD**, issuer **`rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De`**. Check the issuer character by character: a look-alike, `rLUSDtyk…`, uses the same currency code (XRPL_VERIFICATION.md). It costs 0.2 XRP of reserve.
 7. **Split XRP and RLUSD.** Swap about half the trading amount into RLUSD yourself, in the wallet app (it trades on the same ledger) or by buying RLUSD on the exchange and withdrawing it to the address. Aim for about €25 in each, leaving the 1.6 XRP reserve untouched. Claude will read the balances back.
-8. **Bot key (recommended: a regular key).** In the wallet app, set a **regular key** on the account: a second key pair the bot signs with, while the master secret stays on paper. If the bot's key is ever exposed, you remove it with the master key and the funds stay yours. Put the bot's secret in a file **outside the repository and outside OneDrive**, e.g. `C:\debtlab-secrets\xrpl-bot.key`, readable only by your account (`icacls C:\debtlab-secrets /inheritance:r /grant:r "%USERNAME%:F"`). Never open it in an app that syncs, and never paste it anywhere.
+8. **Bot key (required: a regular key).** In the wallet app, set a **regular key** on the account: a second key pair the bot signs with, while the master secret stays on paper. If the bot's key is ever exposed, you remove it with the master key and the funds stay yours. Put the bot's secret in a file **outside the repository and outside OneDrive**, e.g. `C:\debtlab-secrets\xrpl-bot.key`, readable only by your account (`icacls C:\debtlab-secrets /inheritance:r /grant:r "%USERNAME%:F"`). Never open it in an app that syncs, and never paste it anywhere.
 9. **Stop and tell Claude it's done** (address only). M8's plan and safety tests come next; no order is placed until you approve the first one.
 
 ## M8 testnet run: Ethan's steps
@@ -150,12 +150,12 @@ Test funds with no value, on testnet only. Do steps 1-4 yourself; Claude never s
 
 | Check | How |
 |---|---|
-| A real fill, booked and compared | Copy the bot's bid from `status`, then `python tests/live_testnet/taker.py --key-file C:\debtlab-secrets\xrpl-testnet-taker.key --bot-account rBOT --side sell --price BID --size 5`. Then `status` and `compare`. |
+| A real fill, booked and compared | `python tests/live_testnet/taker.py --key-file C:\debtlab-secrets\xrpl-testnet-taker.key --bot-account rBOT --side sell --size 5`. It reads the bot's live bid itself, retries a miss, and says whether the fill hit the bot, another offer or the AMM. Then `status` and `compare`. |
 | A fill that takes liquidity stops it | Not forced: the margin should prevent it. Covered by tests, and the bot pauses if it ever happens. |
 | Kill leaves zero offers | `kill`, then check the address on a testnet explorer. |
 | Stale data | Stop the testnet monitor. After 30 s the bot cancels and stops quoting; it comes back when the monitor does. |
 | Dropped connection | Turn Wi-Fi off, wait a minute, turn it on. Offers expire by themselves meanwhile. (The bot's own reads and sends move between `testnet.xrpl-labs.com` and `clio.altnet.rippletest.net` if only one is lost. The monitor uses only the first, so losing that one still stops quoting.) |
-| Each limit | `limit max_order_eur 1 --reason test` refuses orders; `limit max_daily_loss_eur 0.01 --reason test` pauses. Put them back the same way. |
+| Each limit | `limit max_order_eur 1 --reason test` refuses orders. The daily-loss test is being redone with a small resting taker offer, after the fixes from the first run. Put any limit you change back **before** `resume`. |
 | Restart cleans up | Close the bot's window without Ctrl+C, start it again, and check it's paused with nothing left. |
 
 ## RLUSD/XRP monitor (M7, read-only)

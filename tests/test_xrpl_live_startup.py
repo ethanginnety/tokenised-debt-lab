@@ -240,3 +240,44 @@ def test_with_both_endpoints_down_kill_still_turns_on_and_says_so(tmp_path, monk
     monkeypatch.setattr(controls, "kill", partial(controls.kill, timeout=0.05))
     assert r.cli("kill", "--key-file", str(r.key), "--reason", "test") == 1
     assert ldb.state(r.live())["state"] == "killed" and "kill switch ON" in capsys.readouterr().out
+
+
+def _status_lines(tmp_path, monkeypatch, at):
+    monkeypatch.setattr(xrpl_testnet, "now", lambda: at)
+    conn = ldb.open_db(tmp_path / "status.sqlite3")
+    ldb.seed_limits(conn, CFG, at)
+    return conn, lambda: xrpl_testnet.status(conn, tmp_path / "no-monitor.sqlite3", CFG).splitlines()
+
+
+def test_status_before_the_bot_has_ever_run(tmp_path, monkeypatch):
+    _, lines = _status_lines(tmp_path, monkeypatch, utcnow())
+    assert lines()[1] == "NOT RUNNING: it has never run"
+
+
+def test_status_says_when_the_heartbeat_has_gone_quiet(tmp_path, monkeypatch):
+    t = utcnow().replace(microsecond=0)      # stored to the millisecond, so a whole second stays exact
+    conn, lines = _status_lines(tmp_path, monkeypatch, t)
+    ldb.start_run(conn, t - timedelta(seconds=30), 30)
+    first = lines()[1]
+    assert first.startswith("last alive: ") and first.endswith("(30 s ago)")         # exactly at the limit: still alive
+    monkeypatch.setattr(xrpl_testnet, "now", lambda: t + timedelta(seconds=1))
+    first = lines()[1]
+    assert first.startswith("NOT RUNNING: last alive ") and "31 s ago" in first
+
+
+def test_status_says_not_running_straight_after_a_clean_stop(tmp_path, monkeypatch):
+    t = utcnow()
+    conn, lines = _status_lines(tmp_path, monkeypatch, t)
+    run, _ = ldb.start_run(conn, t - timedelta(seconds=2), 30)
+    ldb.stop_run(conn, run, t - timedelta(seconds=1), "stopped by user")
+    assert lines()[1].startswith("NOT RUNNING: stopped at ") and "stopped by user" in lines()[1]
+
+
+def test_status_shows_not_running_above_a_state_of_running(tmp_path, monkeypatch):
+    """A crash or lost power leaves the state at `running`, which alone would read as quoting."""
+    t = utcnow()
+    conn, lines = _status_lines(tmp_path, monkeypatch, t)
+    ldb.start_run(conn, t - timedelta(hours=1), 30)
+    controls.resume(conn, "Ethan", "test", t - timedelta(hours=1))
+    out = lines()
+    assert out[1].startswith("NOT RUNNING") and out[2].startswith("state: running")

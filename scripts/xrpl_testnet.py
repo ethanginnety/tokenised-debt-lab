@@ -47,6 +47,7 @@ from debtlab.xrpl_market.view import open_readonly  # noqa: E402
 DEFAULT_DB = ROOT / "data" / "xrpl_live.sqlite3"
 DEFAULT_PAPER_DB = ROOT / "data" / "xrpl_testnet_paper.sqlite3"
 DEFAULT_MONITOR_DB = ROOT / "data" / "xrpl_testnet.sqlite3"
+NOT_RUNNING_AFTER_SECONDS = 30      # the same test the dashboard uses for the monitor
 
 
 def now() -> datetime:
@@ -78,9 +79,24 @@ def fee_drops(monitor_db: Path, cfg: dict) -> int:
         return fallback
 
 
+def liveness(conn, at: datetime) -> str:
+    """Whether the bot's process is actually running. The state alone can't say: it stays `running` after a crash."""
+    hb = conn.execute("SELECT at FROM live_heartbeat WHERE id = 1").fetchone()
+    if hb is None:
+        return "NOT RUNNING: it has never run"
+    run = conn.execute("SELECT stopped_at, stop_reason FROM live_runs ORDER BY id DESC LIMIT 1").fetchone()
+    if run and run["stopped_at"]:
+        return f"NOT RUNNING: stopped at {run['stopped_at']} ({run['stop_reason']})"
+    age = (at - datetime.fromisoformat(hb["at"])).total_seconds()
+    if age > NOT_RUNNING_AFTER_SECONDS:
+        return (f"NOT RUNNING: last alive {hb['at']}, {age:.0f} s ago, with no clean stop. "
+                "Nothing is quoting or cancelling; offers it left expire by themselves.")
+    return f"last alive: {hb['at']} ({age:.0f} s ago)"
+
+
 def status(conn, monitor_db: Path, cfg: dict) -> str:
     st = ldb.state(conn)
-    lines = [f"{LABEL}", f"state: {st['state']} ({st['reason']})"]
+    lines = [f"{LABEL}", liveness(conn, now()), f"state: {st['state']} ({st['reason']})"]
     a = book.account(conn)
     if not a:
         return "\n".join(lines + ["account: not opened yet"])
@@ -89,8 +105,6 @@ def status(conn, monitor_db: Path, cfg: dict) -> str:
     aside_x, aside_r = book.set_aside(conn)
     if aside_x or aside_r:
         lines.append(f"set aside, over the budget and not used: {aside_x} XRP, {aside_r} RLUSD")
-    hb = conn.execute("SELECT at FROM live_heartbeat WHERE id = 1").fetchone()
-    lines.append(f"last alive: {hb['at'] if hb else 'never'}")
     mid = None
     if monitor_db.exists():
         m = read_market(open_readonly(monitor_db), now(), cfg)
