@@ -884,3 +884,83 @@ def test_kill_doesnt_book_from_an_endpoint_that_is_behind(w):
     with pytest.raises(controls.XrplReadError, match="behind"):
         controls.read_ledger(w.conn, w.ledger, w.venue, CFG, None, 10, w.t)
     assert book.cursor(w.conn) == cursor
+
+
+# --- what the bot's window says ---------------------------------------------------------------
+
+def _said(w, text):
+    return [line for line in w.lines if text in line]
+
+
+def test_a_daily_loss_prints_once_however_long_it_lasts_and_as_it_drifts(w):
+    """The first run printed it dozens of times in a row."""
+    w.running()
+    w.step(1, bid="0.0595", ask="0.0605", amm_price="0.06")
+    assert w.state() == "paused" and len(_said(w, "daily loss")) == 1
+    for price in ("0.058", "0.057", "0.056"):
+        w.step(2, bid=str(D(price) - D("0.0005")), ask=str(D(price) + D("0.0005")), amm_price=price)
+    assert len(_said(w, "daily loss")) == 1
+
+
+def test_a_pause_and_resume_that_breaches_again_prints_again(w):
+    w.running()
+    w.step(1, bid="0.0595", ask="0.0605", amm_price="0.06")
+    controls.resume(w.conn, "Ethan", "test", w.t)
+    w.step(1, bid="0.0595", ask="0.0605", amm_price="0.06")
+    assert w.state() == "paused" and len(_said(w, "daily loss")) == 2
+
+
+def test_a_different_problem_during_a_pause_still_prints_once(w):
+    w.running()
+    w.step(1, bid="0.0595", ask="0.0605", amm_price="0.06")
+    w.bot._pause("funds moved from outside the bot (transaction ABC: 1 XRP, 0 RLUSD): look, then resume", w.t)
+    w.bot._pause("funds moved from outside the bot (transaction ABC: 1 XRP, 0 RLUSD): look, then resume", w.t)
+    w.bot._pause("a fill took liquidity (transaction DEF): the rule is never to intend to take, and to stop if it does", w.t)
+    assert len(_said(w, "funds moved")) == 1 and len(_said(w, "took liquidity")) == 1 and len(_said(w, "daily loss")) == 1
+
+
+def test_a_state_change_from_another_window_prints_once(w):
+    w.running()
+    controls.pause(w.conn, "Ethan", "lunch", w.t)
+    w.step(3)
+    assert len(_said(w, "state is now paused (lunch)")) == 1
+    controls.resume(w.conn, "Ethan", "back", w.t)
+    w.step(3)
+    assert len(_said(w, "state is now running (back)")) == 1
+
+
+def test_the_bots_own_pause_isnt_printed_twice(w):
+    w.running()
+    w.step(1, bid="0.0595", ask="0.0605", amm_price="0.06")
+    w.step(3, bid="0.0595", ask="0.0605", amm_price="0.06")
+    assert _said(w, "state is now paused") == []
+
+
+def test_stale_data_says_it_stopped_and_came_back_once_each(w):
+    w.running()
+    w.t += timedelta(seconds=31)
+    for _ in range(3):
+        w.net.close_ledger()
+        w.t += timedelta(seconds=4)
+        w.bot.tick(w.t)
+    assert len(_said(w, "stopped quoting: data")) == 1 and _said(w, "quoting again") == []
+    w.step(3)
+    assert len(_said(w, "stopped quoting")) == 1 and len(_said(w, "quoting again")) == 1
+
+
+def test_a_lost_connection_says_when_reads_are_back(w, monkeypatch):
+    from debtlab.xrpl_market.readonly import XrplReadError
+    w.running()
+
+    def down():
+        raise XrplReadError("unreachable")
+
+    real = w.ledger.client.validated_index
+    monkeypatch.setattr(w.ledger.client, "validated_index", down)
+    w.t += timedelta(seconds=1)
+    w.bot.tick(w.t)
+    w.bot.tick(w.t)
+    assert len(_said(w, "ledger read failed")) == 1
+    monkeypatch.setattr(w.ledger.client, "validated_index", real)
+    w.step(2)
+    assert len(_said(w, "ledger reads are back")) == 1

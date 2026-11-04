@@ -20,6 +20,7 @@ A server reporting another network turns on the kill switch and stops: nothing m
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
 from collections.abc import Callable
@@ -76,6 +77,9 @@ class LiveBot:
         self.refusals: dict = {}
         self.run_id: int | None = None
         self.down_since_cancel = False
+        self.said: set[str] = set()      # problems already printed since the state last changed
+        self.seen_state: str | None = None
+        self.quoting_stopped = False
 
     # --- reading -------------------------------------------------------------------------
 
@@ -104,6 +108,7 @@ class LiveBot:
             if ldb.state(self.conn)["state"] == "running":
                 ldb.set_state(self.conn, "paused", "bot", "restarted: quoting needs a resume", now)
             ldb.event(self.conn, now, "run_started", {"run": self.run_id, "seconds_since_last_alive": gap, "label": LABEL})
+        self.seen_state = ldb.state(self.conn)["state"]
         m, _ = self._market(now)
         read = controls.read_ledger(self.conn, self.ledger, self.venue, self.cfg, m.mid, self._fee_drops(m), now)
         self._stops(read, m, now)
@@ -136,10 +141,36 @@ class LiveBot:
     # --- the stops -----------------------------------------------------------------------
 
     def _pause(self, why: str, now: datetime) -> None:
+        """Pause, and print it once: when the state changes, or for a kind of problem not yet printed since. The
+        checks run every tick, so a pause that holds would otherwise print about once a second. Figures don't make
+        a problem a new one, or a daily loss drifting with the mid would keep printing."""
         with ldb.tx(self.conn):
-            if ldb.state(self.conn)["state"] == "running":
+            changed = ldb.state(self.conn)["state"] == "running"
+            if changed:
                 ldb.set_state(self.conn, "paused", "bot", why, now)
-        self.out(f"{LABEL}: {why}")
+        kind = re.sub(r"\d+(\.\d+)?", "#", why)
+        if changed:
+            self.said.clear()
+            self.seen_state = "paused"
+        if changed or kind not in self.said:
+            self.said.add(kind)
+            self.out(f"{LABEL}: {why}")
+
+    def _say_state_changes(self, st: dict) -> None:
+        """A `resume`, `pause`, `kill` or `reset` from another window, once."""
+        if st["state"] != self.seen_state:
+            self.seen_state = st["state"]
+            self.said.clear()
+            self.out(f"{LABEL}: state is now {st['state']} ({st['reason']})")
+
+    def _say_quoting(self, problems: list[str]) -> None:
+        """Stale data and the like stop quoting without changing the state, so say so: once each way."""
+        if problems and not self.quoting_stopped:
+            self.quoting_stopped = True
+            self.out(f"{LABEL}: stopped quoting: {'; '.join(problems)}")
+        elif not problems and self.quoting_stopped:
+            self.quoting_stopped = False
+            self.out(f"{LABEL}: quoting again")
 
     def _stops(self, read: controls.Read, m: mk.Market, now: datetime) -> None:
         if read.problems:
@@ -174,6 +205,8 @@ class LiveBot:
             out["cancels"] = self._cancel_once_when_down(out["problems"][0], now)
             return out
         out["new_ledger"], out["ledger"] = new, read.header.index
+        if self.down_since_cancel:
+            self.out(f"{LABEL}: ledger reads are back")
         self.down_since_cancel = False
         if new:
             self._stops(read, m, now)
@@ -193,9 +226,11 @@ class LiveBot:
             problems.append(f"close-time budget doesn't hold (resolution {h.resolution} s, flags {h.close_flags})")
         out["problems"] = problems
         st = ldb.state(self.conn)
+        self._say_state_changes(st)
         if st["state"] != "running":
             out["cancels"] = controls.cancel_offers(self.conn, self.venue, read, f"{st['state']}: {st['reason']}", now, include_expired=True)
             return out
+        self._say_quoting(problems)
         if not book.account(self.conn) and not problems and not self._open(read, m, now):
             return out
         if problems:

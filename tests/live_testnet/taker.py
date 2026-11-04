@@ -10,6 +10,10 @@ and Ethan runs it himself during the testnet run, with a SECOND testnet key:
 immediate-or-cancel, so nothing rests. Every guard the signer uses applies, and the key is
 never printed.
 
+With --rest it does the opposite: a small passive offer stays on the book at --price until it
+expires after --minutes, as an outside quote the bot's prices can move on. That's how the daily
+loss limit is tested. It's refused if it would trade with the bot's live offer.
+
 Without --price it reads the bot's offer from the latest validated ledger, skips one that has
 already expired, prices one tick through the offer's exact rate, and sends straight away. A
 bot offer is often live for only one ledger, so a miss is tried again on a later offer, up to
@@ -47,13 +51,15 @@ FEE_DROPS = "12"
 LEDGERS_TO_LAND = 2      # past the last validated ledger; a live offer rarely lasts longer
 WAIT_FOR_OFFER_SECONDS = 60
 POLL_SECONDS = 0.5
+MAX_REST_MINUTES = 60
 
 
 class Refused(Exception):
     pass
 
 
-def build(seed: str, cfg: dict, side: str, price: Decimal, size: Decimal, sequence: int, last_ledger: int, bot_account: str) -> Signed:
+def build(seed: str, cfg: dict, side: str, price: Decimal, size: Decimal, sequence: int, last_ledger: int, bot_account: str,
+          expiration: int | None = None) -> Signed:
     guards.check_config(cfg)
     if size <= 0 or size > MAX_XRP:
         raise Refused(f"size {size} XRP: between 0 and {MAX_XRP} only")
@@ -66,8 +72,9 @@ def build(seed: str, cfg: dict, side: str, price: Decimal, size: Decimal, sequen
                                  value=format((size * price).normalize(), "f"))
     xrp = str(int(size * DROPS))
     gets, pays = (token, xrp) if side == "buy" else (xrp, token)
+    flag = OfferCreateFlag.TF_IMMEDIATE_OR_CANCEL if expiration is None else OfferCreateFlag.TF_PASSIVE
     tx = OfferCreate(account=wallet.address, sequence=sequence, fee=FEE_DROPS, last_ledger_sequence=last_ledger,
-                     flags=OfferCreateFlag.TF_IMMEDIATE_OR_CANCEL, taker_gets=gets, taker_pays=pays)
+                     flags=flag, taker_gets=gets, taker_pays=pays, expiration=expiration)
     s = sign(tx, wallet)
     return Signed(s.blob(), s.get_hash(), "OfferCreate", sequence, last_ledger)
 
@@ -213,6 +220,35 @@ def run(seed: str, cfg: dict, ledger: TestnetLedger, submit: Callable[[Signed], 
     return 1
 
 
+def rest(seed: str, cfg: dict, ledger: TestnetLedger, submit: Callable[[Signed], dict], address: str, side: str,
+         size: Decimal, bot_account: str, price: Decimal, minutes: int, sleep: Callable[[float], None] = time.sleep) -> int:
+    """Leave one small passive offer on the book. 0 only if it's resting and traded with nothing."""
+    h = ledger.latest()
+    want = "buy" if side == "sell" else "sell"
+    for o in ledger.account(bot_account, h.index).offers:
+        if o.side == want and (o.expiration is None or o.expiration > h.close_time):
+            rate = o.rlusd / o.xrp
+            if (side == "sell" and price <= rate) or (side == "buy" and price >= rate):
+                print(f"TESTNET: refused: {side} at {price} would trade with the bot's live offer at {rate:.9f}")
+                return 1
+    last = h.index + LEDGERS_TO_LAND + 2
+    expires = h.close_time + minutes * 60
+    signed = build(seed, cfg, side, price, size, ledger.account(address, h.index).sequence, last, bot_account, expires)
+    answer = submit(signed)
+    print(f"TESTNET: resting {side} {size} XRP at {price} from {address} for {minutes} min: first answer "
+          f"{answer.get('engine_result')}, transaction {signed.hash}")
+    outcome = final_outcome(ledger, signed.hash, last, bot_account, sleep)
+    if outcome is None:
+        print("TESTNET: it never reached a validated ledger, so nothing happened")
+        return 1
+    print("\n".join("  " + line for line in describe(outcome, bot_account)))
+    if outcome.result != "tesSUCCESS" or outcome.ours or outcome.others or outcome.amm_xrp:
+        print("TESTNET: it isn't simply resting: look at the result above.")
+        return 1
+    print(f"TESTNET: resting. It expires by itself at ledger time {expires}.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--key-file", type=Path, required=True)
@@ -221,7 +257,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--price", type=Decimal, help="a fixed price, sent once; without it, read the bot's offer")
     ap.add_argument("--size", type=Decimal, required=True)
     ap.add_argument("--attempts", type=int, default=6)
+    ap.add_argument("--rest", action="store_true", help="leave a passive offer on the book at --price instead of taking")
+    ap.add_argument("--minutes", type=int, default=10, help="with --rest: when it expires")
     args = ap.parse_args(argv)
+    if args.rest and args.price is None:
+        ap.error("--rest needs --price")
+    if args.rest and not 1 <= args.minutes <= MAX_REST_MINUTES:
+        ap.error(f"--minutes must be 1 to {MAX_REST_MINUTES}")
     cfg = load_testnet_config()
     guards.check_config(cfg)
     path = guards.check_key_path(args.key_file, ROOT)
@@ -231,6 +273,8 @@ def main(argv: list[str] | None = None) -> int:
     ledger = TestnetLedger(cfg)
     sub = Submitter(cfg["endpoints"]["websocket"][0])
     try:
+        if args.rest:
+            return rest(seed, cfg, ledger, sub.submit, address, args.side, args.size, args.bot_account, args.price, args.minutes)
         return run(seed, cfg, ledger, sub.submit, address, args.side, args.size, args.bot_account, args.price, args.attempts)
     except SubmitFailed as e:
         print(f"TESTNET: {e}. Not resent. Check the taker's account on a testnet explorer before trying again.")

@@ -154,9 +154,12 @@ Test funds with no value, on testnet only. Do steps 1-4 yourself; Claude never s
 | A fill that takes liquidity stops it | Not forced: the margin should prevent it. Covered by tests, and the bot pauses if it ever happens. |
 | Kill leaves zero offers | `kill`, then check the address on a testnet explorer. |
 | Offers stay live | Read back over the run: a live bid in at least 95% of ledgers while the bot is quoting. Claude measures it from the ledger. |
-| Stale data | Stop the testnet monitor. After 30 s the bot cancels and stops quoting; it comes back when the monitor does. |
+| Stale data | With the bot quoting, stop the testnet monitor. After 30 s the bot's window says `stopped quoting: data …`, it cancels and the state stays `running`. Start the monitor again and it says `quoting again`, with no `resume`. |
 | Dropped connection | Turn Wi-Fi off, wait a minute, turn it on. Offers expire by themselves meanwhile. (The bot's own reads and sends move between `testnet.xrpl-labs.com` and `clio.altnet.rippletest.net` if only one is lost. The monitor uses only the first, so losing that one still stops quoting.) |
-| Each limit | `limit max_order_eur 1 --reason test` refuses orders. The daily-loss test is being redone with a small resting taker offer, after the fixes from the first run. Put any limit you change back **before** `resume`. |
+| Order limit | `limit max_order_eur 1 --reason test` refuses orders. Put it back with `limit max_order_eur 10`. |
+| Open-order limit | `limit max_open_orders 1 --reason test` lets only one side rest. Put it back with `limit max_open_orders 2`. |
+| Total limit | `limit max_total_eur 1 --reason test` refuses orders. Put it back with `limit max_total_eur 50`. |
+| Daily loss | `limit max_daily_loss_eur 0 --reason test`, then `python tests/live_testnet/taker.py --key-file C:\debtlab-secrets\xrpl-testnet-taker.key --bot-account rBOT --side sell --size 1 --rest --price PRICE --minutes 10`, with Claude working out PRICE from the book. The offer pulls the mid down, the day's P&L goes to zero or below, and the bot pauses, printing it once. Put the limit back with `limit max_daily_loss_eur 5` **before** `resume`. |
 | Restart cleans up | Close the bot's window without Ctrl+C, start it again, and check it's paused with nothing left. |
 
 ## RLUSD/XRP monitor (M7, read-only)

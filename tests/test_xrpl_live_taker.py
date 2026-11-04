@@ -218,3 +218,46 @@ def test_a_transaction_that_never_lands_counts_as_nothing_happening(capsys):
     w = World([(bid(exp=10_000),)], [None, None, None, None, None, HIT])
     assert run(w, attempts=1) == 1
     assert "never reached a validated ledger" in capsys.readouterr().out
+
+
+# --- a resting offer, for the daily-loss test --------------------------------------------------
+
+RESTED = {"TransactionResult": "tesSUCCESS", "AffectedNodes": []}
+
+
+def rest(w, price="0.0801", side="sell", minutes=10):
+    return t.rest(SEED, CFG, w, w.submit, TAKER, side, D(1), BOT, D(price), minutes, sleep=w.sleep)
+
+
+def test_a_resting_offer_is_passive_and_expires_by_itself(capsys):
+    w = World([(bid(exp=10_000),)], [RESTED])
+    assert rest(w) == 0
+    tx = decode(w.sent[0].blob)
+    assert tx["Flags"] & 0x00010000 and not tx["Flags"] & 0x00020000      # passive, not immediate-or-cancel
+    assert tx["Expiration"] == w.close + 600
+    assert "resting" in capsys.readouterr().out
+
+
+def test_a_resting_offer_that_would_trade_with_the_bot_is_refused(capsys):
+    w = World([(bid(exp=10_000),)], [])
+    assert rest(w, price="0.0799") == 1 and w.sent == []
+    assert "would trade with the bot's live offer" in capsys.readouterr().out
+    w = World([(ask(exp=10_000),)], [])
+    assert rest(w, price="0.0802", side="buy") == 1 and w.sent == []
+
+
+def test_a_bot_offer_already_expired_doesnt_block_a_resting_offer():
+    w = World([(bid(exp=100),)], [RESTED])
+    assert rest(w, price="0.0799") == 0 and len(w.sent) == 1
+
+
+def test_a_resting_offer_that_traded_isnt_reported_as_resting(capsys):
+    w = World([()], [AMM])
+    assert rest(w) == 1
+    assert "isn't simply resting" in capsys.readouterr().out
+
+
+def test_rest_needs_a_price():
+    import pytest
+    with pytest.raises(SystemExit):
+        t.main(["--key-file", "x", "--bot-account", BOT, "--side", "sell", "--size", "1", "--rest"])
