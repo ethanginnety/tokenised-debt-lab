@@ -10,10 +10,10 @@ Each tick, about once a second:
         holding: cancel everything and quote nothing
     on a new ledger, with nothing unresolved: quote what `quotes` asks for
 
-An offer is replaced when its price changes, or when a later Expiration has become
-possible, so it never lapses while quoting: about once every 10 s. A new offer removes the
-expired one before it in the same transaction, because an expired offer stays on the ledger
-holding reserve until something removes it. It always starts paused,
+An offer is replaced when its price changes, or when little of its life is left, so it never
+lapses while quoting. A new offer removes the one before it in the same transaction, and any
+other expired offer is cancelled, because an expired offer stays on the ledger holding reserve
+until something removes it. It always starts paused,
 and a restart pauses it and cancels what was left, so only Ethan's `resume` starts quoting.
 A server reporting another network turns on the kill switch and stops: nothing more is sent.
 """
@@ -194,12 +194,12 @@ class LiveBot:
         out["problems"] = problems
         st = ldb.state(self.conn)
         if st["state"] != "running":
-            out["cancels"] = controls.cancel_offers(self.conn, self.venue, read, f"{st['state']}: {st['reason']}", now)
+            out["cancels"] = controls.cancel_offers(self.conn, self.venue, read, f"{st['state']}: {st['reason']}", now, include_expired=True)
             return out
         if not book.account(self.conn) and not problems and not self._open(read, m, now):
             return out
         if problems:
-            out["cancels"] = controls.cancel_offers(self.conn, self.venue, read, "safety: " + "; ".join(problems), now)
+            out["cancels"] = controls.cancel_offers(self.conn, self.venue, read, "safety: " + "; ".join(problems), now, include_expired=True)
             return out
         if new and unresolved(self.conn) == 0:
             placed, cancels = self._quote(read, m, amm, now)
@@ -242,7 +242,6 @@ class LiveBot:
     def _quote(self, read: controls.Read, m: mk.Market, amm: AmmQuotes | None, now: datetime) -> tuple[int, int]:
         wants = self.quotes(m, now)
         mark = LiveMark(m, read.header, read.account, amm)
-        expiry = closetimes.expiration_for(read.header.close_time, self.cfg["offer_expiry"])
         placed = cancels = 0
         minimum = D(self.cfg["paper"]["strategy"]["min_order_xrp"])
         for side in ("buy", "sell"):
@@ -253,7 +252,7 @@ class LiveBot:
                 cancels += self._cancel_all(cur, "nothing to quote on this side", now)
                 continue
             if current and D(current["price"]) == want.price and current["paper_order_id"] == want.paper_order_id \
-                    and expiry <= current["expiration"]:
+                    and not closetimes.refresh_due(read.header.close_time, current["expiration"], self.cfg["offer_expiry"]):
                 continue
             replacing = frozenset(o["id"] for o in cur)
             room = affordable(side, want.price, book.within_budget(self.conn, read.account), m, self.cfg,
@@ -274,6 +273,7 @@ class LiveBot:
             self.venue.submit(self.conn, order, now)
             placed += 1
             cancels += self._cancel_all(cur[1:], "more than one order on a side", now)
+        cancels += controls.cancel_expired(self.conn, self.venue, read, "expired, and nothing is replacing it", now)
         return placed, cancels
 
     @staticmethod
@@ -319,7 +319,8 @@ class LiveBot:
             self.out(f"{LABEL}: " + ("no offers on the ledger." if cleared.zero else
                      f"{cleared.remaining} offer(s) still listed; each expires by itself."))
         except Exception as e2:
-            self.out(f"{LABEL}: couldn't finish cancelling ({type(e2).__name__}); each offer expires by itself within 30 s.")
+            self.out(f"{LABEL}: couldn't finish cancelling ({type(e2).__name__}); each offer expires by itself within "
+                     f"{self.cfg['offer_expiry']['max_live_seconds']} s.")
 
     def run(self, until: datetime | None = None, clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
             sleep: Callable[[float], None] = time.sleep) -> str:

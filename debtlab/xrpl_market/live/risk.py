@@ -38,6 +38,7 @@ from debtlab.xrpl_market.store import iso
 
 BP = Decimal(10_000)
 DROP = Decimal("0.000001")
+SELL_LEAVES_ROOM_FOR_OBJECTS = 2   # expired offers awaiting removal raise the reserve; a sell using all spare XRP would refuse the next buy
 
 
 class AmmQuotes(NamedTuple):
@@ -87,7 +88,7 @@ def affordable(side: str, price: Decimal, st: AccountState, m: Market, cfg: dict
             return ZERO
         size = (st.rlusd - rl) / price
     else:
-        size = spare_xrp
+        size = spare_xrp - m.reserve_inc_xrp * SELL_LEAVES_ROOM_FOR_OBJECTS
     return max(size, ZERO).quantize(DROP, rounding=ROUND_FLOOR)
 
 

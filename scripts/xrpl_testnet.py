@@ -207,7 +207,7 @@ def _kill(args, cfg: dict, conn, paper) -> int:
     """The state is committed first, so a running bot stops whatever happens to the key or the network."""
     controls.set_killed(conn, args.by, args.reason, now())
     pcontrols.kill(paper, args.by, args.reason, now(), _market_or_none(args.monitor_db, cfg))
-    print(f"{LABEL}: kill switch ON. Offers can't be replaced, and each expires by itself within 30 s.")
+    print(f"{LABEL}: kill switch ON. Offers can't be replaced, and each expires by itself within {cfg['offer_expiry']['max_live_seconds']} s.")
     try:
         _, submitter, ledger, venue = cancel_parts(args.key_file, cfg)
         r = controls.kill(conn, ledger, venue, cfg, args.by, args.reason, fee_drops(args.monitor_db, cfg), clock=now, sleep=time.sleep)

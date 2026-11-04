@@ -16,12 +16,13 @@
     "websocket": ["wss://testnet.xrpl-labs.com/"]
   },
   "offer_expiry": {
-    "_note": "Expiration rule (closetimes.py). Measured on 4,596 mainnet boundaries, 1-2 Nov 2026; re-measure before any mainnet plan.",
+    "_note": "Expiration rule (closetimes.py). Measured on 4,596 mainnet boundaries, 1-2 Nov 2026; re-measure before any mainnet plan. Limit raised from 30 s to 60 s by Ethan, 4 Nov 2026, after offers were live in 29% of ledgers.",
     "close_time_resolution_seconds": 10,
-    "expiry_ahead_seconds": 15,
+    "expiry_ahead_seconds": 45,
+    "refresh_before_expiry_seconds": 20,
     "last_execution_after_expiry_seconds": "9.39",
     "close_time_ahead_of_receipt_seconds": "2.54",
-    "max_live_seconds": 30
+    "max_live_seconds": 60
   },
   "live": {
     "_note": "How far from the best price and the AMM's price an offer must stay, so it never intends to take (decision C).",

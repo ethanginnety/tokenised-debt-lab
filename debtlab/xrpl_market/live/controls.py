@@ -109,6 +109,20 @@ def cancel_offers(conn: sqlite3.Connection, venue: LiveVenue, read: Read, reason
     return n
 
 
+def cancel_expired(conn: sqlite3.Connection, venue: LiveVenue, read: Read, reason: str, now: datetime) -> int:
+    """Remove expired offers that nothing already under way removes: a side that's refused or has nothing to
+    quote would otherwise leave them listed, holding reserve."""
+    under_way = {r["offer_sequence"] for r in conn.execute(
+        "SELECT offer_sequence FROM live_txs WHERE status = 'pending' AND offer_sequence IS NOT NULL")}
+    gone = {o.sequence for o in read.account.offers if o.expiration is not None and o.expiration <= read.header.close_time}
+    n = 0
+    for seq in sorted(gone - under_way):
+        o = book.order_by_sequence(conn, seq)
+        venue.cancel_offer(conn, seq, reason, now, o["id"] if o else None)
+        n += 1
+    return n
+
+
 @dataclass(frozen=True)
 class Cleared:
     zero: bool          # the ledger shows no offers, and nothing we sent is still unresolved

@@ -131,7 +131,81 @@ def test_offers_are_refreshed_before_they_can_lapse_while_quoting(w):
 def test_an_offer_lives_within_the_budget_on_ledger_time(w):
     w.running()
     for t in w.net.blobs():
-        assert t["Expiration"] - w.net.close_time <= 15
+        assert t["Expiration"] - w.net.close_time <= CFG["offer_expiry"]["expiry_ahead_seconds"]
+
+
+def _creates(w, since=0):
+    return [t for t in w.net.blobs()[since:] if t["TransactionType"] == "OfferCreate"]
+
+
+def test_an_unchanged_price_is_only_replaced_near_expiry(w):
+    """The first run replaced every 10 s and had a live bid in 29% of ledgers."""
+    w.running()
+    n = len(w.net.blobs())
+    start = w.net.close_time
+    w.step(1)
+    assert _creates(w, n) == []                # plenty of life left
+    w.step(60)
+    seconds = w.net.close_time - start
+    per_side = len(_creates(w, n)) / 2
+    assert seconds / 30 <= per_side <= seconds / 15     # every 15-25 s; a 10 s refresh would be twice the top of this
+
+
+def test_a_new_price_is_replaced_at_once(w):
+    w.running()
+    n = len(w.net.blobs())
+    w.want["buy"] = Want(D("0.0798"), D(100))
+    w.step()
+    made = _creates(w, n)
+    assert len(made) == 1 and made[0]["OfferSequence"]
+
+
+def test_both_sides_stay_executable_in_every_ledger(w):
+    w.running()
+    for _ in range(40):
+        w.step()
+        assert len(w.covered()) == 2
+
+
+def test_a_dead_offer_is_removed_even_with_nothing_to_quote_on_its_side(w):
+    """The first run left a sell listed for 90 minutes, because only the next sell would have removed it."""
+    w.running()
+    w.want["sell"] = None
+    for _ in range(20):                        # the bot misses these ledgers, so its offers lapse
+        w.advance()
+    assert any(o.get("expiration", 10**12) <= w.net.close_time for o in w.net.offers.values())
+    w.step(4)
+    assert w.net.offers and all((o.get("expiration") or 10**12) > w.net.close_time for o in w.net.offers.values())
+    assert len(w.net.offers) == 1              # the buy; no dead sell
+
+
+def test_pausing_removes_offers_that_have_already_expired(w):
+    w.running()
+    controls.pause(w.conn, "Ethan", "test", w.t)
+    for _ in range(20):
+        w.advance()
+    w.step(4)
+    assert w.net.offers == {}
+
+
+def test_a_safety_stop_removes_offers_that_have_already_expired(w):
+    w.running()
+    w.mon.exclude = None                       # a problem that stops quoting while the ledger still reads
+    for _ in range(20):
+        w.advance()
+    w.step(4)
+    assert w.net.offers == {} and w.state() == "running"
+
+
+def test_removing_a_dead_offer_isnt_sent_twice(w):
+    w.running()
+    w.want["sell"] = None
+    for _ in range(20):
+        w.advance()
+    n = len(w.net.blobs())
+    w.step(4)
+    cancels = [t["OfferSequence"] for t in w.net.blobs()[n:] if t["TransactionType"] == "OfferCancel"]
+    assert len(cancels) == len(set(cancels))
 
 
 def test_no_offer_is_left_over_after_running_with_the_books_matching(w):
@@ -469,6 +543,21 @@ def test_expired_offers_on_the_ledger_count_towards_the_reserve(quiet):
     assert affordable("sell", D("0.0801"), more, m, CFG, []) == room - D("0.2") * 8
 
 
+def test_a_sell_leaves_room_for_the_buy_when_dead_offers_raise_the_reserve(quiet):
+    """The first run: the sell took nearly all spare XRP, a dead offer raised the reserve, and the buy was
+    refused with `room for 0 XRP` while the account held over 5 RLUSD."""
+    from debtlab.xrpl_market.live.risk import affordable
+    h = quiet.ledger.latest()
+    st = quiet.ledger.account(ADDRESS, h.index)
+    m = mk.read_market(quiet.bot.mon, quiet.t + timedelta(seconds=0.5), CFG)
+    resting = {"side": "buy", "remaining": "1", "price": "0.0799", "status": "open"}
+    size = affordable("sell", D("0.0801"), st, m, CFG, [resting])
+    sell = {"side": "sell", "remaining": str(size), "price": "0.0801", "status": "open"}
+    objects = CFG["paper"]["trust_lines"] + 1 + 1 + 2       # the trust line, this sell, the buy, and two dead offers
+    more = type(st)(st.address, st.ledger_index, st.xrp, st.rlusd, st.sequence, objects, st.has_trust_line, st.offers)
+    assert affordable("buy", D("0.0799"), more, m, CFG, [sell]) > 0
+
+
 def test_funds_come_from_the_ledger(quiet):
     quiet.net.rlusd = D(1)
     quiet.net.payment()           # nothing moved, but it's a new ledger
@@ -496,7 +585,8 @@ def test_a_refused_quote_never_reaches_the_signer_and_the_side_is_cancelled(w):
     w.net.close_ledger()
     for _ in range(4):
         w.step()
-    assert all(int(D(t["TakerPays"]) if isinstance(t["TakerPays"], str) else 0) < 150_000_000 for t in w.net.blobs()[n:])
+    assert all(int(D(t["TakerPays"]) if isinstance(t["TakerPays"], str) else 0) < 150_000_000 for t in _creates(w, n))
+    assert [t for t in w.net.blobs()[n:] if t["TransactionType"] == "OfferCancel"]      # the side is cancelled
     assert w.events("order_refused")[0]["side"] == "buy"
     assert len(w.events("order_refused")) == 1       # the same refusal isn't logged again and again
 

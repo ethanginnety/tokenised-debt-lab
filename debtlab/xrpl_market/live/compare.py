@@ -92,7 +92,7 @@ def render(rows: list[Row], fee: dict) -> str:
         lines += ["", "Totals: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items()))]
     lines += ["", f"Network fees, XRP: live {plain(fee['live'])} ({fee['live_transactions']} transactions), conservative "
                   f"{plain(fee['conservative'])}, optimistic {plain(fee['optimistic'])}.",
-              "Live pays for an offer about every 10 s because offers expire by themselves; paper is charged only when "
+              "Live pays for an offer about every 15-25 s because offers expire by themselves; paper is charged only when "
               "the price moves. M7's paper fees don't include that.",
               "Testnet prices aren't real: this shows the plumbing works, and says nothing about profit."]
     return "\n".join(lines)

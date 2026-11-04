@@ -28,6 +28,12 @@ def expiration_for(close_time: int, cfg: dict) -> int:
     return (int(close_time) + int(cfg["expiry_ahead_seconds"])) // step * step
 
 
+def refresh_due(close_time: int, expiration: int, cfg: dict) -> bool:
+    """Time to replace an offer whose price hasn't changed: little enough of its life is left that its
+    replacement must go now to land first. Replacing sooner only spends fees."""
+    return int(expiration) - int(close_time) <= int(cfg["refresh_before_expiry_seconds"])
+
+
 def worst_case_live_seconds(cfg: dict) -> Decimal:
     """From receiving a ledger to the last moment an offer priced from it can execute, on
     the measured worst cases."""

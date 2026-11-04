@@ -69,12 +69,20 @@ def test_the_budget_stops_holding_on_a_coarser_resolution_or_no_consensus():
 def test_an_expiration_is_a_boundary_ahead_of_the_close_time_and_within_budget(close):
     e = closetimes.expiration_for(close, EXPIRY)
     assert e % 10 == 0
-    assert close + 5 < e <= close + 15
+    assert close + 35 < e <= close + 45
 
 
-def test_the_worst_case_stays_within_30_seconds():
+def test_the_worst_case_stays_within_60_seconds():
     worst = closetimes.worst_case_live_seconds(EXPIRY)
-    assert worst == D("26.93") and worst <= D(EXPIRY["max_live_seconds"])
+    assert worst == D("56.93") and worst <= D(EXPIRY["max_live_seconds"]) == D(60)
+
+
+def test_a_refresh_is_due_only_near_expiry_and_leaves_time_to_land():
+    assert not closetimes.refresh_due(1000, 1021, EXPIRY)
+    assert closetimes.refresh_due(1000, 1020, EXPIRY)
+    assert closetimes.refresh_due(1000, 990, EXPIRY)
+    # a replacement sent when due is still ahead of the old offer by several ledgers
+    assert EXPIRY["refresh_before_expiry_seconds"] >= 3 * 4
 
 
 def test_boundary_offsets_take_the_first_ledger_to_reach_the_boundary():
