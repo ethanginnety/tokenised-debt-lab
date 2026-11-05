@@ -2,6 +2,7 @@
 
 import json
 from datetime import timedelta
+from decimal import ROUND_FLOOR
 from decimal import Decimal as D
 
 import pytest
@@ -556,6 +557,40 @@ def test_a_sell_leaves_room_for_the_buy_when_dead_offers_raise_the_reserve(quiet
     objects = CFG["paper"]["trust_lines"] + 1 + 1 + 2       # the trust line, this sell, the buy, and two dead offers
     more = type(st)(st.address, st.ledger_index, st.xrp, st.rlusd, st.sequence, objects, st.has_trust_line, st.offers)
     assert affordable("buy", D("0.0799"), more, m, CFG, [sell]) > 0
+
+
+def test_a_resting_sell_too_big_for_the_balance_doesnt_refuse_the_bid(quiet):
+    """The rerun, 5 Nov: a fill on the offer being replaced took 2.9 XRP, the replacement still counted its old size,
+    and the bid was cancelled and refused with `room for 0 XRP`. An offer can't take XRP below the reserve anyway."""
+    from debtlab.xrpl_market.live.risk import affordable
+    st = quiet.ledger.account(ADDRESS, quiet.ledger.latest().index)
+    m = mk.read_market(quiet.bot.mon, quiet.t + timedelta(seconds=0.5), CFG)
+    sell = {"side": "sell", "remaining": str(st.xrp + 5), "price": "0.0801", "status": "open"}
+    assert affordable("buy", D("0.0799"), st, m, CFG, [sell]) == (st.rlusd / D("0.0799")).quantize(D("0.000001"), rounding=ROUND_FLOOR)
+
+
+def test_the_bid_stays_when_xrp_leaves_while_a_sell_rests(tmp_path):
+    """The same case through the bot: a fill on the offer being replaced leaves the replacement's size stale."""
+    w = World(tmp_path)
+    w.net.xrp = 102_500_000        # just enough for the 100 XRP sell, with the reserve
+    w.running()
+    while not (new := [o for o in book.open_orders(w.conn) if o["side"] == "sell" and o["status"] == "pending" and o["replaces"]]):
+        w.step()
+    w.net.hit(new[0]["replaces"], "5")
+    w.step(10)
+    assert w.conn.execute("SELECT COUNT(*) FROM live_fills").fetchone()[0] == 1
+    refused = [r["detail"] for r in w.conn.execute("SELECT detail FROM live_events WHERE kind = 'order_refused'")]
+    assert refused == []
+    assert {o["side"] for o in book.open_orders(w.conn)} == {"buy", "sell"}
+
+
+def test_a_bid_short_of_the_reserve_blames_xrp_not_rlusd(quiet):
+    quiet.net.xrp = 1_000_000      # 1 XRP, in drops: under the reserve, with plenty of RLUSD
+    quiet.net.payment()
+    quiet.step()
+    reasons = check(quiet)
+    assert any("not enough XRP for the reserve and fees" in r for r in reasons)
+    assert not any("not enough RLUSD" in r for r in reasons)
 
 
 def test_funds_come_from_the_ledger(quiet):

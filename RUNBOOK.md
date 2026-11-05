@@ -142,7 +142,7 @@ Test funds with no value, on testnet only. Do steps 1-4 yourself; Claude never s
    Quotes appear after about two minutes: the strategy needs 30 price changes first. If the account is worth more than €50, the bot uses €50 of it, in the account's own mix of XRP and RLUSD, and sets the rest aside: `status` shows both. Raising the limit later doesn't release what was set aside.
 8. **Watch it:** `status`, and `compare` for live against paper.
 9. **Stop it at any time:**
-   - `kill --key-file C:\debtlab-secrets\xrpl-testnet.key --reason WHY` cancels from the ledger's own list until none remain, with the bot running or not, and stays on until `reset --reason WHY`. It doesn't need mainnet to answer: starting the bot does, but cancelling doesn't. If it can't reach testnet, each offer still expires by itself within 30 s.
+   - `kill --key-file C:\debtlab-secrets\xrpl-testnet.key --reason WHY` cancels from the ledger's own list until none remain, with the bot running or not, and stays on until `reset --reason WHY`. It doesn't need mainnet to answer: starting the bot does, but cancelling doesn't. If it can't reach testnet, each offer still expires by itself within 60 s.
    - `pause --reason WHY`: a running bot cancels on its next tick.
    - Ctrl+C in the bot's window cancels everything and stops. Starting it again leaves it paused.
 
@@ -159,7 +159,7 @@ Test funds with no value, on testnet only. Do steps 1-4 yourself; Claude never s
 | Order limit | `limit max_order_eur 1 --reason test` refuses orders. Put it back with `limit max_order_eur 10`. |
 | Open-order limit | `limit max_open_orders 1 --reason test` lets only one side rest. Put it back with `limit max_open_orders 2`. |
 | Total limit | `limit max_total_eur 1 --reason test` refuses orders. Put it back with `limit max_total_eur 50`. |
-| Daily loss | `limit max_daily_loss_eur 0 --reason test`, then `python tests/live_testnet/taker.py --key-file C:\debtlab-secrets\xrpl-testnet-taker.key --bot-account rBOT --side sell --size 1 --rest --price PRICE --minutes 10`, with Claude working out PRICE from the book. The offer pulls the mid down, the day's P&L goes to zero or below, and the bot pauses, printing it once. Put the limit back with `limit max_daily_loss_eur 5` **before** `resume`. |
+| Daily loss | `limit max_daily_loss_eur 0.001 --reason test` (not 0: fees take the day's P&L below zero by themselves, which fires it by accident), then `python tests/live_testnet/taker.py --key-file C:\debtlab-secrets\xrpl-testnet-taker.key --bot-account rBOT --side sell --size 1 --rest --price PRICE --minutes 10`, with Claude working out PRICE from the book. The offer pulls the mid down, the day's loss passes the cap, and the bot pauses, printing it once. Put the limit back with `limit max_daily_loss_eur 5` **before** `resume`. |
 | Restart cleans up | Close the bot's window without Ctrl+C, start it again, and check it's paused with nothing left. |
 
 ## RLUSD/XRP monitor (M7, read-only)
@@ -210,4 +210,14 @@ The strategy's values were frozen by Ethan on 5 Nov 2026 (`config/xrpl.json` `pa
 2. Start the monitor, then the paper bot. Quoting needs about two minutes of history after a monitor restart.
 3. Stay with it. If the laptop has to move or close, stop first.
 4. End with Ctrl+C in the paper bot's window, then in the monitor's.
-5. Record the session in `results/`: start and end times (UTC), and the output of both `status` commands. Gaps between sessions stay in the record; never remove them.
+5. Record the session in `results/m7_paper_sessions.txt`: start and end times (UTC), and the output of both `status` commands. Gaps between sessions stay in the record; never remove them.
+
+Each session, from the repository with the virtual environment active, with the mainnet monitor already running:
+
+```
+python scripts/xrpl_paper.py --db C:\debtlab-data\xrpl_paper.sqlite3 --monitor-db C:\debtlab-data\xrpl.sqlite3 run
+python scripts/xrpl_paper.py --db C:\debtlab-data\xrpl_paper.sqlite3 --monitor-db C:\debtlab-data\xrpl.sqlite3 resume --reason "paper session N"
+python scripts/xrpl_paper.py --db C:\debtlab-data\xrpl_paper.sqlite3 --monitor-db C:\debtlab-data\xrpl.sqlite3 status
+```
+
+`run` stays open in its own window and starts paused, every session, so each one needs its own `resume`. Paper `status` doesn't show uptime: Claude works it out after each session from the recorded decisions, counting time with a quote and no gap over 30 s, as the monitor counts its own. The sessions end when those hours reach 24.

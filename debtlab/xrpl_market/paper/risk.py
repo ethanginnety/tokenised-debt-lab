@@ -63,18 +63,24 @@ def others_for(conn: sqlite3.Connection, order: PaperOrder, pending: tuple[Order
     return out
 
 
+def held_back(m: Market, cfg: dict, others: int) -> Decimal:
+    """The XRP an offer on this account needs left alone: the reserve with one more offer, and fees."""
+    return account.reserve(m, cfg, others + 1) + 2 * m.fee_xrp
+
+
 def affordable(conn: sqlite3.Connection, acct: str, side: str, price: Decimal, m: Market, cfg: dict,
                others: list[dict]) -> Decimal:
     """The largest size (XRP, whole drops) the account could have on this side now."""
     xrp, rlusd = account.balances(conn, acct)
     rl, xr, n = committed(others)
-    spare_xrp = xrp - account.reserve(m, cfg, n + 1) - xr - 2 * m.fee_xrp
+    held = held_back(m, cfg, n)
     if side == "buy":
-        if spare_xrp < 0:
+        # As live: a bid spends RLUSD and only needs what's held back, which a resting sell can't take.
+        if xrp < held:
             return Decimal(0)
         size = (rlusd - rl) / price
     else:
-        size = spare_xrp
+        size = xrp - held - xr
     return max(size, Decimal(0)).quantize(DROP, rounding=ROUND_FLOOR)
 
 
@@ -133,9 +139,13 @@ class PaperRiskCheck:
             reasons.append(f"daily loss EUR {-day:.4f} on the {order.account} account has reached the maximum {cap}")
         can = affordable(conn, order.account, order.side, order.price, m, self.cfg, others)
         if order.size > can:
-            what = "RLUSD" if order.side == "buy" else "XRP"
-            reasons.append(f"not enough {what} on the {order.account} account: room for {can} XRP after open orders,"
-                           f" the reserve and fees")
+            xrp, _ = account.balances(conn, order.account)
+            if order.side == "buy" and xrp < (held := held_back(m, self.cfg, len(others))):
+                reasons.append(f"not enough XRP for the reserve and fees on the {order.account} account: {xrp} held, {held} needed")
+            else:
+                what = "RLUSD" if order.side == "buy" else "XRP"
+                reasons.append(f"not enough {what} on the {order.account} account: room for {can} XRP after open orders,"
+                               f" the reserve and fees")
         return reasons
 
     def after_refusal(self, conn: sqlite3.Connection, marks: Mapping[str, Market], now: datetime) -> bool:

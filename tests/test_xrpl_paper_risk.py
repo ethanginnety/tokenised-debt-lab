@@ -61,6 +61,24 @@ def test_the_total(w):
     assert check(w, order("sell", "1.251", "8")) == ["open orders would total EUR 15.0008; the maximum is 15"]
 
 
+def test_a_resting_sell_too_big_for_the_balance_doesnt_refuse_the_bid(w):
+    """As live: a resting offer's size can't eat the reserve, so it never blocks a bid."""
+    xrp, _ = account.balances(w.paper, "conservative")
+    account.journal(w.paper, "conservative", w.at(), None, "fee", -(xrp - D(4)), D(0), D("1.25"), "test")
+    pdb.set_limit(w.paper, "max_daily_loss_eur", D(100), "Ethan", "test", w.at())
+    assert put(w, order("sell", "1.251", "2", oid="s")) == []
+    account.journal(w.paper, "conservative", w.at(), None, "fee", D(-1), D(0), D("1.25"), "test-2")
+    assert check(w, order()) == []
+
+
+def test_a_bid_short_of_the_reserve_blames_xrp_not_rlusd(w):
+    xrp, _ = account.balances(w.paper, "conservative")
+    account.journal(w.paper, "conservative", w.at(), None, "fee", -(xrp - D(1)), D(0), D("1.25"), "test")
+    reasons = check(w, order())
+    assert any("not enough XRP for the reserve and fees on the conservative account" in r for r in reasons)
+    assert not any("not enough RLUSD" in r for r in reasons)
+
+
 def test_daily_loss_refuses_and_pauses(w):
     account.journal(w.paper, "optimistic", w.at(), None, "fee", D(-6), D(0), D("1.25"), "test-loss")   # EUR -6
     rs = check(w, order(acct="optimistic"))

@@ -13,7 +13,8 @@ state come from the live database each time. It assumes the worst: every open or
     whole drops; the RLUSD amount within 15 significant digits
     at most EUR 10 an order, at most 2 open orders, and capital in plus open orders within EUR 50
     the loss today under EUR 5
-    funds on the ledger, within the budget, after every open order fills, keeping the reserve and fees
+    funds on the ledger, within the budget, after every open order fills, keeping the reserve and fees;
+        a resting offer can't take XRP below the reserve, so its size never blocks a bid
 """
 
 from __future__ import annotations
@@ -77,18 +78,25 @@ def others_for(conn: sqlite3.Connection, order_id: str, replacing: frozenset[str
     return [o for o in book.open_orders(conn) if o["id"] != order_id and o["id"] not in replacing and o["sequence"] not in gone]
 
 
+def held_back(st: AccountState, m: Market, cfg: dict, others: list[dict]) -> Decimal:
+    """The XRP an offer on this account needs left alone: the reserve with one more offer, and fees."""
+    # The ledger's own count, if higher: expired offers hold reserve until they're removed.
+    keep = m.reserve_base_xrp + m.reserve_inc_xrp * max(cfg["paper"]["trust_lines"] + len(others) + 1, st.owner_count)
+    return keep + 2 * m.fee_xrp
+
+
 def affordable(side: str, price: Decimal, st: AccountState, m: Market, cfg: dict, others: list[dict]) -> Decimal:
     """The largest size (XRP, whole drops) the ledger balances allow on this side now."""
-    rl, xr, n = committed(others)
-    # The ledger's own count, if higher: expired offers hold reserve until they're removed.
-    keep = m.reserve_base_xrp + m.reserve_inc_xrp * max(cfg["paper"]["trust_lines"] + n + 1, st.owner_count)
-    spare_xrp = st.xrp - keep - xr - 2 * m.fee_xrp
+    rl, xr, _ = committed(others)
+    held = held_back(st, m, cfg, others)
     if side == "buy":
-        if spare_xrp < 0:
+        # A bid spends RLUSD. Of XRP it only needs what's held back, and a resting sell can't take that: the ledger
+        # stops an offer at the reserve. So a sell's size doesn't count here, even one left too big by a fill.
+        if st.xrp < held:
             return ZERO
         size = (st.rlusd - rl) / price
     else:
-        size = spare_xrp - m.reserve_inc_xrp * SELL_LEAVES_ROOM_FOR_OBJECTS
+        size = st.xrp - held - xr - m.reserve_inc_xrp * SELL_LEAVES_ROOM_FOR_OBJECTS
     return max(size, ZERO).quantize(DROP, rounding=ROUND_FLOOR)
 
 
@@ -157,10 +165,14 @@ class LiveRiskCheck:
         day = book.daily_pnl_rlusd(conn, m.mid, now)
         if (cap := lim.get("max_daily_loss_eur")) is not None and day is not None and m.to_eur(day) <= -cap:
             reasons.append(f"daily loss EUR {-m.to_eur(day):.4f} has reached the maximum {cap}")
-        can = affordable(order.side, order.price, book.within_budget(conn, mark.account), m, self.cfg, others)
+        st = book.within_budget(conn, mark.account)
+        can = affordable(order.side, order.price, st, m, self.cfg, others)
         if order.size > can:
-            what = "RLUSD" if order.side == "buy" else "XRP"
-            reasons.append(f"not enough {what} on the ledger: room for {can} XRP after open orders, the reserve and fees")
+            if order.side == "buy" and st.xrp < (held := held_back(st, m, self.cfg, others)):
+                reasons.append(f"not enough XRP for the reserve and fees on the ledger: {st.xrp} held, {held} needed")
+            else:
+                what = "RLUSD" if order.side == "buy" else "XRP"
+                reasons.append(f"not enough {what} on the ledger: room for {can} XRP after open orders, the reserve and fees")
         return reasons
 
     def _never_take(self, order: Order, m: Market, amm: AmmQuotes | None) -> list[str]:
