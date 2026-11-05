@@ -54,7 +54,7 @@ def test_a_quote_and_its_parts(tmp_path):
     sigma, n = realised_vol_bp(m.mids)
     assert q.quoted and q.reasons == () and q.fair == m.mid == D("1.25")
     assert c["vol_bp"] == D(s["vol_mult"]) * sigma * D(s["vol_horizon_ledgers"]).sqrt() and c["vol_bp"] > 0
-    assert c["age_bp"] == D("0.5") * D(2) and c["age_s"] == 2.0
+    assert c["age_bp"] == D(s["age_bp_per_second"]) * D(2) and c["age_s"] == 2.0
     assert q.bid_size == D(9) * D("1.25") / D("1.25") == D(9)              # EUR 9 at 1.25 USD/EUR and 1.25 RLUSD/XRP
     assert c["fee_bp"] == 2 * D("0.00001") / D(9) * 10_000
     assert c["half_spread_bp"] == c["base_bp"] + c["vol_bp"] + c["age_bp"] + c["fee_bp"]

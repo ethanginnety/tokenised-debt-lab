@@ -186,7 +186,7 @@ Then open http://127.0.0.1:8001. The `$env:` values last only for that window, s
 
 *Couldn't load the RLUSD/XRP monitor: Failed to fetch* means **the app** has stopped, not the monitor: a page left open keeps asking every 10 s and gets no answer. Start the app again and the section recovers by itself within 10 s. A fault in `/api/xrpl` itself would show `HTTP 500` instead.
 
-For the step 4 checkpoint, run it until `status` shows at least **48 hours of actual uptime** (Ethan, 2 Nov 2026: hours up, not hours on the clock), then send Claude the output of `status`. Checkpoint moved by Ethan to the evening of Wednesday 4 Nov 2026 (it was due after 22:50 on 3 Nov) because of the gaps listed in ROADMAP.
+For the step 4 checkpoint, run it until `status` shows at least **48 hours of actual uptime** (Ethan, 2 Nov 2026: hours up, not hours on the clock), then send Claude the output of `status`. Checkpoint moved by Ethan to the evening of Wednesday 4 Nov 2026 (it was due after 22:50 on 3 Nov) because of the gaps listed in ROADMAP. **Accepted by Ethan on 5 Nov 2026 on 41.33 h of uptime, short of 48 h, because decision C passes by wide margins (his decision).**
 
 ## RLUSD/XRP paper bot (M7, PAPER; run only after Ethan's go)
 
@@ -202,4 +202,12 @@ python scripts/xrpl_paper.py limit max_order_eur 8 --reason WHY
 
 PAPER: no key, no wallet, nothing reaches a ledger. It reads the monitor's database (`DEBTLAB_XRPL_DB`, or `--monitor-db`) and writes its own (`DEBTLAB_XRPL_PAPER_DB`, default `data/xrpl_paper.sqlite3`); keep both outside OneDrive, e.g. `C:\debtlab-data\`. Start the monitor first and leave it running: the paper bot never restarts or disturbs it. If the monitor stops or the data is older than 30 s, the paper bot cancels everything and waits. If the paper bot stops, start it again: it cancels whatever the last run left open, never uses trades from while it was down, and records the gap. `status` shows both fill rules side by side; the truth is between them.
 
-Before step 7: agree the strategy's starting values (`config/xrpl.json` `paper.strategy`, see ASSUMPTIONS) in the light of the checkpoint data.
+The strategy's values were frozen by Ethan on 5 Nov 2026 (`config/xrpl.json` `paper.strategy`, see ASSUMPTIONS). They expect a negative edge. No retuning on paper P&L, during or after the run.
+
+**Run it as supervised sessions (Ethan, 5 Nov 2026).** The unclean reboots all happened in standby, so don't leave a run unattended:
+
+1. Before each session: plugged in and lid open. On battery, closing the lid sleeps the laptop and it also sleeps after 45 idle minutes.
+2. Start the monitor, then the paper bot. Quoting needs about two minutes of history after a monitor restart.
+3. Stay with it. If the laptop has to move or close, stop first.
+4. End with Ctrl+C in the paper bot's window, then in the monitor's.
+5. Record the session in `results/`: start and end times (UTC), and the output of both `status` commands. Gaps between sessions stay in the record; never remove them.

@@ -96,7 +96,7 @@ def test_requote_only_when_the_price_moves_enough(tmp_path):
     w.close(bid="1.24905", ask="1.25105")                         # mid up 0.4 bp
     b.tick(w.at())
     assert {o["id"] for o in w.orders()} == before
-    w.close(bid="1.2510", ask="1.2530")                           # mid up 16 bp
+    w.close(bid="1.2550", ask="1.2570")                           # mid up 48 bp: more than the wider volatility term offsets
     b.tick(w.at())
     after = w.orders()
     assert len(after) == 4 and not ({o["id"] for o in after} & before)

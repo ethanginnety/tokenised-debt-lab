@@ -102,7 +102,7 @@ def test_live_rests_exactly_the_paper_quotes(w):
 def test_a_paper_requote_moves_the_live_quote(w):
     w.running()
     old = w.live_orders()["buy"]["price"]
-    w.step(4, bid="0.0845", ask="0.0855", amm_price="0.085")
+    w.step(4, bid="0.0797", ask="0.0807", amm_price="0.0802")     # stays below the fake ledger's outside offer at 0.0805
     live, cons = w.live_orders(), w.paper_orders()
     assert live["buy"]["price"] != old and live["buy"]["price"] == cons["buy"]["price"]
 
