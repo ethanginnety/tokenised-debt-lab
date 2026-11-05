@@ -204,7 +204,7 @@ PAPER: no key, no wallet, nothing reaches a ledger. It reads the monitor's datab
 
 The strategy's values were frozen by Ethan on 5 Nov 2026 (`config/xrpl.json` `paper.strategy`, see ASSUMPTIONS). They expect a negative edge. No retuning on paper P&L, during or after the run.
 
-**Run it as supervised sessions (Ethan, 5 Nov 2026).** The unclean reboots all happened in standby, so don't leave a run unattended:
+**Run it as supervised sessions until they add up to 24 h of uptime (Ethan, 5 Nov 2026; decision F, given the 14 Nov deadline).** The unclean reboots all happened in standby, so don't leave a run unattended:
 
 1. Before each session: plugged in and lid open. On battery, closing the lid sleeps the laptop and it also sleeps after 45 idle minutes.
 2. Start the monitor, then the paper bot. Quoting needs about two minutes of history after a monitor restart.
