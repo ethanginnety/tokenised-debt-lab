@@ -77,6 +77,8 @@ class PaperBot:
         with self._snapshot():
             m = self._read(now)
             with pdb.tx(self.conn):
+                if pdb.state(self.conn)["state"] == "running":   # as live: every new run waits for a resume
+                    pdb.set_state(self.conn, "paused", "bot", "restarted: quoting needs a resume", now)
                 left = account.open_orders(self.conn)
                 cur = self._cursor()
                 start_at = max(cur or 0, (m.ledger_index or 1) - 1)

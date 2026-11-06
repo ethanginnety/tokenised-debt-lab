@@ -142,6 +142,25 @@ def test_the_kill_switch_survives_a_restart(tmp_path):
     assert len(w.orders()) == 4
 
 
+def test_a_new_run_starts_paused_even_if_the_last_was_running(tmp_path):
+    w = World(tmp_path)
+    b = w.running_bot()
+    assert pdb.state(w.paper)["state"] == "running"
+    b.stop(w.at(1), "stopped by user")                             # Ctrl+C: the state stays "running"
+    assert pdb.state(w.paper)["state"] == "running"
+    b2 = w.bot()
+    b2.start(w.at(2))
+    st = pdb.state(w.paper)
+    assert (st["state"], st["changed_by"], st["reason"]) == ("paused", "bot", "restarted: quoting needs a resume")
+    w.close()
+    b2.tick(w.at())
+    assert w.orders() == []                                        # no quote before a resume
+    controls.resume(w.paper, "Ethan", "next session", w.at())
+    w.close()
+    b2.tick(w.at())
+    assert len(w.orders()) == 4
+
+
 def test_a_restart_cancels_what_was_left_and_never_uses_older_trades(tmp_path):
     w = World(tmp_path)
     w.running_bot()                                                # then "crashes": no stop

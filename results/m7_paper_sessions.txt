@@ -1,0 +1,26 @@
+M7 paper run: supervised sessions on mainnet data (decision F: 24 h of uptime summed across sessions).
+Uptime = time with a quote and no gap over 30 s, from the recorded paper decisions (Claude's calculation).
+Gaps between sessions stay in this record; never remove them.
+
+Session 1, 5 Nov 2026
+  run started 14:14:50 UTC, first quote 14:15:25, last quote 14:37:02, stopped by Ethan 14:37:03
+  uptime 0.360 h, no gaps over 30 s; running total 0.360 of 24 h
+  fills: conservative 36 (151.25 XRP), optimistic 37 (151.25 XRP); no paper orders left open
+  after the session: lid closed 14:37:09 and the laptop went into standby on battery until 20:58:24;
+  the mainnet monitor (run 6) stayed open but had no data from 14:37:07 to 20:58:59 (recorded as outages), then reconnected by itself
+
+  status outputs not saved for session 1, Ethan's decision; the figures above come from the paper database
+
+Session 2, 5 Nov 2026
+  run started 21:03:23 UTC, first quote 21:03:24 (paper state was still "running" from session 1, so it quoted before any resume)
+  last quote 6 Nov 15:54:50, stopped by Ethan 15:54:54 (Ctrl+C); no paper orders left open
+  uptime 14.224 h; running total 14.584 of 24 h
+  10 gaps over 30 s, 4.63 h in all:
+    8 short ones, 17 min: the monitor's public server (xrplcluster.com) going stale or disconnecting, each reconnecting by itself
+    09:59-10:19 (20 min) and 11:39-15:40 (241 min): the laptop in Modern Standby on battery
+      (charger connected 5 Nov 23:30, disconnected 6 Nov 09:07; standby 09:49-09:51, 09:59-10:14, 10:15-10:18,
+      11:39-12:57, 12:57-13:13, 13:13-15:38); after each wake the bot waited to rebuild 30 mid changes before quoting
+  no quote on 20 more checks: crossed book data from the monitor
+  fills: conservative 1,440 (5,514.49 XRP), optimistic 1,440 (5,514.49 XRP); the two rules gave identical fills again
+  20 refused orders, all a paper account short of RLUSD or XRP for the full size (inventory at its limit), none a fault
+  the session ran partly unsupervised (on battery, standby) against the agreed setup; its standby time is not counted
