@@ -28,6 +28,7 @@ Code at commit 5ce3ce6.
 [x] Secrets: no string that decodes as an XRPL seed in the three mainnet databases, any tracked file,
     data/ or results/ (scan counted matches, printed none). Key file C:\debtlab-secrets\xrpl-bot.key and
     its folder readable only by ETHANLAPTOP\ethan; *.key is git-ignored.
-[ ] Laptop plugged in, lid open: Ethan, at the start of each session.
-[ ] R16 (issuer can freeze or claw back RLUSD) and R13 (Irish CGT): Ethan to confirm he has reviewed them.
-[ ] Ethan's explicit go.
+[x] Laptop plugged in, lid open: Ethan confirmed for session 1 (2026-11-07T18:08:23Z), and he stays with it.
+[x] R16 (issuer can freeze or claw back RLUSD) and R13 (Irish CGT): reviewed by Ethan (2026-11-07T18:08:23Z).
+[x] Ethan's explicit go, 2026-11-07T18:08:23Z: "Go: I'm starting the first mainnet session now, about 1 hour."
+    He starts the bot and resumes it himself.
