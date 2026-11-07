@@ -1,0 +1,43 @@
+M8 MAINNET LIVE SESSIONS: uptime against the cut-off (results/m8_live_cutoff.txt)
+=================================================================================
+
+Cut-off: 24 h of uptime in supervised sessions, or 2026-11-11T20:00:00Z, whichever comes first.
+Uptime counts from `run` start to stop, from the live database (live_runs). Recorded by Claude, read-only.
+
+Session 1, run 1: 2026-11-07T18:09:13.983Z to 20:39:26.004Z, 2 h 30 min 12 s (planned about 1 h).
+  Stopped by Ethan (Ctrl+C); zero offers on the ledger after the stop.
+  Uptime so far: 2.50 h of 24 h (21.50 h left).
+
+Session 1 results (account rH5NrqyAkxt3JXtuyi4XkYRBGkTrB1Hwog):
+  Ledger: 31.40205 XRP, 28.951 RLUSD at opening (ledger 108179565); 2.731365 XRP, 62.2566948904985 RLUSD
+    after the stop (ledger 108181822). The books match the ledger exactly: budget plus set-aside on both legs.
+  Checked against the ledger by hash: every account_tx in ledgers 108179566 to 108181849 (889), balance changes
+    read straight from the metadata. 746 of the account's own transactions (739 OfferCreate, 7 OfferCancel, all
+    tesSUCCESS), every one signed by the regular key ravzzNVJTvE8kj13knvY7NJ2ykxPgvRrdm; 143 others crossing
+    the bot's offers. 142 fill hashes in the books, all on the ledger, 0 mismatches per hash; no transaction of
+    the account's that the books don't know about. Fees 0.00746 XRP.
+  Fills: 142, all maker, none took liquidity. 84 buys 282.07 XRP; 58 sells 310.73 XRP.
+    Paper alongside over the same time: conservative 128 fills 348.47 XRP; optimistic 143 fills 399.21 XRP.
+  P&L, RLUSD (mid 1.15808 after the stop): -0.0004 = spread +0.1734 + fees -0.0087 + inventory -0.1652.
+    Daily loss limit EUR 5 never neared.
+  Close-time check: tripped once at 18:49:49 (resolution 10 s, flags 1); offers cancelled, quoting resumed by
+    itself when it held again. Working as designed.
+
+FINDING 1 (budget breach; needs a fix before session 2):
+  The bot sold 1.881683 XRP more than its budget, out of the 4.613048 XRP set aside (about EUR 2.2).
+  The account never went under its reserve (the ledger doesn't allow it).
+  Cause: a replacement offer (OfferCreate with OfferSequence) is sized as if the old offer were still whole.
+    If the old offer fills in the same ledger, before the replacement applies, or in a ledger the bot hasn't
+    read yet, the cancel finds nothing and the new offer still goes up at full size. Two same-side offers
+    are then live. It happened 35 times (174.78 XRP filled on old offers in that gap); 15 times the
+    replacement filled too. This is why live filled about 1.5-1.7 times paper, and why many decisions show
+    "live 17.3 against paper 8.65" in `compare`. The last case (orders L108070375 and L108070377, both sells,
+    both filled in ledger 108181372) took the budget below zero.
+  After 20:10 the budget had no XRP even for fees, so both sides were refused for 29 minutes with zero offers
+    on the ledger. Nothing paused or alerted.
+
+FINDING 2 (mainnet fee escalation): 152 transactions queued (terQUEUED), 11 refused (telCAN_NOT_QUEUE,
+  telCAN_NOT_QUEUE_FEE), 12 expired unapplied. The fee comes from the monitor's base fee, below the open-ledger
+  cost when the network is busy. No harm to safety; some quote refreshes landed late.
+
+Both fixes need Ethan's approval. Nothing changes until then; no session 2 until then.
