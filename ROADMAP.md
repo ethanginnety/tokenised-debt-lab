@@ -193,11 +193,23 @@ Steps 1-7 use no real key and send nothing signed to any network.
 
 **Testnet results prove the plumbing only.** Testnet prices aren't real (about 0.08 RLUSD per XRP, against about 1.25 on mainnet), so they say nothing about profit and never feed into strategy values.
 
+## M8 mainnet plan (approved by Ethan, 7 Nov 2026)
+
+Real funds, about EUR 50. The M8 requirements above apply. Nothing is signed for mainnet until every item of the checklist (C) is ticked and Ethan gives his go; he starts the bot and resumes it himself.
+
+- **A. Ethan's setup** (RUNBOOK *M8 mainnet: Ethan's setup*). His existing dedicated Xaman account, about EUR 60 of XRP: no new account. Trust line to RLUSD, issuer `rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De`, limit 100 RLUSD. He swaps about EUR 25 into RLUSD himself. **The master key never touches the laptop:** a script generates the bot key straight into `C:\debtlab-secrets\xrpl-bot.key` and prints only its address, and Ethan signs `SetRegularKey` in Xaman. He tells Claude the two addresses; Claude checks the account read-only.
+- **B. Code, tests first** (approved, including the signing exception for the one mainnet signer: offers and cancels only, regular key only). Mainnet guards kept apart from testnet's; the mainnet signer refuses the master key and any key that isn't the account's regular key on the validated ledger; start-up checks on the trust line, other ledger objects, offers and the account's size; the hard stop; new databases for the live account and paper alongside; the monitor restarted with `--exclude-account`; spy, control and leak tests; a shadow run on mainnet that sends nothing.
+- **C. Safety checklist before Ethan's go**, each item recorded with its evidence (RUNBOOK).
+- **D. Paper alongside,** as on testnet: paper decides the quotes, live follows the conservative account; both rules on the same quotes; compared fill by fill.
+- **E. Supervised sessions,** the first about 1 h. Pauses on the first fill that takes liquidity, any disagreement with the ledger, money moved from outside, and the EUR 5 daily loss. Report per brief section 7.5 with transaction hashes, by 14 Nov.
+
+**Ethan's answers, 7 Nov 2026, recorded before any live order** (`results/m8_live_cutoff.txt`): run length up to 24 h of uptime in supervised sessions, **hard stop Wednesday 11 Nov 2026 20:00 Irish time (20:00 UTC)**, whichever comes first; EUR 9 quotes kept; trust line limit 100 RLUSD.
+
 ## Where we are (resume point, 1 Nov 2026)
 
 Written so a fresh session (after `/clear`) can pick up exactly here. Read PROMPT.md, this file, ASSUMPTIONS.md and CHANGELOG.md first.
 
-**Latest, 5 Nov 2026:** Ethan accepted the checkpoint on 41.33 h of uptime (his decision; 48 h was not reached: a lid closed on battery at 00:40 UTC and a second unclean reboot in standby between 09:47 and 10:17). Strategy values frozen (ASSUMPTIONS); no retuning on paper P&L. The paper run will be supervised sessions (RUNBOOK). The M8 testnet rerun passed on 5 Nov (step 8 above). Paper run length is 24 h of uptime across sessions (decision F). **Update, 7 Nov 2026:** the paper run is done (step 7 above): 24 h reached at 01:42 UTC on 7 Nov, a PAPER loss of EUR 1.46 on 50 while the mid fell 9.4%, 0.92 better than holding. A new paper run now starts paused (6 Nov). Next: Ethan's agreement that M7 is done, then the M8 mainnet plan for his approval.
+**Latest, 5 Nov 2026:** Ethan accepted the checkpoint on 41.33 h of uptime (his decision; 48 h was not reached: a lid closed on battery at 00:40 UTC and a second unclean reboot in standby between 09:47 and 10:17). Strategy values frozen (ASSUMPTIONS); no retuning on paper P&L. The paper run will be supervised sessions (RUNBOOK). The M8 testnet rerun passed on 5 Nov (step 8 above). Paper run length is 24 h of uptime across sessions (decision F). **Update, 7 Nov 2026:** the paper run is done (step 7 above): 24 h reached at 01:42 UTC on 7 Nov, a PAPER loss of EUR 1.46 on 50 while the mid fell 9.4%, 0.92 better than holding. A new paper run now starts paused (6 Nov). Next: Ethan's agreement that M7 is done, then the M8 mainnet plan for his approval. **Update, 7 Nov 2026:** Ethan approved the M8 mainnet plan (above); the live run's cut-off is recorded (`results/m8_live_cutoff.txt`). Next: building part B, tests first, while Ethan does part A.
 
 **M8's testnet stage started on 2 Nov (plan above); step 1 done.** **The checkpoint counts 48 hours of actual monitor uptime** (Ethan, 2 Nov), not 48 hours on the clock.
 
