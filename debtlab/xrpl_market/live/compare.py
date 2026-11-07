@@ -77,8 +77,8 @@ def fees(live: sqlite3.Connection, paper: sqlite3.Connection) -> dict:
     return out
 
 
-def render(rows: list[Row], fee: dict) -> str:
-    lines = [f"{LABEL}: live against paper, fill by fill", ""]
+def render(rows: list[Row], fee: dict, label: str = LABEL) -> str:
+    lines = [f"{label}: live against paper, fill by fill", ""]
     if not rows:
         lines.append("No fills yet, live or paper.")
     for r in rows:
@@ -94,5 +94,6 @@ def render(rows: list[Row], fee: dict) -> str:
                   f"{plain(fee['conservative'])}, optimistic {plain(fee['optimistic'])}.",
               "Live pays for an offer about every 15-25 s because offers expire by themselves; paper is charged only when "
               "the price moves. M7's paper fees don't include that.",
-              "Testnet prices aren't real: this shows the plumbing works, and says nothing about profit."]
+              ("Testnet prices aren't real: this shows the plumbing works, and says nothing about profit."
+               if label == LABEL else "Real fills on mainnet; paper's are an upper bound: it assumes first place in the queue.")]
     return "\n".join(lines)

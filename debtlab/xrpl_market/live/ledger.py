@@ -1,4 +1,4 @@
-"""What the validated testnet ledger says about the account. READ-ONLY: public reads only.
+"""What the validated ledger says about the account, on testnet or mainnet. READ-ONLY: public reads only.
 
 The ledger is the source of truth (M8): the bot's own records are checked against this on
 every ledger. Every read names a validated ledger number, through `readonly.ReadOnlyClient`,
@@ -68,15 +68,27 @@ def parse_offer(o: dict, rlusd_hex: str, issuer: str) -> LedgerOffer | None:
     return LedgerOffer(int(o["seq"]), side, xrp, rlusd, None if exp is None else int(exp))
 
 
+@dataclass(frozen=True)
+class Setup:
+    """How the account is set up, for the mainnet start-up checks (`live/setup.py`)."""
+    address: str
+    ledger_index: int
+    regular_key: str | None
+    lines: tuple[dict, ...]          # every trust line, as account_lines gives it
+    objects: tuple[str, ...]         # the LedgerEntryType of every object the account owns
+    issuer_flags: int
+
+
 class FailoverReads:
-    """The read client over several testnet endpoints. When one stops answering, the next is tried
-    and stays in use until it fails too. Each is checked to be testnet the first time it's used, and
+    """The read client over several endpoints of one network. When one stops answering, the next is tried
+    and stays in use until it fails too. Each is checked to be on the network the first time it's used, and
     every read keeps the read client's rules: a reply that isn't validated counts as a failed read."""
 
-    def __init__(self, urls: Iterable[str]):
-        self.urls = [guards.check_endpoint(u) for u in urls]
+    def __init__(self, urls: Iterable[str], net: guards.Network = guards.TESTNET):
+        self.net = net
+        self.urls = [net.check_endpoint(u) for u in urls]
         if not self.urls:
-            raise XrplReadError("no testnet read endpoints configured")
+            raise XrplReadError(f"no {net.name} read endpoints configured")
         self._clients: dict[str, ReadOnlyClient] = {}
         self._checked: set[str] = set()
         self.index = 0
@@ -97,7 +109,7 @@ class FailoverReads:
             c = self._client(self.urls[i])
             try:
                 if self.urls[i] not in self._checked:
-                    guards.check_network(c.server("server_info").result)    # another network raises, and doesn't fail over
+                    self.net.check_network(c.server("server_info").result)    # another network raises, and doesn't fail over
                     self._checked.add(self.urls[i])
                 result = call(c)
                 self.index = i
@@ -123,14 +135,15 @@ class FailoverReads:
 
 class TestnetLedger:
     __test__ = False       # not a pytest class
+    net = guards.TESTNET
 
     def __init__(self, cfg: dict, client: FailoverReads | None = None):
-        guards.check_config(cfg)
+        self.net.check_config(cfg)
         self.rlusd_hex, self.issuer = cfg["rlusd"]["currency_hex"], cfg["rlusd"]["issuer"]
-        self.client = client or FailoverReads(cfg["live"]["endpoints"]["json_rpc"])
+        self.client = client or FailoverReads(cfg["live"]["endpoints"]["json_rpc"], self.net)
 
     def check_network(self) -> None:
-        guards.check_network(self.client.server("server_info").result)
+        self.net.check_network(self.client.server("server_info").result)
 
     def latest(self) -> Header:
         i = self.client.validated_index()
@@ -177,6 +190,36 @@ class TestnetLedger:
             if not marker:
                 return out
         raise XrplReadError("account_tx: too many pages")
+
+
+    def regular_key(self, address: str) -> str | None:
+        """The account's RegularKey on the latest validated ledger, or None."""
+        i = self.client.validated_index()
+        return self.client.at("account_info", {"account": address}, i).result["account_data"].get("RegularKey")
+
+    def setup(self, address: str, ledger_index: int) -> Setup:
+        """Every trust line and owned object, the regular key and the issuer's flags, at one validated ledger."""
+        data = self.client.at("account_info", {"account": address}, ledger_index).result["account_data"]
+        lines, objects = [], []
+        for method, key, out in (("account_lines", "lines", lines), ("account_objects", "account_objects", objects)):
+            marker = None
+            for _ in range(MAX_PAGES):
+                params = {"account": address, "limit": PAGE, **({"marker": marker} if marker else {})}
+                r = self.client.at(method, params, ledger_index).result
+                out += r.get(key, [])
+                marker = r.get("marker")
+                if not marker:
+                    break
+            else:
+                raise XrplReadError(f"{method}: too many pages")
+        issuer = self.client.at("account_info", {"account": self.issuer}, ledger_index).result["account_data"]
+        return Setup(address, ledger_index, data.get("RegularKey"), tuple(lines),
+                     tuple(str(o.get("LedgerEntryType")) for o in objects), int(issuer.get("Flags", 0)))
+
+
+class MainnetLedger(TestnetLedger):
+    """The same reads, on mainnet's allowlist and network, for the mainnet bot. READ-ONLY."""
+    net = guards.MAINNET
 
 
 def exists_on_mainnet(address: str, urls: Iterable[str], client: Callable[[str], ReadOnlyClient] | None = None) -> bool:

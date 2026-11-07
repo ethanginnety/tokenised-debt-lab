@@ -1,0 +1,35 @@
+{
+  "_note": "M8 MAINNET: REAL FUNDS, about EUR 50 (plan approved by Ethan, 7 Nov 2026). Nothing here is a key. The strategy, limits and monitor settings come from xrpl.json, so live runs on the values frozen there (5 Nov). The hosts and issuer are also constants in live/guards.py: this file can't widen them.",
+  "network": "mainnet",
+  "network_id": 0,
+  "rlusd": {
+    "currency": "RLUSD",
+    "currency_hex": "524C555344000000000000000000000000000000",
+    "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De"
+  },
+  "offer_expiry": {
+    "_note": "As on testnet (xrpl_testnet.json), whose values were measured on mainnet boundaries, 1-2 Nov 2026. Worst-case live time 60 s (Ethan, 4 Nov).",
+    "close_time_resolution_seconds": 10,
+    "expiry_ahead_seconds": 45,
+    "refresh_before_expiry_seconds": 20,
+    "last_execution_after_expiry_seconds": "9.39",
+    "close_time_ahead_of_receipt_seconds": "2.54",
+    "max_live_seconds": 60
+  },
+  "live": {
+    "_account": "Ethan's dedicated Xaman account: its public address only, set when he gives it. The bot signs for it with its regular key, never the master key.",
+    "account": "",
+    "taker_margin_bp": "2",
+    "_trust_line_limit_rlusd": "The RLUSD trust line's limit, Ethan 7 Nov 2026. A line with a higher limit refuses to start.",
+    "trust_line_limit_rlusd": "100",
+    "_max_account_eur": "The whole account's worth at the start, above which the bot refuses to start: about EUR 60 is expected, and the bot uses EUR 50 of it (max_total_eur). Guards against the wrong account or funds added by mistake.",
+    "max_account_eur": "70",
+    "_stop_at": "Hard stop: Wed 11 Nov 2026 20:00 Irish time (GMT), Ethan 7 Nov 2026, recorded before any live order (results/m8_live_cutoff.txt). No run or resume after it; a running bot stops itself at it.",
+    "stop_at": "2026-11-11T20:00:00Z",
+    "_endpoints": "The bot's own reads and sends, in order: it moves to the next when one stops answering. s2 first: the monitor reads xrplcluster.com, which has a per-IP quota. s1.ripple.com left out: it answered lgrNotFound for the validated ledger it had just reported. Checked 7 Nov 2026 (XRPL_VERIFICATION.md).",
+    "endpoints": {
+      "json_rpc": ["https://s2.ripple.com:51234/", "https://xrplcluster.com/"],
+      "websocket": ["wss://s2.ripple.com/", "wss://xrplcluster.com/"]
+    }
+  }
+}

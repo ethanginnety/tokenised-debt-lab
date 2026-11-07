@@ -37,8 +37,8 @@ DROPS = 1_000_000
 START_CLOSE = 800_000_000
 
 
-def rl(v) -> dict:
-    return {"currency": RLUSD, "issuer": ISSUER, "value": plain(D(v))}
+def rl(v, issuer=ISSUER) -> dict:
+    return {"currency": RLUSD, "issuer": issuer, "value": plain(D(v))}
 
 
 def write_key(tmp_path: Path) -> Path:
@@ -52,13 +52,16 @@ def resp(result: dict):
 
 
 class FakeNet:
-    def __init__(self, xrp="300", rlusd="20", address=ADDRESS):
-        self.address = address
+    def __init__(self, xrp="300", rlusd="20", address=ADDRESS, issuer=ISSUER, network_id=1, regular_key=None):
+        self.address, self.issuer, self.regular_key = address, issuer, regular_key
+        self.lines: list[dict] | None = None      # account_lines as given; None: the one RLUSD line, if has_line
+        self.objects: list[dict] = []             # account_objects other than the line and the offers
+        self.issuer_flags = 0
         self.xrp, self.rlusd, self.seq = int(D(xrp) * DROPS), D(rlusd), 100
         self.offers: dict[int, dict] = {}
         self.index, self.close_time = 1000, START_CLOSE
         self.parent_close = START_CLOSE - 1
-        self.resolution, self.close_flags, self.network_id = 10, 0, 1
+        self.resolution, self.close_flags, self.network_id = 10, 0, network_id
         self.queue: list[dict] = []
         self.history: list[dict] = []
         self.sent: list[dict] = []
@@ -142,15 +145,30 @@ class FakeNet:
         if method == "ledger":
             return resp({"ledger": {"close_time": self.close_time, "close_time_resolution": self.resolution,
                                     "close_flags": self.close_flags}})
+        if method == "account_info" and params.get("account") == self.issuer:
+            return resp({"account_data": {"Account": self.issuer, "Balance": "0", "Sequence": 1, "Flags": self.issuer_flags}})
         if method == "account_info":
-            return resp({"account_data": {"Balance": str(self.xrp), "Sequence": self.seq, "OwnerCount": len(self.offers) + 1}})
+            data = {"Account": self.address, "Balance": str(self.xrp), "Sequence": self.seq, "OwnerCount": len(self.offers) + 1,
+                    "Flags": 0}
+            if self.regular_key:
+                data["RegularKey"] = self.regular_key
+            return resp({"account_data": data})
         if method == "account_lines":
-            return resp({"lines": [{"currency": RLUSD, "account": ISSUER, "balance": plain(self.rlusd)}] if self.has_line else []})
+            return resp({"lines": self._lines()})
+        if method == "account_objects":
+            line = [{"LedgerEntryType": "RippleState"}] if self._lines() else []
+            offers = [{"LedgerEntryType": "Offer", "Sequence": s} for s in sorted(self.offers)]
+            return resp({"account_objects": line + offers + self.objects})
         if method == "account_offers":
             return resp({"offers": [{"seq": s, "taker_gets": o["gets"], "taker_pays": o["pays"],
                                      **({"expiration": o["expiration"]} if o.get("expiration") else {})}
                                     for s, o in sorted(self.offers.items())]})
         raise AssertionError(method)
+
+    def _lines(self) -> list[dict]:
+        if self.lines is not None:
+            return self.lines
+        return [{"currency": RLUSD, "account": self.issuer, "balance": plain(self.rlusd), "limit": "100"}] if self.has_line else []
 
     def history_read(self, params):
         if self.reads_fail:
@@ -172,7 +190,7 @@ class FakeNet:
                                            "PreviousFields": {"Balance": str(x0)}}})
         if self.rlusd != r0:
             f = {"Balance": {"currency": RLUSD, "issuer": "rrrrrrrrrrrrrrrrrrrrBZbvji", "value": plain(self.rlusd)},
-                 "LowLimit": {"issuer": self.address}, "HighLimit": {"issuer": ISSUER}}
+                 "LowLimit": {"issuer": self.address}, "HighLimit": {"issuer": self.issuer}}
             nodes.append({"ModifiedNode": {"LedgerEntryType": "RippleState", "LedgerIndex": "L", "FinalFields": f,
                                            "PreviousFields": {"Balance": {**f["Balance"], "value": plain(r0)}}}})
         for seq, o in removed:
@@ -244,11 +262,11 @@ class FakeNet:
         if buying:
             self.xrp += int(q * DROPS)
             self.rlusd -= r
-            after = {"gets": rl(total_r - r), "pays": str(int((total_x - q) * DROPS))}
+            after = {"gets": rl(total_r - r, self.issuer), "pays": str(int((total_x - q) * DROPS))}
         else:
             self.xrp -= int(q * DROPS)
             self.rlusd += r
-            after = {"gets": str(int((total_x - q) * DROPS)), "pays": rl(total_r - r)}
+            after = {"gets": str(int((total_x - q) * DROPS)), "pays": rl(total_r - r, self.issuer)}
         self.rlusd += self.fill_rounding
         done = q >= total_x
         if done:
@@ -325,10 +343,12 @@ class Monitor:
 TESTNET_HOSTS = {"testnet.xrpl-labs.com", "clio.altnet.rippletest.net"}
 
 
-def rpc_transport(net: FakeNet, *, mainnet="absent", on_read=None, down_hosts=None):
+def rpc_transport(net: FakeNet, *, mainnet="absent", on_read=None, down_hosts=None, ours=TESTNET_HOSTS):
     """The real read client over fake HTTP: the fake testnet answers in rippled's JSON-RPC layout, on
     both endpoints. Every other host counts as mainnet: `absent` says the account isn't there, `down`
-    doesn't answer. `down_hosts`: a set, changeable while running, of testnet hosts that don't answer."""
+    doesn't answer. `down_hosts`: a set, changeable while running, of testnet hosts that don't answer.
+    `ours`: the hosts the fake answers as; a fake mainnet passes the mainnet hosts, and then every other
+    host (testnet included) is recorded in `mainnet_reads` as somewhere it shouldn't have read."""
     net.mainnet_reads, net.read_hosts = [], []
     down_hosts = set() if down_hosts is None else down_hosts
 
@@ -337,7 +357,7 @@ def rpc_transport(net: FakeNet, *, mainnet="absent", on_read=None, down_hosts=No
         method, params = body["method"], body["params"][0]
         if request.url.host in down_hosts:
             raise httpx.ConnectError("unreachable")
-        if request.url.host in TESTNET_HOSTS:
+        if request.url.host in ours:
             net.read_hosts.append(request.url.host)
         else:
             net.mainnet_reads.append(request.url.host)

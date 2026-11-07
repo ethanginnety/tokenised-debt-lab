@@ -150,6 +150,17 @@ It is a measurement over about 17 hours, not a guarantee, so:
 - **Testnet account size:** that guide funds 1,000 XRP, about 80 RLUSD or €72 at testnet's price, above the €50 total. Settled by Ethan on 2 Nov: the bot isn't refused such an account, it uses €50 and sets the rest aside (ASSUMPTIONS). What the xrpl.org faucet pays out no longer matters.
 - **The M7 paper fees don't include the 10 s refresh:** paper charges a fee per requote, so its fees run up to about €0.19 a day under live. To be reported alongside the paper results; strategy values aren't affected.
 
+## M8: mainnet live reads and sends (7 Nov 2026)
+
+Checked read-only from the laptop with the bot's own read code (`MainnetLedger` over `FailoverReads`), before any key existed. Nothing was signed or sent.
+
+- **Network ID:** `server_info` reports `network_id` 0 on `xrplcluster.com` (rippled 3.4.1), `s1.ripple.com` and `s2.ripple.com`. The mainnet guard requires 0 before every submit, as testnet's requires 1.
+- **The bot's reads, on an ordinary RLUSD holder** (`rUMBUV11...GF2V`, one trust line, two offers): `ledger`, `account_info`, `account_lines`, `account_offers`, `account_objects` and `account_tx` all answered with validated data on `s2.ripple.com` and `xrplcluster.com`, and the two agreed exactly at ledger 108173924. `account_objects` was added to the read client's public methods for the start-up check.
+- **`s1.ripple.com` left out:** at the validated ledger index it had just reported, it answered `ledger` with `lgrNotFound`, twice. It appears to balance across servers that lag one another. Not in the bot's endpoints or the mainnet allowlist.
+- **`xrplcluster.com` has a per-IP quota:** 2,000 units per 10 s and 10,000 per 60 s. Paging a long history (500 ledgers of an active account; the issuer's owner directory) used it up, with the mainnet monitor reading from the same IP. The bot's reads and sends go to `s2.ripple.com` first and fall back to `xrplcluster.com`, so they don't share the monitor's quota. The bot reads only its own transactions, a few per ledger.
+- **The issuer's flags** at ledger 108173924: `0x819a0000` (clawback allowed, deposit authorisation, default ripple, master key disabled, XRP disallowed, destination tag required); no global freeze. The start-up check refuses a global freeze; the monitor warns on any change (risk R16).
+- **Offer expiry on mainnet** uses testnet's rule unchanged: its values were measured on mainnet close-time boundaries (1-2 Nov), worst-case live time 60 s. The close-flag measurement (ASSUMPTIONS) stands at one event in 5,200 ledgers; the shadow run is the first live check of both.
+
 ## Still open
 
 - RLUSD's own USD price can't be observed on this pair; the €-limits assume 1 RLUSD = $1 (decision D, risk R19).

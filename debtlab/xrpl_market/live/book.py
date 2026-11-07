@@ -28,8 +28,8 @@ from datetime import datetime
 from decimal import ROUND_FLOOR, Decimal
 
 from debtlab.money import D, ZERO, plain
-from debtlab.xrpl_market.live import LABEL, reconcile
-from debtlab.xrpl_market.live.db import ControlError, event, iso, limits
+from debtlab.xrpl_market.live import reconcile
+from debtlab.xrpl_market.live.db import ControlError, event, iso, label, limits
 from debtlab.xrpl_market.live.ledger import AccountState, Header
 from debtlab.xrpl_market.live.reconcile import Effect
 
@@ -113,7 +113,7 @@ def open_account(conn: sqlite3.Connection, st: AccountState, mid: Decimal, usd_p
     set_cursor(conn, st.ledger_index)
     event(conn, now, "account_opened", {"address": st.address, "ledger_xrp": plain(st.xrp), "ledger_rlusd": plain(st.rlusd),
                                         "budget_xrp": plain(use_x), "budget_rlusd": plain(use_r), "worth_eur": plain(eur),
-                                        "mid": plain(mid), "label": LABEL})
+                                        "mid": plain(mid), "label": label(conn)})
 
 
 def set_aside(conn: sqlite3.Connection) -> tuple[Decimal, Decimal]:
@@ -153,7 +153,7 @@ def _fill(conn: sqlite3.Connection, e: Effect, order: sqlite3.Row | None, role: 
                      (plain(D(order["filled_xrp"]) + xrp), plain(D(order["filled_rlusd"]) + rlusd),
                       plain(D(order["took"]) + (xrp if role == "taker" else ZERO)), oid))
     event(conn, now, f"{role}_fill", {"id": fid, "order": oid, "side": side, "xrp": plain(xrp), "rlusd": plain(rlusd),
-                                      "mid": plain(mid), "ledger": e.ledger_index, "tx": e.hash, "label": LABEL})
+                                      "mid": plain(mid), "ledger": e.ledger_index, "tx": e.hash, "label": label(conn)})
 
 
 def apply(conn: sqlite3.Connection, e: Effect, mid: Decimal, now: datetime) -> None:

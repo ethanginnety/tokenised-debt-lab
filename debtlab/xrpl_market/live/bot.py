@@ -1,8 +1,13 @@
-"""The testnet bot's loop (M8 step 6). TESTNET: test funds, never mainnet.
+"""The live bot's loop (M8): testnet, or mainnet with real funds. Every part must be on one network.
+
+Its network is its venue's, and the ledger, submitter, config, its own database and the
+monitor's must all say the same, or it refuses to start. On mainnet, before anything is sent,
+the account must pass the start-up checks (`live/setup.py`), and nothing runs after the hard
+stop (`live.stop_at`): a running bot stops itself at it.
 
 Each tick, about once a second:
 
-    read the market from the testnet monitor's database (read-only)
+    read the market from the monitor's database (read-only)
     on a new validated ledger: bring the books up to it and check them against it
     stop (cancel everything and pause) on: a disagreement with the ledger, a fill that took
         liquidity, money moved from outside the bot, the daily loss limit
@@ -31,9 +36,10 @@ from pathlib import Path
 
 from debtlab.money import D, plain
 from debtlab.xrpl_market import closetimes, store
-from debtlab.xrpl_market.live import LABEL, book, controls, guards
+from debtlab.xrpl_market.live import book, controls, setup
 from debtlab.xrpl_market.live import db as ldb
 from debtlab.xrpl_market.live.guards import MainnetBlocked
+from debtlab.xrpl_market.live.setup import SetupRefused
 from debtlab.xrpl_market.live.ledger import TestnetLedger
 from debtlab.xrpl_market.live.risk import AmmQuotes, LiveMark, LiveRiskCheck, affordable, amm_prices, others_for, own_offers_problem
 from debtlab.xrpl_market.live.signer import Submitter
@@ -61,13 +67,22 @@ Quotes = Callable[[mk.Market, datetime], dict[str, Want | None]]
 class LiveBot:
     def __init__(self, conn: sqlite3.Connection, monitor_path: Path | str, cfg: dict, ledger: TestnetLedger, venue: LiveVenue,
                  submitter: Submitter, quotes: Quotes, out: Callable[[str], None] = print, alongside=None):
-        guards.check_config(cfg)
+        self.net = venue.net
+        self.net.check_config(cfg)
+        for part, net in (("ledger", ledger.net), ("submitter", submitter.net)):
+            if net is not self.net:
+                raise MainnetBlocked(f"the {part} is for {net.name}, the venue for {self.net.name}")
+        if ldb.network(conn) != self.net.name:
+            raise ldb.WrongDatabase(f"the live database records {ldb.network(conn)}, not {self.net.name}")
+        self.label = self.net.label
         if not Path(monitor_path).exists():
-            raise FileNotFoundError(f"no monitor database at {monitor_path}: start the testnet monitor first")
+            raise FileNotFoundError(f"no monitor database at {monitor_path}: start the {self.net.name} monitor first")
         self.mon = open_readonly(Path(monitor_path))
-        if store.network(self.mon) != "testnet":
+        if store.network(self.mon) != self.net.name:
             self.mon.close()
-            raise ldb.WrongDatabase(f"{monitor_path} doesn't record testnet; use the testnet monitor's database")
+            raise ldb.WrongDatabase(f"{monitor_path} doesn't record {self.net.name}; use the {self.net.name} monitor's database")
+        stop_at = cfg.get("live", {}).get("stop_at")
+        self.stop_at = ldb.parse(stop_at.replace("Z", "+00:00")) if stop_at else None
         self.conn, self.cfg, self.ledger, self.venue, self.submitter = conn, cfg, ledger, venue, submitter
         self.quotes, self.out, self.alongside = quotes, out, alongside
         self.risk = LiveRiskCheck(cfg)
@@ -97,17 +112,34 @@ class LiveBot:
 
     # --- start and stop ------------------------------------------------------------------
 
+    def preflight(self, now: datetime) -> list[str]:
+        """Mainnet's start-up checks, at the latest validated ledger. Reads only."""
+        h = self.ledger.latest()
+        address = self.venue.signer.address
+        st = self.ledger.account(address, h.index)
+        m, _ = self._market(now)
+        worth = m.to_eur(st.xrp * m.mid + st.rlusd) if m.mid is not None and m.fx is not None else None
+        known = {r["sequence"] for r in self.conn.execute("SELECT sequence FROM live_orders WHERE sequence IS NOT NULL")}
+        return setup.problems(self.ledger.setup(address, h.index), self.cfg, self.venue.signer.key_address,
+                              [o.sequence for o in st.offers], known, worth)
+
     def start(self, now: datetime) -> int:
         self.ledger.check_network()
+        if self.stop_at is not None and now >= self.stop_at:
+            raise SetupRefused(f"the hard stop ({self.stop_at.isoformat()}) has passed: no more running")
         ldb.seed_limits(self.conn, self.cfg, now)
         a = book.account(self.conn)
         if a and a["address"] != self.venue.signer.address:
             raise ldb.ControlError(f"this database is for account {a['address']}, not {self.venue.signer.address}")
+        if self.net.name == "mainnet":
+            found = self.preflight(now)
+            if found:
+                raise SetupRefused("start-up checks failed: " + "; ".join(found))
         self.run_id, gap = ldb.start_run(self.conn, now, float(self.max_age))
         with ldb.tx(self.conn):
             if ldb.state(self.conn)["state"] == "running":
                 ldb.set_state(self.conn, "paused", "bot", "restarted: quoting needs a resume", now)
-            ldb.event(self.conn, now, "run_started", {"run": self.run_id, "seconds_since_last_alive": gap, "label": LABEL})
+            ldb.event(self.conn, now, "run_started", {"run": self.run_id, "seconds_since_last_alive": gap, "label": self.label})
         self.seen_state = ldb.state(self.conn)["state"]
         m, _ = self._market(now)
         read = controls.read_ledger(self.conn, self.ledger, self.venue, self.cfg, m.mid, self._fee_drops(m), now)
@@ -117,7 +149,7 @@ class LiveBot:
             self.alongside.start(now)
         n = controls.cancel_offers(self.conn, self.venue, read, "restart: left by the previous run", now, include_expired=True)
         if n:
-            self.out(f"{LABEL}: cancelling {n} offer(s) left by the previous run")
+            self.out(f"{self.label}: cancelling {n} offer(s) left by the previous run")
         return self.run_id
 
     def stop(self, clock: Callable[[], datetime], reason: str, sleep: Callable[[float], None] = time.sleep,
@@ -154,23 +186,23 @@ class LiveBot:
             self.seen_state = "paused"
         if changed or kind not in self.said:
             self.said.add(kind)
-            self.out(f"{LABEL}: {why}")
+            self.out(f"{self.label}: {why}")
 
     def _say_state_changes(self, st: dict) -> None:
         """A `resume`, `pause`, `kill` or `reset` from another window, once."""
         if st["state"] != self.seen_state:
             self.seen_state = st["state"]
             self.said.clear()
-            self.out(f"{LABEL}: state is now {st['state']} ({st['reason']})")
+            self.out(f"{self.label}: state is now {st['state']} ({st['reason']})")
 
     def _say_quoting(self, problems: list[str]) -> None:
         """Stale data and the like stop quoting without changing the state, so say so: once each way."""
         if problems and not self.quoting_stopped:
             self.quoting_stopped = True
-            self.out(f"{LABEL}: stopped quoting: {'; '.join(problems)}")
+            self.out(f"{self.label}: stopped quoting: {'; '.join(problems)}")
         elif not problems and self.quoting_stopped:
             self.quoting_stopped = False
-            self.out(f"{LABEL}: quoting again")
+            self.out(f"{self.label}: quoting again")
 
     def _stops(self, read: controls.Read, m: mk.Market, now: datetime) -> None:
         if read.problems:
@@ -206,7 +238,7 @@ class LiveBot:
             return out
         out["new_ledger"], out["ledger"] = new, read.header.index
         if self.down_since_cancel:
-            self.out(f"{LABEL}: ledger reads are back")
+            self.out(f"{self.label}: ledger reads are back")
         self.down_since_cancel = False
         if new:
             self._stops(read, m, now)
@@ -256,7 +288,7 @@ class LiveBot:
         self.down_since_cancel = True
         with ldb.tx(self.conn):
             ldb.event(self.conn, now, "connection_lost", {"why": why})
-        self.out(f"{LABEL}: {why}")
+        self.out(f"{self.label}: {why}")
         return controls.cancel_offers(self.conn, self.venue, self.last_read, "safety: " + why, now)
 
     def _open(self, read: controls.Read, m: mk.Market, now: datetime) -> bool:
@@ -266,7 +298,7 @@ class LiveBot:
                 book.record_day_open(self.conn, m.mid, now)
             x, r = book.set_aside(self.conn)
             if x or r:
-                self.out(f"{LABEL}: the account holds more than the budget; {x} XRP and {r} RLUSD set aside, not used")
+                self.out(f"{self.label}: the account holds more than the budget; {x} XRP and {r} RLUSD set aside, not used")
             return True
         except ldb.ControlError as e:
             self._pause(f"account not opened: {e}", now)
@@ -331,7 +363,7 @@ class LiveBot:
         with ldb.tx(self.conn):
             ldb.event(self.conn, now, "order_refused", {"side": order.side, "price": plain(order.price), "size": plain(order.size),
                                                         "reasons": reasons, "previous_refusal_repeated": prev[1] if prev else 0,
-                                                        "label": LABEL})
+                                                        "label": self.label})
         self.refusals[order.side] = [tuple(reasons), 0]
 
     # --- running -------------------------------------------------------------------------
@@ -340,36 +372,41 @@ class LiveBot:
         controls.set_killed(self.conn, "bot", f"refused: {e}", clock())
         if self.run_id is not None:
             ldb.stop_run(self.conn, self.run_id, clock(), f"refused: {e}")
-        self.out(f"{LABEL}: REFUSED: {e}. Kill switch on; nothing more is sent.")
+        self.out(f"{self.label}: REFUSED: {e}. Kill switch on; nothing more is sent.")
 
     def _crashed(self, e: Exception, clock: Callable[[], datetime], sleep: Callable[[float], None]) -> None:
         """Anything unexpected: pause, say so, and cancel as far as possible, then let the error show."""
         why = f"crashed: {type(e).__name__}: {e}"
-        self.out(f"{LABEL}: {why}. Cancelling everything.")
+        self.out(f"{self.label}: {why}. Cancelling everything.")
         try:
             controls.pause(self.conn, "bot", why, clock())
             with ldb.tx(self.conn):
                 ldb.event(self.conn, clock(), "run_crashed", {"run": self.run_id, "why": why})
             cleared = self.stop(clock, why, sleep)
-            self.out(f"{LABEL}: " + ("no offers on the ledger." if cleared.zero else
+            self.out(f"{self.label}: " + ("no offers on the ledger." if cleared.zero else
                      f"{cleared.remaining} offer(s) still listed; each expires by itself."))
         except Exception as e2:
-            self.out(f"{LABEL}: couldn't finish cancelling ({type(e2).__name__}); each offer expires by itself within "
+            self.out(f"{self.label}: couldn't finish cancelling ({type(e2).__name__}); each offer expires by itself within "
                      f"{self.cfg['offer_expiry']['max_live_seconds']} s.")
 
     def run(self, until: datetime | None = None, clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
             sleep: Callable[[float], None] = time.sleep) -> str:
         reason = "finished (--for)"
+        if self.stop_at is not None and (until is None or self.stop_at < until):
+            until, reason = self.stop_at, f"hard stop ({self.stop_at.isoformat()})"
         tick_s = float(self.cfg["paper"]["tick_seconds"])
         try:
             self.start(clock())
-            self.out(f"{LABEL}: started (run {self.run_id}), account {self.venue.signer.address}, state "
+            self.out(f"{self.label}: started (run {self.run_id}), account {self.venue.signer.address}, state "
                      f"{ldb.state(self.conn)['state']}. Quoting only starts after `resume`.")
             while until is None or clock() < until:
                 self.tick(clock())
                 sleep(tick_s)
         except KeyboardInterrupt:
             reason = "stopped by user"
+        except SetupRefused as e:
+            self.out(f"{self.label}: REFUSED: {e}. Nothing was sent or cancelled.")
+            raise
         except MainnetBlocked as e:
             self._refuse(e, clock)
             raise
@@ -381,6 +418,6 @@ class LiveBot:
         except MainnetBlocked as e:
             self._refuse(e, clock)
             raise
-        self.out(f"{LABEL}: stopped ({reason}); " + ("no offers on the ledger." if cleared.zero else
+        self.out(f"{self.label}: stopped ({reason}); " + ("no offers on the ledger." if cleared.zero else
                  f"{cleared.remaining} offer(s) still listed ({cleared.last_error}); each expires by itself."))
         return reason

@@ -17,6 +17,7 @@ import httpx
 # Methods that read ledger state at a ledger index.
 LEDGER_METHODS = frozenset({
     "ledger", "book_offers", "amm_info", "account_info", "account_lines", "account_offers", "gateway_balances",
+    "account_objects",      # M8 mainnet: the start-up check that the account owns nothing unexpected
 })
 # Methods reading an account's validated history (M8); each entry says whether it's validated.
 HISTORY_METHODS = frozenset({"account_tx", "tx"})

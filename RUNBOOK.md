@@ -100,19 +100,80 @@ The RLUSD/XRP monitor and the paper run (M7) need the machine awake and online f
 5. **Don't hide gaps.** Whatever stops the run (sleep, update restart, crash, lost Wi-Fi), the monitor records it: disconnects and stale data as outages while it runs, and time it wasn't running at all as a gap found from its last heartbeat on the next start. Uptime is reported with every gap. Restart it as soon as you notice; never edit or delete outage records.
 6. After the run, undo these settings if you want normal sleep and updates back.
 
-## M8 preparation: what Ethan does himself
+## M8 mainnet: Ethan's setup
 
-For the live €50 experiment (M8). Claude never touches funds, never sees a seed or key, and never sends a transfer. Do these yourself, in order, and only tell Claude the wallet's **public address** (it starts with `r`). Nothing here places an order; the first live order still needs your explicit approval.
+**Real funds.** Plan approved by Ethan on 7 Nov 2026 (ROADMAP, *M8 mainnet plan*). Claude never touches funds, never sees a seed or key, and never sends a transfer: only tell Claude **public addresses** (they start with `r`). **The account's master key never touches the laptop:** it stays in Xaman. Nothing here places an order; the first order still needs your explicit go, after the checklist below. Commands run from the repository with the virtual environment active.
 
-1. **Exchange account.** Use a regulated exchange you already trust that supports **withdrawals of XRP to an XRP Ledger address**. Finish its identity checks. Keep its statements: Irish CGT applies to crypto disposals (risk R13).
-2. **A new, dedicated wallet.** Create a brand-new XRP Ledger account in a self-custody wallet app you trust, used only for this experiment. Write the secret (seed or recovery words) on paper and keep it offline. **Never** type it into a chat (including this one), an email, a note-taking app, a cloud drive, or this repository.
-3. **Buy about €60 of XRP** on the exchange. €50 is the experiment's ceiling, not a target; the rest covers the ledger's reserve (about 1.6 XRP: 1 for the account, 0.2 for the RLUSD trust line, 0.2 for each of up to two open offers) and the exchange's withdrawal fee.
-4. **Small test send first.** Withdraw a small amount, **at least 2 XRP** (an account needs 1 XRP to exist, so a smaller first payment fails), to the new address. Check it arrived in the wallet app and on a ledger explorer. Your own wallet needs no destination tag. Then send the rest.
-5. **Tell Claude the address.** Claude reads it read-only (balance, reserve, trust lines) to confirm the setup. Only the address, nothing else.
-6. **RLUSD trust line.** In the wallet app, add a trust line for currency **RLUSD**, issuer **`rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De`**. Check the issuer character by character: a look-alike, `rLUSDtyk…`, uses the same currency code (XRPL_VERIFICATION.md). It costs 0.2 XRP of reserve.
-7. **Split XRP and RLUSD.** Swap about half the trading amount into RLUSD yourself, in the wallet app (it trades on the same ledger) or by buying RLUSD on the exchange and withdrawing it to the address. Aim for about €25 in each, leaving the 1.6 XRP reserve untouched. Claude will read the balances back.
-8. **Bot key (required: a regular key).** In the wallet app, set a **regular key** on the account: a second key pair the bot signs with, while the master secret stays on paper. If the bot's key is ever exposed, you remove it with the master key and the funds stay yours. Put the bot's secret in a file **outside the repository and outside OneDrive**, e.g. `C:\debtlab-secrets\xrpl-bot.key`, readable only by your account (`icacls C:\debtlab-secrets /inheritance:r /grant:r "%USERNAME%:F"`). Never open it in an app that syncs, and never paste it anywhere.
-9. **Stop and tell Claude it's done** (address only). M8's plan and safety tests come next; no order is placed until you approve the first one.
+Xaman's menus change between versions, so the names below may differ slightly. If a step isn't where it says, stop and tell Claude what you see. Don't use a website that asks for your secret.
+
+1. **The account.** Use your existing dedicated Xaman account, holding about €60 of XRP and used for nothing else. Tell Claude its address. Claude reads it back read-only (balance, trust lines, offers, objects, regular key) and says whether anything is unexpected.
+2. **RLUSD trust line.** In Xaman, add the token **RLUSD**, issuer **`rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De`**, checking the issuer character by character: a look-alike, `rLUSDtyk…`, uses the same currency code (XRPL_VERIFICATION.md). Set the limit to **100** if Xaman asks. If it doesn't let you choose, add it anyway: `check` (step 7) shows the limit, and the bot won't start on a limit over 100 until you and Claude agree what to do. It costs 0.2 XRP of reserve.
+3. **Split XRP and RLUSD.** Swap about €25 of XRP into RLUSD in Xaman yourself, using its swap or DEX. Leave at least 2 XRP of reserve untouched. Claude reads the balances back.
+4. **Make the bot's key, on the laptop.** This creates `C:\debtlab-secrets\xrpl-bot.key`, locks the folder so only your Windows account can open it, writes a brand-new key straight into the file and prints **only its address**:
+   ```
+   python scripts/xrpl_mainnet.py keygen
+   ```
+   It refuses to overwrite an existing key, or to write one inside the repository or OneDrive. **Never open, copy, back up or paste the file.** If it's ever exposed, remove the regular key in Xaman (step 5) and run `keygen` again after deleting the file yourself. The bot's code signs only offers and cancels, but anyone else holding the key could sign anything for the account, payments included: that's why it stays in the locked file, and why you can remove it with the master key.
+5. **Set it as the regular key, in Xaman.** In the account's settings (Settings > Accounts > the account > Advanced, or similar), choose **Set regular key**, paste the address printed in step 4, check it character by character, and sign with Xaman. **Don't disable the master key:** you need it to remove the bot's key. The bot refuses to start if the ledger's regular key isn't exactly this key, and it never accepts the master key.
+6. **Tell Claude the two addresses:** the account's, and the bot key's from step 4. Claude puts the account in `config/xrpl_mainnet.json` (a reviewed change), reads the regular key back from the ledger, and restarts nothing without you.
+7. **Restart the mainnet monitor with the bot's account left out,** so the bot never prices from its own offers. Stop the monitor's window with Ctrl+C, then:
+   ```
+   python scripts/xrpl_monitor.py run --db C:\debtlab-data\xrpl.sqlite3 --exclude-account rACCOUNT
+   ```
+8. **Check everything; nothing is sent:**
+   ```
+   python scripts/xrpl_mainnet.py check --key-file C:\debtlab-secrets\xrpl-bot.key
+   ```
+   It opens the key with every check, then checks the account: the regular key, exactly one trust line (RLUSD from the verified issuer, limit at most 100, not frozen), no other ledger objects (a signer list, escrow, check, ticket or payment channel all refuse), no offer the bot didn't place, a total worth at most €70, and no freeze by the issuer. It prints the limits and the hard stop, then `all checks passed` or each problem.
+9. **Shadow run, about 30 minutes; nothing is sent.** It reads and reconciles the real account on every ledger, on its own database (`xrpl_mainnet_shadow.sqlite3`), and every send is refused before it leaves, even after a `resume`:
+   ```
+   python scripts/xrpl_mainnet.py run --shadow --key-file C:\debtlab-secrets\xrpl-bot.key --for 1800
+   ```
+   Then show that `kill` leaves zero offers, and reset it:
+   ```
+   python scripts/xrpl_mainnet.py kill --key-file C:\debtlab-secrets\xrpl-bot.key --reason "checklist: kill leaves zero offers"
+   python scripts/xrpl_mainnet.py reset --reason "checklist done"
+   ```
+10. **Stop and send Claude the outputs** of steps 8 and 9. Claude ticks the checklist below with the evidence.
+
+### Checklist before Ethan's go (each recorded with its evidence)
+
+| Item | Evidence |
+|---|---|
+| The full test suite and the mainnet safety tests pass | `python -m pytest tests -q`, run by Claude on the commit you'll run |
+| The account matches: regular key, one trust line, balances about €25 a side, nothing else | Claude's read-only read, and `check` |
+| Limits loaded: order €10 (quotes about €9), daily loss €5, total €50, data age 30 s, 2 open orders; offers live 60 s at most | `check` prints them |
+| The shadow run is clean, and `kill` leaves zero offers | step 9's output, and the account on a mainnet explorer |
+| The monitor is fresh and leaves the bot's account out | `check` refuses otherwise |
+| Paper alongside will run on its own database, `xrpl_mainnet_paper.sqlite3` | `run` opens it; the M7 database stays untouched |
+| The laptop is plugged in, with the lid open | you |
+| No secret-shaped string in any database or log, and the key file readable only by you | Claude's scan of the databases and outputs; `check` refuses a readable key |
+| The issuer's clawback and freeze (R16) and the Irish tax record (R13) reviewed | RISK_REGISTER.md, with you |
+| The hard stop is Wednesday 11 Nov 2026 20:00 Irish time (20:00 UTC) | `check` and `status` print it |
+| **Your explicit go** | in the chat |
+
+## M8 mainnet run: Ethan's steps (after the checklist and your go)
+
+**Real funds.** Supervised sessions, plugged in, lid open, the first about an hour. Up to 24 h of uptime in all, or until the hard stop, whichever comes first (`results/m8_live_cutoff.txt`).
+
+1. **Start the bot,** in its own window. It starts paused and places nothing yet:
+   ```
+   python scripts/xrpl_mainnet.py run --key-file C:\debtlab-secrets\xrpl-bot.key
+   ```
+2. **The first order comes from this one,** run by you in another window:
+   ```
+   python scripts/xrpl_mainnet.py resume --reason "first mainnet orders"
+   ```
+   Quotes appear after about two minutes: the strategy needs 30 price changes first. The bot uses €50 of the account and sets the rest aside: `status` shows both.
+3. **Watch it:** `python scripts/xrpl_mainnet.py status`, and `compare` for live against paper, fill by fill.
+4. **It pauses itself,** cancelling everything, on: the first fill that takes liquidity, any disagreement with the ledger, money moved from outside, or the €5 daily loss. Send Claude the output; don't resume until you've talked it through.
+5. **Stop it at any time:**
+   - `kill --key-file C:\debtlab-secrets\xrpl-bot.key --reason WHY` cancels from the ledger's own list until none remain, with the bot running or not, and stays on until `reset --reason WHY`. If it can't reach the network, each offer still expires by itself within 60 s.
+   - `pause --reason WHY`: a running bot cancels on its next tick.
+   - Ctrl+C in the bot's window cancels everything and stops. Starting it again leaves it paused.
+   - At the hard stop the bot stops itself, cancelling everything; `run` and `resume` refuse after it.
+6. **After each session,** tell Claude it's stopped. Claude records the session's uptime, as for paper.
+7. **Afterwards, to take the key away:** remove the regular key in Xaman, then delete `C:\debtlab-secrets\xrpl-bot.key` yourself.
 
 ## M8 testnet run: Ethan's steps
 

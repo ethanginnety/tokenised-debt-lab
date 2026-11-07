@@ -34,7 +34,8 @@ def test_write_and_signing_methods_are_refused_before_sending(method):
 
 def test_allowed_methods_are_only_public_reads():
     assert ALLOWED == {"ledger", "book_offers", "amm_info", "account_info", "account_lines", "account_offers",
-                       "account_tx", "tx", "gateway_balances", "server_state", "server_info", "subscribe", "unsubscribe"}
+                       "account_tx", "tx", "gateway_balances", "server_state", "server_info", "subscribe", "unsubscribe",
+                       "account_objects"}
 
 
 def test_subscribe_is_not_sent_over_json_rpc():

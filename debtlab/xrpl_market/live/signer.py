@@ -1,4 +1,7 @@
-"""The only file that signs or submits (M8). TESTNET ONLY. It can only place and cancel offers.
+"""The testnet signer, and the signing and sending both networks share (M8). It can only place and cancel offers.
+
+With `live/mainnet_signer.py`, the only files that sign or submit. Opening a signer here is
+TESTNET ONLY; the mainnet signer reuses `Signer` and `Submitter` with mainnet's own checks.
 
 `open_signer` checks the config, then the key file's location and who can read it, reads
 the seed once, and refuses a key whose account exists on mainnet. `open_cancel_signer` does
@@ -7,7 +10,8 @@ can only reduce risk, so the kill switch never depends on reaching mainnet. The 
 only inside a closure: a `Signer` has no attribute holding it, won't pickle or copy, and
 this file has no print, logging or environment access (tested).
 
-`Submitter` checks its endpoints when created and the server's network before every submit.
+`Submitter` checks its endpoints when created and the server's network before every submit,
+for the network it is given (testnet unless told otherwise).
 It sends only `server_info` and a signed blob. If an endpoint doesn't answer before sending,
 the next is used. A signed blob is never resent: once it may have left, its outcome is
 unknown until a validated ledger says, and only the next transaction moves on.
@@ -80,13 +84,16 @@ def _whole(value: int | None, name: str) -> int:
 
 
 class Signer:
-    __slots__ = ("address", "_issuer", "_currency", "_signing")
+    """Signs for `address`. `key_address`: the key's own address, which differs from `address` for a regular key."""
+    __slots__ = ("address", "key_address", "network", "_issuer", "_currency", "_signing")
 
-    def __init__(self, address: str, issuer: str, currency: str, signing: Callable):
+    def __init__(self, address: str, issuer: str, currency: str, signing: Callable, network: str = "testnet",
+                 key_address: str | None = None):
         self.address, self._issuer, self._currency, self._signing = address, issuer, currency, signing
+        self.network, self.key_address = network, key_address or address
 
     def __repr__(self) -> str:
-        return f"Signer(testnet, {self.address})"
+        return f"Signer({self.network}, {self.address})"
 
     def __reduce_ex__(self, protocol):
         raise TypeError("a Signer can't be pickled or copied")
@@ -141,15 +148,16 @@ def open_signer(key_file: Path | str, cfg: dict, *, on_mainnet: Callable[[str], 
     wallet, own = _load(key_file, cfg, account, acl, me, repo_root)
     for address in {wallet.address, own}:
         guards.check_not_on_mainnet(address, on_mainnet)
-    return Signer(wallet.address, cfg["rlusd"]["issuer"], cfg["rlusd"]["currency_hex"], _signing_function(wallet))
+    return Signer(wallet.address, cfg["rlusd"]["issuer"], cfg["rlusd"]["currency_hex"], _signing_function(wallet),
+                  key_address=own)
 
 
 def open_cancel_signer(key_file: Path | str, cfg: dict, *, account: str | None = None, acl: Callable = guards.read_acl,
                        me: Callable[[], str] = guards.current_user, repo_root: Path = ROOT) -> Signer:
     """For the kill switch: every check but the mainnet one, and it can sign only `OfferCancel`."""
-    wallet, _ = _load(key_file, cfg, account, acl, me, repo_root)
+    wallet, own = _load(key_file, cfg, account, acl, me, repo_root)
     return Signer(wallet.address, cfg["rlusd"]["issuer"], cfg["rlusd"]["currency_hex"],
-                  _signing_function(wallet, (OfferCancel,)))
+                  _signing_function(wallet, (OfferCancel,)), key_address=own)
 
 
 def _load(key_file: Path | str, cfg: dict, account: str | None, acl: Callable, me: Callable[[], str],
@@ -165,10 +173,13 @@ def _load(key_file: Path | str, cfg: dict, account: str | None, acl: Callable, m
 
 
 class Submitter:
-    """Sends signed offers to testnet, one at a time, moving to the next endpoint when one stops answering."""
+    """Sends signed offers to one network (testnet unless `net` says otherwise), one at a time, moving to the
+    next endpoint when one stops answering."""
 
-    def __init__(self, url: str, *more: str, connect: Callable = ws_connect, timeout: float = 10.0):
-        self.urls = [guards.check_endpoint(u) for u in (url, *more)]
+    def __init__(self, url: str, *more: str, connect: Callable = ws_connect, timeout: float = 10.0,
+                 net: guards.Network = guards.TESTNET):
+        self.net = net
+        self.urls = [net.check_endpoint(u) for u in (url, *more)]
         self._index = 0
         self._connect, self._timeout = connect, timeout
         self._conn = None
@@ -212,19 +223,19 @@ class Submitter:
         return msg.get("result", {})
 
     def alive(self) -> bool:
-        """Is an endpoint answering, as testnet? Sends only `server_info`; another network raises."""
+        """Is an endpoint answering, as this network? Sends only `server_info`; another network raises."""
         info = self._server_info()
         if info is None:
             return False
-        guards.check_network(info)
+        self.net.check_network(info)
         return True
 
     def submit(self, signed: Signed) -> dict:
         """The server's preliminary answer. Only a validated ledger says what really happened."""
         info = self._server_info()
         if info is None:
-            raise SubmitFailed(f"no testnet endpoint answered: {', '.join(self.urls)}", sent=False)
-        guards.check_network(info)
+            raise SubmitFailed(f"no {self.net.name} endpoint answered: {', '.join(self.urls)}", sent=False)
+        self.net.check_network(info)
         try:
             return self._request("submit", tx_blob=signed.blob)
         except Exception as e:

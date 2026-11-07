@@ -1,6 +1,8 @@
-"""The testnet venue's database: its own SQLite file, migrated from migrations/xrpl_live/.
+"""The live venue's database: its own SQLite file, migrated from migrations/xrpl_live/.
 
-Refuses a bond, monitor or paper database. Limits and state are append-only and read from
+It records one network, testnet or mainnet, and refuses to open as the other: a new database
+takes the network it's opened for; one already used keeps its own. Refuses a bond, monitor or
+paper database. Limits and state are append-only and read from
 the database every time, so a kill switch survives a restart. A database where the bot has
 never run reads as paused. Never holds a key.
 """
@@ -29,16 +31,44 @@ LIMITS = {
 }
 
 
-def open_db(path: Path | str) -> sqlite3.Connection:
+NETWORK_LABELS = {"testnet": "TESTNET: no real funds", "mainnet": "MAINNET: real funds"}
+
+
+def open_db(path: Path | str, network: str = "testnet") -> sqlite3.Connection:
+    if network not in NETWORK_LABELS:
+        raise ValueError(f"unknown network {network!r}")
     conn = connect(path)
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     for marker, what in (({"ledger_txns", "curve_snapshots", "events"}, "a bond"), ({"xrpl_snapshots"}, "the monitor's"),
                          ({"paper_orders"}, "the paper bot's")):
         if tables & marker:
             conn.close()
-            raise WrongDatabase(f"{path} is {what} database; the testnet venue uses its own")
+            raise WrongDatabase(f"{path} is {what} database; the live venue uses its own")
     migrate(conn, MIGRATIONS)
+    have = _network(conn)
+    if have != network:
+        used = any(conn.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone()
+                   for t in ("live_runs", "live_state_changes", "live_account", "live_txs"))
+        if used or have != "testnet":      # only a new database's default mark can change, and never back from mainnet
+            conn.close()
+            raise WrongDatabase(f"{path} records {have}, not {network}: each network has its own database")
+        with tx(conn):
+            conn.execute("UPDATE live_meta SET value = ? WHERE key = 'network'", (network,))
     return conn
+
+
+def _network(conn: sqlite3.Connection) -> str:
+    return conn.execute("SELECT value FROM live_meta WHERE key = 'network'").fetchone()["value"]
+
+
+def network(conn: sqlite3.Connection) -> str:
+    """The network this database records: testnet or mainnet."""
+    return _network(conn)
+
+
+def label(conn: sqlite3.Connection) -> str:
+    """What every event and message from this database says it is."""
+    return NETWORK_LABELS[_network(conn)]
 
 
 def event(conn: sqlite3.Connection, at: datetime, kind: str, detail: dict) -> None:

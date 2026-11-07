@@ -1,4 +1,5 @@
-"""Only one file may sign, submit or hold a key: `live/signer.py` (M8, testnet, approved by Ethan on 2 Nov 2026).
+"""Only two files may sign, submit or hold a key: `live/signer.py` (M8 testnet, approved by Ethan on 2 Nov 2026)
+and `live/mainnet_signer.py` (M8 mainnet, offers and cancels only, regular key only: approved by Ethan on 7 Nov 2026).
 
 Scans every Python file the app and scripts are made of. A failure here means someone
 added signing or key handling elsewhere; that needs Ethan's approval, not a test change.
@@ -13,7 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = sorted([*ROOT.glob("debtlab/**/*.py"), *ROOT.glob("scripts/**/*.py")])
-MAY_SIGN = {ROOT / "debtlab" / "xrpl_market" / "live" / "signer.py"}
+MAY_SIGN = {ROOT / "debtlab" / "xrpl_market" / "live" / "signer.py", ROOT / "debtlab" / "xrpl_market" / "live" / "mainnet_signer.py"}
 
 FORBIDDEN = {
     "xrpl-py wallet": re.compile(r"\bxrpl\.wallet\b|from\s+xrpl\s+import[^\n]*\bwallet\b|\bWallet\s*\("),
@@ -43,8 +44,10 @@ def test_no_signing_or_key_handling(path):
     assert not found, f"{path.relative_to(ROOT)}: {found}"
 
 
-def test_exactly_one_file_may_sign():
-    assert [p.relative_to(ROOT).as_posix() for p in MAY_SIGN] == ["debtlab/xrpl_market/live/signer.py"]
+def test_exactly_the_two_approved_files_may_sign():
+    assert sorted(p.relative_to(ROOT).as_posix() for p in MAY_SIGN) == ["debtlab/xrpl_market/live/mainnet_signer.py",
+                                                                         "debtlab/xrpl_market/live/signer.py"]
+    assert all(p.exists() for p in MAY_SIGN)
 
 
 @pytest.mark.parametrize("snippet", [

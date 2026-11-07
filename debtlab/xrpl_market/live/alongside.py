@@ -1,12 +1,13 @@
-"""Paper alongside the testnet bot (M8 step 7): both fill rules on exactly the same quotes.
+"""Paper alongside the live bot (M8), testnet or mainnet: both fill rules on exactly the same quotes.
 
-The paper bot runs unchanged on the testnet monitor's data, on its own database. It decides
+The paper bot runs unchanged on the same monitor's data as live, on its own database. It decides
 the quotes, and the live offers follow the prices of its driver account's open orders, so
 live and paper are comparable fill by fill. State is kept the same both ways: a live stop
 pauses paper, and a breach on a paper account pauses live.
 
-A paper database used here is marked as testnet, and the M7 paper command refuses one with
-that mark, so testnet fills can't land in the M7 paper evidence, or the other way round.
+A paper database used here is marked with its network, and the M7 paper command refuses one
+with any mark, so alongside fills can't land in the M7 paper evidence, or the other way round,
+and a testnet paper database can't be used on mainnet.
 """
 
 from __future__ import annotations
@@ -26,6 +27,11 @@ from debtlab.xrpl_market.paper.bot import PaperBot
 
 def open_testnet_paper(path: Path | str) -> sqlite3.Connection:
     """A paper database for testnet: new, or marked as testnet already. Refuses one with M7 evidence in it."""
+    return open_alongside_paper(path, "testnet")
+
+
+def open_alongside_paper(path: Path | str, network: str) -> sqlite3.Connection:
+    """A paper database alongside live on `network`: new, or marked with it already. Refuses one with M7 evidence."""
     conn = pdb.open_db(path)
     mark = conn.execute("SELECT value FROM paper_meta WHERE key = 'network'").fetchone()
     if mark is None:
@@ -33,12 +39,12 @@ def open_testnet_paper(path: Path | str) -> sqlite3.Connection:
             "SELECT 1 FROM paper_runs LIMIT 1").fetchone()
         if used:
             conn.close()
-            raise pdb.WrongDatabase(f"{path} has been used for M7 paper trading; testnet uses its own paper database")
-        conn.execute("INSERT INTO paper_meta(key, value) VALUES ('network', 'testnet')")
+            raise pdb.WrongDatabase(f"{path} has been used for M7 paper trading; {network} uses its own paper database")
+        conn.execute("INSERT INTO paper_meta(key, value) VALUES ('network', ?)", (network,))
         conn.commit()
-    elif mark["value"] != "testnet":
+    elif mark["value"] != network:
         conn.close()
-        raise pdb.WrongDatabase(f"{path} records {mark['value']}, not testnet")
+        raise pdb.WrongDatabase(f"{path} records {mark['value']}, not {network}")
     return conn
 
 

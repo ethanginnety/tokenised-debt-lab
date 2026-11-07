@@ -1,4 +1,6 @@
-"""The testnet venue: a `Venue` that places, replaces and cancels real offers on TESTNET (M8).
+"""The live venue: a `Venue` that places, replaces and cancels real offers on testnet or mainnet (M8).
+
+Its network is its signer's: a mainnet signer only comes from `live/mainnet_signer.py`.
 
 Unlike the paper and simulated venues, a network sits in the middle, so the order of things
 differs. The risk check runs and the order and transaction are recorded and COMMITTED before
@@ -23,7 +25,7 @@ from decimal import Decimal
 from debtlab.marketmaker.interfaces import Order
 from debtlab.money import plain
 from debtlab.xrpl_market import closetimes
-from debtlab.xrpl_market.live import LABEL
+from debtlab.xrpl_market.live import guards
 from debtlab.xrpl_market.live.db import event, iso, tx
 from debtlab.xrpl_market.live.ledger import Header
 from debtlab.xrpl_market.live.signer import Signed, Signer, SubmitFailed, Submitter
@@ -62,12 +64,16 @@ def unresolved(conn: sqlite3.Connection) -> int:
 
 
 class LiveVenue:
-    simulated = False       # real transactions on a real ledger, with test funds
-    label = LABEL
+    simulated = False       # real transactions on a real ledger: test funds on testnet, real funds on mainnet
 
     def __init__(self, signer: Signer, submitter: Submitter, cfg: dict):
+        self.net = guards.NETWORKS[signer.network]
+        if submitter.net is not self.net:
+            raise guards.MainnetBlocked(f"a {signer.network} signer with a {submitter.net.name} submitter")
+        self.net.check_config(cfg)
+        self.label = self.net.label
         self.signer, self.submitter, self.expiry = signer, submitter, cfg["offer_expiry"]
-        self.name = f"XRPL testnet ({signer.address})"
+        self.name = f"XRPL {self.net.name} ({signer.address})"
         self.context: Context | None = None
         self.down: str | None = None     # why the last send lost its connection; the bot stops quoting on it
 
@@ -98,7 +104,7 @@ class LiveVenue:
                          (status, prelim, iso(now) if resolved else None, signed.hash))
             event(conn, now, "tx_sent", {"hash": signed.hash, "kind": signed.kind, "sequence": signed.sequence,
                                          "offer_sequence": signed.offer_sequence, "preliminary": prelim, "status": status,
-                                         "label": LABEL})
+                                         "label": self.label})
         return status
 
     def submit(self, conn: sqlite3.Connection, order: LiveOrder, now: datetime) -> None:
@@ -115,7 +121,7 @@ class LiveVenue:
                           signed.sequence, expiration, signed.hash, order.replaces, iso(now), c.header.index))
             event(conn, now, "order_placed", {"id": order.id, "side": order.side, "price": plain(order.price),
                                               "size": plain(order.size), "sequence": signed.sequence,
-                                              "expiration": expiration, "replaces": order.replaces, "label": LABEL})
+                                              "expiration": expiration, "replaces": order.replaces, "label": self.label})
         self.context = Context(c.header, c.next_sequence + 1, c.fee_drops, c.mid)
         if self._send(conn, signed, order.id, now) == "failed":
             with tx(conn):
@@ -129,7 +135,7 @@ class LiveVenue:
                                           last_ledger=c.header.index + LAST_LEDGER_AHEAD, fee_drops=c.fee_drops)
         self.context = Context(c.header, c.next_sequence + 1, c.fee_drops, c.mid)
         with tx(conn):
-            event(conn, now, "cancel_sent", {"offer_sequence": offer_sequence, "reason": reason, "label": LABEL})
+            event(conn, now, "cancel_sent", {"offer_sequence": offer_sequence, "reason": reason, "label": self.label})
         return self._send(conn, signed, order_id, now)
 
     def cancel(self, conn: sqlite3.Connection, order_ids: list[str], reason: str, now: datetime) -> None:
