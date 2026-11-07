@@ -124,7 +124,7 @@ Xaman's menus change between versions, so the names below may differ slightly. I
    ```
    python scripts/xrpl_mainnet.py check --key-file C:\debtlab-secrets\xrpl-bot.key
    ```
-   It opens the key with every check, then checks the account: the regular key, exactly one trust line (RLUSD from the verified issuer, limit at most 100, not frozen), no other ledger objects (a signer list, escrow, check, ticket or payment channel all refuse), no offer the bot didn't place, a total worth at most €70, and no freeze by the issuer. It prints the limits and the hard stop, then `all checks passed` or each problem.
+   It opens the key with every check, then checks the account: the regular key, exactly one trust line (RLUSD from the verified issuer, limit no higher than `trust_line_limit_rlusd` in the config, not frozen), no other ledger objects (a signer list, escrow, check, ticket or payment channel all refuse), no offer the bot didn't place, a total worth at most €70, and no freeze by the issuer. It prints the limits and the hard stop, then `all checks passed` or each problem.
 9. **Shadow run, about 30 minutes; nothing is sent.** It reads and reconciles the real account on every ledger, on its own database (`xrpl_mainnet_shadow.sqlite3`), and every send is refused before it leaves, even after a `resume`:
    ```
    python scripts/xrpl_mainnet.py run --shadow --key-file C:\debtlab-secrets\xrpl-bot.key --for 1800

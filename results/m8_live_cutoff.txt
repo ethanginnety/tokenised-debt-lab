@@ -18,3 +18,7 @@ Account:  Ethan's existing dedicated Xaman account (about EUR 60 of XRP), not a 
 Trust line: RLUSD, issuer rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De, limit 100 RLUSD.
 Paper alongside: both fill rules on the same quotes, its own database, compared fill by fill.
 Report:   per brief section 7.5, with transaction hashes, by 14 Nov 2026.
+
+Update, 7 Nov 2026 (before any live order): the trust line limit is Xaman's default,
+751088147 RLUSD, not 100. Ethan chose to keep it and raise the start-up check's cap to it
+(option 2). It changes no limit the bot trades under.

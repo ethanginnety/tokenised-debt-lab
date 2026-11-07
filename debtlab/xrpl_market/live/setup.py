@@ -3,7 +3,7 @@
 Before the mainnet bot does anything, the account must be exactly as the RUNBOOK sets it up:
 
     its regular key on the validated ledger is the bot's key
-    exactly one trust line: RLUSD from the verified issuer, limit within the agreed 100, not frozen
+    exactly one trust line: RLUSD from the verified issuer, limit no higher than `live.trust_line_limit_rlusd`, not frozen
     it owns nothing but that line and offers: no signer list (someone else could sign), escrow,
         check, payment channel, ticket or anything else
     no offer on the ledger that the bot didn't place: it's left alone, and the bot doesn't start

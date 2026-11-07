@@ -160,7 +160,7 @@ def test_the_mainnet_config_passes_and_says_what_it_is():
     c = load_mainnet_config()
     assert c["network"] == "mainnet" and c["network_id"] == 0 and c["rlusd"]["issuer"] == MAINNET_ISSUER
     assert c["paper"] == MAIN["paper"] and c["paper"]["strategy"]["order_eur"] == "9"      # the frozen strategy
-    assert c["live"]["trust_line_limit_rlusd"] == "100" and c["live"]["stop_at"] == "2026-11-11T20:00:00Z"
+    assert c["live"]["trust_line_limit_rlusd"] == "751088147" and c["live"]["stop_at"] == "2026-11-11T20:00:00Z"
     assert c["offer_expiry"]["max_live_seconds"] == 60 and LOOKALIKE in c["known_lookalikes"]
 
 
@@ -501,7 +501,7 @@ def test_the_wrong_regular_key_on_the_ledger_refuses_to_start(tmp_path, monkeypa
     ("two", "exactly one trust line"),
     ([{"currency": "524C555344000000000000000000000000000000", "account": LOOKALIKE, "balance": "25", "limit": "100"}],
      "exactly one trust line"),
-    ([{"currency": "524C555344000000000000000000000000000000", "account": MAINNET_ISSUER, "balance": "25", "limit": "1000"}],
+    ([{"currency": "524C555344000000000000000000000000000000", "account": MAINNET_ISSUER, "balance": "25", "limit": "751088148"}],
      "limit"),
     ([{"currency": "524C555344000000000000000000000000000000", "account": MAINNET_ISSUER, "balance": "25", "limit": "100",
        "freeze_peer": True}], "frozen"),

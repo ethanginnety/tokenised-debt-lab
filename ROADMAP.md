@@ -203,7 +203,7 @@ Real funds, about EUR 50. The M8 requirements above apply. Nothing is signed for
 - **D. Paper alongside,** as on testnet: paper decides the quotes, live follows the conservative account; both rules on the same quotes; compared fill by fill.
 - **E. Supervised sessions,** the first about 1 h. Pauses on the first fill that takes liquidity, any disagreement with the ledger, money moved from outside, and the EUR 5 daily loss. Report per brief section 7.5 with transaction hashes, by 14 Nov.
 
-**Ethan's answers, 7 Nov 2026, recorded before any live order** (`results/m8_live_cutoff.txt`): run length up to 24 h of uptime in supervised sessions, **hard stop Wednesday 11 Nov 2026 20:00 Irish time (20:00 UTC)**, whichever comes first; EUR 9 quotes kept; trust line limit 100 RLUSD.
+**Ethan's answers, 7 Nov 2026, recorded before any live order** (`results/m8_live_cutoff.txt`): run length up to 24 h of uptime in supervised sessions, **hard stop Wednesday 11 Nov 2026 20:00 Irish time (20:00 UTC)**, whichever comes first; EUR 9 quotes kept; trust line limit 100 RLUSD (**changed the same day by Ethan, option 2:** Xaman set its default limit, 751,088,147, and he kept it; the start-up check's cap was raised to match, ASSUMPTIONS).
 
 ## Where we are (resume point, 1 Nov 2026)
 
