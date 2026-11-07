@@ -221,3 +221,11 @@ python scripts/xrpl_paper.py --db C:\debtlab-data\xrpl_paper.sqlite3 --monitor-d
 ```
 
 `run` stays open in its own window and starts paused, every session, so each one needs its own `resume`. Paper `status` doesn't show uptime: Claude works it out after each session from the recorded decisions, counting time with a quote and no gap over 30 s, as the monitor counts its own. The sessions end when those hours reach 24.
+
+The end-of-run report, read-only, for the first 24 h of uptime (what came after is reported separately):
+
+```
+python scripts/xrpl_paper_report.py --db C:\debtlab-data\xrpl_paper.sqlite3 --monitor-db C:\debtlab-data\xrpl.sqlite3
+```
+
+It writes `results/m7_paper_report.md` and `.json`.

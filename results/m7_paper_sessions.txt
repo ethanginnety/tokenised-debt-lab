@@ -24,3 +24,13 @@ Session 2, 5 Nov 2026
   fills: conservative 1,440 (5,514.49 XRP), optimistic 1,440 (5,514.49 XRP); the two rules gave identical fills again
   20 refused orders, all a paper account short of RLUSD or XRP for the full size (inventory at its limit), none a fault
   the session ran partly unsupervised (on battery, standby) against the agreed setup; its standby time is not counted
+
+Session 3, 6-7 Nov 2026
+  run started 16:02:53 UTC 6 Nov, paused by the bot on start (the new fix), resumed by Ethan 16:04:01, first quote 16:04:06
+  last quote 7 Nov 10:16:20, stopped by Ethan 10:16:22 (Ctrl+C); no paper orders left open
+  uptime 17.878 h; running total 32.462 h
+  plugged in throughout, lid open, no standby; 9 gaps over 30 s, about 2 min each, all the monitor's public server reconnecting
+  24 h of uptime (decision F) reached at 7 Nov 01:42:09 UTC, 9.416 h into this session
+
+Result (Ethan, 7 Nov 2026): the report covers the first 24 h of uptime, opening to 7 Nov 01:42:09 UTC; the 8.462 h after it are
+a separate check, not part of the result. Report: results/m7_paper_report.md (exact figures in results/m7_paper_report.json).
