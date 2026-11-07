@@ -1,0 +1,33 @@
+M8 MAINNET: safety checklist before Ethan's go (RUNBOOK, "Checklist before Ethan's go")
+==========================================================================================
+
+Recorded 2026-11-07, about 18:10 UTC, by Claude from Ethan's outputs and read-only checks. No
+mainnet order has been placed or signed; no transaction has been sent from the account by the bot.
+Code at commit 5ce3ce6.
+
+[x] Tests: full suite 995 passed on 5ce3ce6, including 98 mainnet safety tests
+    (tests/test_xrpl_mainnet_safety.py), each guard with a control that fails without it.
+[x] Account, read-only at ledger 108179467: rH5NrqyAkxt3JXtuyi4XkYRBGkTrB1Hwog
+      31.40205 XRP (EUR 32.67), 28.951 RLUSD (EUR 25.93), EUR 58.60 in all (ceiling 70)
+      regular key ravzzNVJTvE8kj13knvY7NJ2ykxPgvRrdm (SetRegularKey, ledger 108178317, tesSUCCESS);
+        master key not disabled (flags 0x10000: lsfPasswordSpent only, set by the regular key change)
+      one trust line: RLUSD from rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De, limit 751088147 (Xaman's default,
+        kept by Ethan: option 2), not frozen; no offers; owns only the trust line; reserve 1.2 XRP
+      issuer flags 0x819a0000, the same as at ledger 108173924 (XRPL_VERIFICATION.md); no global freeze
+[x] `check` (Ethan, ledger 108178385): all checks passed; limits order EUR 10, daily loss EUR 5,
+    total EUR 50, data age 30 s, 2 open orders; offers live at most 60 s; hard stop 2026-11-11T20:00Z.
+    Quotes EUR 9 (frozen strategy).
+[x] Shadow run (Ethan): 2026-11-07 16:53:54 to 17:23:59 UTC, 30 min, its own database: 0 transactions,
+    0 orders, account not opened in its books, ended with zero offers on the ledger, labelled MAINNET.
+    The shadow database doesn't log each ledger read; no crash, ledger disagreement or read outage.
+[x] Kill (Ethan, live database): killed 17:54:21, 0 cancels needed, zero offers; reset to paused
+    17:55:11. Paper alongside followed both.
+[x] Monitor: running with --exclude-account rH5NrqyAkxt3JXtuyi4XkYRBGkTrB1Hwog (process command line
+    checked); data 7 s old, book valid. `check` refuses otherwise.
+[x] Paper alongside: C:\debtlab-data\xrpl_mainnet_paper.sqlite3, marked mainnet. M7's database untouched.
+[x] Secrets: no string that decodes as an XRPL seed in the three mainnet databases, any tracked file,
+    data/ or results/ (scan counted matches, printed none). Key file C:\debtlab-secrets\xrpl-bot.key and
+    its folder readable only by ETHANLAPTOP\ethan; *.key is git-ignored.
+[ ] Laptop plugged in, lid open: Ethan, at the start of each session.
+[ ] R16 (issuer can freeze or claw back RLUSD) and R13 (Irish CGT): Ethan to confirm he has reviewed them.
+[ ] Ethan's explicit go.
