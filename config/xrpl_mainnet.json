@@ -18,7 +18,7 @@
   },
   "live": {
     "_account": "Ethan's dedicated Xaman account: its public address only, set when he gives it. The bot signs for it with its regular key, never the master key.",
-    "account": "",
+    "account": "rH5NrqyAkxt3JXtuyi4XkYRBGkTrB1Hwog",
     "taker_margin_bp": "2",
     "_trust_line_limit_rlusd": "The RLUSD trust line's limit, Ethan 7 Nov 2026. A line with a higher limit refuses to start.",
     "trust_line_limit_rlusd": "100",
