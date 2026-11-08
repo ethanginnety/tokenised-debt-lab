@@ -31,7 +31,7 @@ from debtlab.xrpl_market.live.ledger import Header
 from debtlab.xrpl_market.live.signer import Signed, Signer, SubmitFailed, Submitter
 
 DROPS = Decimal(1_000_000)
-LAST_LEDGER_AHEAD = 3
+LAST_LEDGER_AHEAD = 5     # 3 until mainnet session 1: from a validated read a ledger behind, too close to queue
 NEVER_APPLIES = ("tem", "tef", "tel")
 
 

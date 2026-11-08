@@ -185,7 +185,7 @@ def test_every_offer_expires_on_the_rule_with_a_last_ledger(r):
     oid = r.place()
     (tx,) = r.net.blobs()
     assert tx["Expiration"] == closetimes.expiration_for(r.net.close_time, CFG["offer_expiry"]) == r.order(oid)["expiration"]
-    assert tx["LastLedgerSequence"] == 1003 and tx["Flags"] & 0x00010000
+    assert tx["LastLedgerSequence"] == 1005 and tx["Flags"] & 0x00010000
 
 
 def test_the_fee_is_journalled_and_the_balances_match_the_ledger(r):
@@ -329,7 +329,7 @@ def test_no_answer_to_a_submit_stays_pending_until_a_ledger_says(r):
 def test_a_transaction_that_never_lands_lapses_after_its_last_ledger(r):
     r.net.drop_all = True
     a = r.place()
-    for _ in range(3):
+    for _ in range(5):          # LastLedgerSequence 5 ahead (3 until mainnet session 1)
         r.step()
         assert r.order(a)["status"] == "pending"
     r.step()

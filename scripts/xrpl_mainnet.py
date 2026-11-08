@@ -55,9 +55,14 @@ from debtlab.xrpl_market.readonly import XrplReadError  # noqa: E402
 from debtlab.xrpl_market.view import open_readonly  # noqa: E402
 
 DATA = Path("C:/debtlab-data")
-DEFAULT_DB = DATA / "xrpl_mainnet_live.sqlite3"
+# Budget periods (Ethan, 8 Nov 2026). Each opens a fresh EUR 50 budget from what the account holds when it
+# starts, on its own live and paper-alongside databases, and is reported apart. Period 1 was session 1,
+# 7 Nov (xrpl_mainnet_live.sqlite3 and xrpl_mainnet_paper.sqlite3): closed, its budget 1.881683 XRP below
+# zero (RISK_REGISTER R21). Kept as it is; `--db` and `--paper-db` still read it.
+BUDGET_PERIOD = 2
+DEFAULT_DB = DATA / f"xrpl_mainnet_live_period{BUDGET_PERIOD}.sqlite3"
 DEFAULT_SHADOW_DB = DATA / "xrpl_mainnet_shadow.sqlite3"
-DEFAULT_PAPER_DB = DATA / "xrpl_mainnet_paper.sqlite3"
+DEFAULT_PAPER_DB = DATA / f"xrpl_mainnet_paper_period{BUDGET_PERIOD}.sqlite3"
 DEFAULT_MONITOR_DB = DATA / "xrpl.sqlite3"
 DEFAULT_KEY = Path("C:/debtlab-secrets/xrpl-bot.key")
 NOT_RUNNING_AFTER_SECONDS = 30

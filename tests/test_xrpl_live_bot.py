@@ -572,7 +572,10 @@ def test_a_resting_sell_too_big_for_the_balance_doesnt_refuse_the_bid(quiet):
 def test_the_bid_stays_when_xrp_leaves_while_a_sell_rests(tmp_path):
     """The same case through the bot: a fill on the offer being replaced leaves the replacement's size stale."""
     w = World(tmp_path)
-    w.net.xrp = 102_500_000        # just enough for the 100 XRP sell, with the reserve
+    # Enough for the 100 XRP sell and its replacement, with the reserve. It was just one sell's worth (102.5 XRP)
+    # until mainnet session 1: an offer being replaced now counts in full, so with one sell's worth the sell is
+    # cancelled and quoted afresh instead of replaced, and this case can't arise (test_xrpl_live_replace_race.py).
+    w.net.xrp = 202_500_000
     w.running()
     while not (new := [o for o in book.open_orders(w.conn) if o["side"] == "sell" and o["status"] == "pending" and o["replaces"]]):
         w.step()

@@ -24,6 +24,7 @@ risk check keeps a price margin and the bot pauses on a fill that takes (ROADMAP
 from __future__ import annotations
 
 import itertools
+import math
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -229,6 +230,20 @@ class Submitter:
             return False
         self.net.check_network(info)
         return True
+
+    def open_ledger_fee_drops(self) -> int | None:
+        """What a transaction must pay now to get into the open ledger, in drops, from `server_info`: its load
+        factor (the highest of the server's load and the open-ledger cost) times the base fee. None if no
+        endpoint answers or it doesn't say. Another network raises."""
+        info = self._server_info()
+        if info is None:
+            return None
+        self.net.check_network(info)
+        info = info.get("info") or {}
+        load, base = info.get("load_factor"), (info.get("validated_ledger") or {}).get("base_fee_xrp")
+        if load is None or base is None:
+            return None
+        return math.ceil(Decimal(str(base)) * DROPS * Decimal(str(load)))
 
     def submit(self, signed: Signed) -> dict:
         """The server's preliminary answer. Only a validated ledger says what really happened."""

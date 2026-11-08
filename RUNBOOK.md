@@ -145,7 +145,7 @@ Xaman's menus change between versions, so the names below may differ slightly. I
 | Limits loaded: order €10 (quotes about €9), daily loss €5, total €50, data age 30 s, 2 open orders; offers live 60 s at most | `check` prints them |
 | The shadow run is clean, and `kill` leaves zero offers | step 9's output, and the account on a mainnet explorer |
 | The monitor is fresh and leaves the bot's account out | `check` refuses otherwise |
-| Paper alongside will run on its own database, `xrpl_mainnet_paper.sqlite3` | `run` opens it; the M7 database stays untouched |
+| Paper alongside will run on its own database, `xrpl_mainnet_paper.sqlite3` (budget period 1); from session 2, `xrpl_mainnet_paper_period2.sqlite3` | `run` opens it; the M7 database stays untouched |
 | The laptop is plugged in, with the lid open | you |
 | No secret-shaped string in any database or log, and the key file readable only by you | Claude's scan of the databases and outputs; `check` refuses a readable key |
 | The issuer's clawback and freeze (R16) and the Irish tax record (R13) reviewed | RISK_REGISTER.md, with you |

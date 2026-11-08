@@ -6,6 +6,10 @@ anywhere, how much did live fill, and how much would each paper rule have said?
 Testnet is thin, and our own offers are part of it: a real fill of our live offer is also a
 trade the monitor records, and paper then counts it. Those are flagged, as evidence about
 the plumbing and not about the paper rules. Testnet prices say nothing about profit.
+
+Fills of a replacement sent after its old offer had filled unseen are counted apart ("double-offer
+fills", mainnet session 1): paper replaces atomically and can't have them, so they aren't evidence
+about the paper rules either.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ class Row:
     conservative: Decimal = ZERO
     optimistic: Decimal = ZERO
     own_trades: int = 0
+    live_double: Decimal = ZERO     # of live_maker + live_taker: fills of a replacement after its old offer filled unseen
 
     @property
     def kind(self) -> str:
@@ -43,9 +48,28 @@ class Row:
         return "both, amounts differ"
 
 
+def double_offer_fills(live: sqlite3.Connection) -> set[str]:
+    """Fills of a replacement whose old offer filled after the replacement was sized (after the ledger it was
+    sent from), up to the ledger it applied in. The replacement was sized as if the old offer were still
+    whole, so these sold or bought one quote's worth a second time (mainnet session 1, 7 Nov 2026)."""
+    out: set[str] = set()
+    for r in live.execute("SELECT id, replaces, placed_ledger, applied_ledger FROM live_orders WHERE replaces IS NOT NULL"
+                          " AND placed_ledger IS NOT NULL"):
+        old = live.execute("SELECT id FROM live_orders WHERE sequence = ? AND applied_ledger IS NOT NULL", (r["replaces"],)).fetchone()
+        if old is None:
+            continue
+        upto = r["applied_ledger"] if r["applied_ledger"] is not None else 10**12
+        unseen = live.execute("SELECT 1 FROM live_fills WHERE order_id = ? AND ledger_index > ? AND ledger_index <= ?",
+                              (old["id"], r["placed_ledger"], upto)).fetchone()
+        if unseen:
+            out |= {f["id"] for f in live.execute("SELECT id FROM live_fills WHERE order_id = ?", (r["id"],))}
+    return out
+
+
 def compare(live: sqlite3.Connection, paper: sqlite3.Connection) -> list[Row]:
     rows: dict[tuple, Row] = {}
     live_txs = set()
+    double = double_offer_fills(live)
 
     def row(decision, side) -> Row:
         return rows.setdefault((decision, side), Row(decision, side))
@@ -56,6 +80,8 @@ def compare(live: sqlite3.Connection, paper: sqlite3.Connection) -> list[Row]:
             r.live_maker += D(f["xrp"])
         else:
             r.live_taker += D(f["xrp"])
+        if f["id"] in double:
+            r.live_double += D(f["xrp"])
     for f in paper.execute("SELECT f.*, o.decision_id FROM paper_fills f JOIN paper_orders o ON o.id = f.order_id"):
         r = row(f["decision_id"], f["side"])
         if f["account"] == "conservative":
@@ -83,13 +109,19 @@ def render(rows: list[Row], fee: dict, label: str = LABEL) -> str:
         lines.append("No fills yet, live or paper.")
     for r in rows:
         own = f"  [{r.own_trades} paper trade(s) were our own live fill]" if r.own_trades else ""
-        lines.append(f"decision {r.decision_id} {r.side:<4}  live {plain(r.live_maker + r.live_taker)}  conservative "
+        dbl = f" (of which {plain(r.live_double)} double-offer)" if r.live_double else ""
+        lines.append(f"decision {r.decision_id} {r.side:<4}  live {plain(r.live_maker + r.live_taker)}{dbl}  conservative "
                      f"{plain(r.conservative)}  optimistic {plain(r.optimistic)}  XRP: {r.kind}{own}")
     counts: dict[str, int] = {}
     for r in rows:
         counts[r.kind] = counts.get(r.kind, 0) + 1
     if counts:
         lines += ["", "Totals: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items()))]
+        live = sum((r.live_maker + r.live_taker for r in rows), ZERO)
+        dbl = sum((r.live_double for r in rows), ZERO)
+        lines.append(f"XRP filled: live {plain(live)}, of which double-offer {plain(dbl)} (live without them "
+                     f"{plain(live - dbl)}); conservative {plain(sum((r.conservative for r in rows), ZERO))}, "
+                     f"optimistic {plain(sum((r.optimistic for r in rows), ZERO))}")
     lines += ["", f"Network fees, XRP: live {plain(fee['live'])} ({fee['live_transactions']} transactions), conservative "
                   f"{plain(fee['conservative'])}, optimistic {plain(fee['optimistic'])}.",
               "Live pays for an offer about every 15-25 s because offers expire by themselves; paper is charged only when "

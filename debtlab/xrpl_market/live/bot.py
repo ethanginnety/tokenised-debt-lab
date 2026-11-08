@@ -25,6 +25,7 @@ A server reporting another network turns on the kill switch and stops: nothing m
 
 from __future__ import annotations
 
+import math
 import re
 import sqlite3
 import time
@@ -41,7 +42,8 @@ from debtlab.xrpl_market.live import db as ldb
 from debtlab.xrpl_market.live.guards import MainnetBlocked
 from debtlab.xrpl_market.live.setup import SetupRefused
 from debtlab.xrpl_market.live.ledger import TestnetLedger
-from debtlab.xrpl_market.live.risk import AmmQuotes, LiveMark, LiveRiskCheck, affordable, amm_prices, others_for, own_offers_problem
+from debtlab.xrpl_market.live.risk import (AmmQuotes, LiveMark, LiveRiskCheck, affordable, amm_prices, others_for,
+                                           own_offers_problem, replaced_for)
 from debtlab.xrpl_market.live.signer import Submitter
 from debtlab.xrpl_market.live.venue import LiveOrder, LiveVenue, unresolved
 from debtlab.xrpl_market.paper import PAIR
@@ -50,6 +52,8 @@ from debtlab.xrpl_market.readonly import XrplReadError
 from debtlab.xrpl_market.view import open_readonly
 
 DROPS = Decimal(1_000_000)
+FEE_HEADROOM = Decimal("1.2")    # the open-ledger cost rises as a ledger fills; 20% over it
+FEE_CAP_DROPS = 100              # 0.0001 XRP (Ethan, 7 Nov 2026): above it, the transaction queues or lapses instead
 
 
 @dataclass(frozen=True)
@@ -106,9 +110,19 @@ class LiveBot:
             self.mon.execute("ROLLBACK")
 
     def _fee_drops(self, m: mk.Market | None) -> int:
-        if m is None:
-            return int(self.cfg["paper"]["network_fallback"]["fee_drops"])
-        return int(m.fee_xrp * DROPS)
+        """The network's open-ledger cost now, from the sending server, with headroom and a cap. The monitor
+        reads the fee only once every 1,000 ledgers, so alone it was the base fee while mainnet was busy:
+        session 1 had 152 transactions queued, 11 refused and 12 lapse. Without a reading, the monitor's."""
+        known = int(self.cfg["paper"]["network_fallback"]["fee_drops"]) if m is None else int(m.fee_xrp * DROPS)
+        try:
+            now = self.submitter.open_ledger_fee_drops()
+        except MainnetBlocked:
+            raise
+        except Exception:
+            now = None
+        if now is None:
+            return min(known, FEE_CAP_DROPS)
+        return min(max(known, math.ceil(now * FEE_HEADROOM)), FEE_CAP_DROPS)
 
     # --- start and stop ------------------------------------------------------------------
 
@@ -205,6 +219,12 @@ class LiveBot:
             self.out(f"{self.label}: quoting again")
 
     def _stops(self, read: controls.Read, m: mk.Market, now: datetime) -> None:
+        if book.account(self.conn):
+            x, r = book.balances(self.conn)
+            short = [f"{plain(v)} {what}" for v, what in ((x, "XRP"), (r, "RLUSD")) if v < 0]
+            if short:
+                self._pause(f"the budget is below zero ({', '.join(short)}): the bot has used more than its budget, "
+                            "out of what was set aside. Tell Claude before resuming", now)
         if read.problems:
             self._pause("the books disagree with the ledger: " + "; ".join(read.problems), now)
         for e in read.effects:
@@ -323,7 +343,7 @@ class LiveBot:
                 continue
             replacing = frozenset(o["id"] for o in cur)
             room = affordable(side, want.price, book.within_budget(self.conn, read.account), m, self.cfg,
-                              others_for(self.conn, "", replacing))
+                              others_for(self.conn, "", replacing), replaced_for(self.conn, "", replacing))
             size = min(want.size, room)
             if size < minimum:
                 size = want.size      # let the risk check say why
