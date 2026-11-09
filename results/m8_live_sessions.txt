@@ -71,3 +71,83 @@ Decision, 8 Nov 2026 (Ethan): session 2 opens a fresh EUR 50 budget from what th
 budget period 2, on new databases (C:\debtlab-data\xrpl_mainnet_live_period2.sqlite3 and
 xrpl_mainnet_paper_period2.sqlite3, now the script's defaults). Period 1 (session 1) is closed and kept as it
 is; the two are reported separately. Uptime still counts across both towards the 24 h. No swaps in Xaman.
+
+Session 2, budget period 2, run 1: 2026-11-08T12:09:02.559Z to 21:17:10.851Z, 9 h 08 min 08 s.
+  Quoting from Ethan's resume at 12:09:25 to the bot's own pause at 16:45:46 (4 h 36 min); paused, with zero
+  offers, for the remaining 4 h 31 min, which counts as uptime. Stopped by Ethan (Ctrl+C); zero offers on the
+  ledger after the stop. A first Ctrl+C at 19:58 reached the mainnet monitor's window instead, so the monitor
+  stopped then and the paused bot ran on without it until 21:17.
+  Uptime so far: 2.50 h + 9.14 h = 11.64 h of 24 h (12.36 h left).
+
+Session 2 results (account rH5NrqyAkxt3JXtuyi4XkYRBGkTrB1Hwog, live db xrpl_mainnet_live_period2.sqlite3):
+  Opening (ledger 108195914): 2.731365 XRP, 62.2566948904985 RLUSD on the ledger, worth EUR 58.61. Budget
+    2.329987 XRP and 53.1079877751 RLUSD (EUR 50); set aside 0.401378 XRP and 9.1487071153985 RLUSD.
+  After the stop (ledger 108204075): 28.82183 XRP, 31.64324506462646 RLUSD. The books match the ledger
+    exactly: budget 28.420452 XRP and 22.494537949228 RLUSD, plus the set-aside.
+  Checked against the ledger by hash: every account_tx in ledgers 108195915 to 108204075 (2221), balance
+    changes read straight from the metadata. 1767 of the account's own transactions (1631 OfferCreate,
+    136 OfferCancel, all tesSUCCESS), every one signed by the regular key ravzzNVJTvE8kj13knvY7NJ2ykxPgvRrdm;
+    454 others crossing the bot's offers. 455 fill hashes in the books, all on the ledger, 0 mismatches per
+    hash; no transaction of the account's that the books don't know about. Fees 0.049892 XRP. One more
+    OfferCreate expired unapplied (sequence 108070955, 13:37); none queued or refused at the end (session 1:
+    152 queued, 11 refused, 12 expired): fix 3 worked.
+  Fills: 455. 271 buys 967.107131 XRP (one of them, 0.4066 XRP, took liquidity: see below); 184 sells
+    940.966774 XRP, all maker.
+    Paper alongside over the same time: conservative 1195.45 XRP; optimistic 1375.85 XRP.
+    Double-offer fills: 68 fills, 343.00 XRP. Without them live filled 1565.08 XRP, still more than paper,
+    as in session 1; the rest of the gap is still to explain.
+  Budget: never below zero (fix 1 and 2 held). Lowest XRP 1.999316; RLUSD reached 0.00000036, the edge
+    where fix 1 shrinks the replacement. Nothing paused for the budget. 218 orders refused, mostly sells
+    for lack of budget XRP in the first hours.
+  P&L, RLUSD, at the order book mid after the stop (1.144093, ledger 108204075; the monitor was down, so
+    book only): -0.8148 (about EUR -0.73) = spread +0.6569 + fees -0.0571 + inventory -1.4146.
+    At the pause (mid 1.156461): -0.4633. The other -0.35 came while paused, holding 28.42 XRP as XRP fell.
+    Over the session the mid fell from 1.16611 to 1.14409 (-1.9%); the bot bought into the fall. Daily
+    loss limit EUR 5 never neared.
+  Connection lost once, 16:59:32 (DNS failure reading xrplcluster.com); recovered by itself.
+
+FINDING 3 (took liquidity once; RISK_REGISTER R20): at 16:45:46 a buy at 1.156992, priced below the mid
+  of the ledger it was sized from, applied 2 ledgers later after the mid fell to 1.156461 and crossed a
+  resting offer at about 1.15697: 0.4066 XRP taken for 0.470426 RLUSD (transaction
+  EBBA3521119E807DDB9AA8535CFC733526D5F4E149B4FE217DD6960C80AF0AF2). The bot paused in the same ledger and
+  cancelled its sell, as designed. Cost of taking about 0.0002 RLUSD against the mid. Whether the margin
+  should widen when the price moves fast is Ethan's decision; nothing changed.
+
+Decision, 8 Nov 2026 (Ethan): session 3 tonight, a couple of hours, unchanged, still budget period 2.
+
+Session 3 did not run on the evening of 8 Nov as planned above; it ran on 9 Nov.
+
+Session 3, budget period 2, run 2: 2026-11-09T16:51:13.100Z to 22:43:04.128Z, 5 h 51 min 51 s.
+  Quoting from Ethan's resume at 16:51:43 (first offers 16:52:52, once the strategy had its data) to the
+  bot's own pause at 17:19:46 (28 min); paused, with zero offers, for the remaining 5 h 23 min, which counts
+  as uptime. Stopped by Ethan (Ctrl+C, bot first, then the monitor at 22:43:05); zero offers on the ledger.
+  Uptime so far: 2.50 h + 9.14 h + 5.86 h = 17.50 h of 24 h (6.50 h left).
+
+Session 3 results (same live db as session 2):
+  Opening: the account as session 2 left it, 28.82183 XRP and 31.64324506462646 RLUSD. XRP fell from
+    1.144093 at session 2's stop to 1.098309 at today's opening, while the bot was stopped.
+  After the stop (ledger 108226743): 30.752076 XRP, 29.48669460605546 RLUSD. The books match the ledger
+    exactly: budget 30.350698 XRP and 20.337987490657 RLUSD, plus the set-aside.
+  Checked against the ledger by hash, all of budget period 2 again (ledgers 108195915 to 108226743, 2510
+    transactions): 1980 of the account's own (1822 OfferCreate, 158 OfferCancel, all tesSUCCESS), every one
+    signed by the regular key; 530 others crossing the bot's offers; 532 fill hashes, all on the ledger,
+    0 mismatches; nothing of the account's the books don't know. Session 3's share: 213 transactions (191
+    OfferCreate, 22 OfferCancel), none queued, refused or expired; fees 0.005196 XRP.
+  Fills: 77. 33 buys 207.018698 XRP; 44 sells 205.083256 XRP, one of them (0.518477 XRP) taking liquidity.
+    Paper alongside over the same time: conservative 224.32 XRP; optimistic 291.54 XRP. Live 412.10 XRP,
+    of which double-offer 73.81 (12 fills); without them 338.29.
+  Budget: never below zero. 39 orders refused, mostly buys for lack of budget RLUSD (the bot held mostly
+    XRP).
+  P&L, RLUSD, at the mid after the stop (1.098512, monitor, ledger 108226734):
+    session 3 (from today's opening): -0.0304 = spread +0.1382 + fees -0.0057 + inventory -0.1629.
+    budget period 2 so far (sessions 2 and 3): -2.1464 (about EUR -1.92), mostly XRP's fall while the bot
+    was stopped overnight holding 28.42 XRP.
+
+FINDING 4 (took liquidity again; RISK_REGISTER R20): at 17:19:46 a sell at 1.092636 (order
+  L108072358-sell-108221905, transaction 381D2D791621B86179289A993FF5B8FF9E9F2536408D3EB4C5F79C594805CB18),
+  sized at ledger 108221905 with the mid at 1.091955, applied 2 ledgers later after the price jumped (best
+  ask 1.092292 to 1.093662) and crossed a bid resting above it: 0.518477 XRP sold as taker for 0.566839
+  RLUSD, about 1.09328, above the mid, so no cost. The bot paused in the same ledger, as designed. The same
+  mechanism as finding 3, the other way: twice in about 5 h 05 min of quoting across sessions 2 and 3. Each
+  pause then ran on as uptime until Ethan stopped the bot (4 h 31 min and 5 h 23 min). Whether to change
+  the margin, or how paused time counts, is Ethan's decision; nothing changed.
