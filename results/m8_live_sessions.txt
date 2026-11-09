@@ -3,6 +3,8 @@ M8 MAINNET LIVE SESSIONS: uptime against the cut-off (results/m8_live_cutoff.txt
 
 Cut-off: 24 h of uptime in supervised sessions, or 2026-11-11T20:00:00Z, whichever comes first.
 Uptime counts from `run` start to stop, from the live database (live_runs). Recorded by Claude, read-only.
+  WRONG, corrected 9 Nov 2026 (see the end of this file): the rule recorded before any order is time
+  quoting, with no gap over 30 s (results/m8_live_cutoff.txt). The 'uptime so far' lines below are run time.
 
 Session 1, run 1: 2026-11-07T18:09:13.983Z to 20:39:26.004Z, 2 h 30 min 12 s (planned about 1 h).
   Stopped by Ethan (Ctrl+C); zero offers on the ledger after the stop.
@@ -151,3 +153,17 @@ FINDING 4 (took liquidity again; RISK_REGISTER R20): at 17:19:46 a sell at 1.092
   mechanism as finding 3, the other way: twice in about 5 h 05 min of quoting across sessions 2 and 3. Each
   pause then ran on as uptime until Ethan stopped the bot (4 h 31 min and 5 h 23 min). Whether to change
   the margin, or how paused time counts, is Ethan's decision; nothing changed.
+
+CORRECTION, 9 Nov 2026 (Claude): uptime was counted wrongly in this log. The rule recorded before any
+  order (results/m8_live_cutoff.txt) is time quoting, with no gap over 30 s, as for paper. This log counted
+  run time, start to stop, so the 4 h 31 min and 5 h 23 min paused after the taker fills were counted as
+  uptime. By the recorded rule: session 1 2.50 h, session 2 4.61 h, session 3 0.45 h, total 7.55 h of 24 h
+  (run time 17.50 h). I told Ethan 17.50 h; it was 7.55 h.
+
+Decisions, 9 Nov 2026 (Ethan), after session 3:
+  - The uptime rule stays as it was recorded: no change after seeing results.
+  - No change to the price margin.
+  - THE LIVE RUN ENDS NOW, at 7.55 h of uptime by the recorded rule (17.50 h of run time), short of the
+    24 h and the hard stop. Reason, as Ethan gave it: his exams this week, not the P&L.
+  - Ideas after M8 (ROADMAP): widen the margin in fast markets; flatten inventory before stopping.
+  Final report: results/m8_live_report.md (figures in results/m8_live_report.json).
