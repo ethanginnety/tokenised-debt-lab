@@ -34,6 +34,7 @@ def snapshot_data(client: TestClient) -> dict:
         data["lifecycle_detail"] = client.get("/api/lifecycle").json()
     data["marketmaker_detail"] = client.get("/api/marketmaker").json()
     data["xrpl_detail"] = client.get("/api/xrpl").json()
+    data["live_detail"] = client.get("/api/live").json()
     return data
 
 

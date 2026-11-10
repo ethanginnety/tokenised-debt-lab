@@ -322,6 +322,28 @@ ul.assume { margin: 0; padding: 0 16px 16px 40px; font-size: 13px; color: var(--
 
 footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 16px; }
 
+/* live trading */
+.lv-label { font-size: 13px; }
+.lv-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.lv-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.lv-legend .lv-seg { width: 12px; height: 10px; flex: none; }
+.lv-mark { color: var(--neg); font-size: 12px; }
+.lv-bars { display: flex; flex-direction: column; gap: 6px; }
+.lv-bar { display: grid; grid-template-columns: 6.5rem 1fr 5.5rem; align-items: center; gap: 8px; font-size: 12px; }
+.lv-bar .num { text-align: right; }
+.lv-track { display: flex; gap: 2px; height: 14px; }
+.lv-seg { display: inline-block; height: 100%; border-radius: 2px; }
+.lv-seg.s1 { background: var(--s1); }
+.lv-seg.s1r { background: color-mix(in srgb, var(--s1) 45%, var(--panel)); }
+.lv-seg.dbl { background: repeating-linear-gradient(135deg, var(--warn) 0 3px, color-mix(in srgb, var(--warn) 35%, var(--panel)) 3px 6px); }
+.lv-seg.pc { background: var(--s2); }
+.lv-seg.po { background: color-mix(in srgb, var(--s2) 50%, var(--panel)); }
+.lv-seg.run { background: var(--line); }
+.lv-seg.pause { background: color-mix(in srgb, var(--warn) 55%, var(--panel)); }
+.lv-legend .lv-seg.dbl { background: var(--neg); }
+#liveTimeline text, #livePath text { font-size: 11px; }
+#live table td:first-child { min-width: 9.5rem; }
+
 /* ---------------------------------------------------------------- phones: sidebar becomes a top menu */
 @media (max-width: 900px) {
   .side {
@@ -357,6 +379,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     <li><a href="#lifecycle">Lifecycle</a></li>
     <li><a href="#marketmaker">Market maker</a></li>
     <li><a href="#xrpl">RLUSD/XRP</a></li>
+    <li><a href="#live">Live trading</a></li>
     <li><a href="#risk">Risk</a></li>
     <li><a href="#curves-sec">Curves</a></li>
     <li><a href="#sources">Data sources</a></li>
@@ -431,6 +454,20 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
       </div>
       <p class="note warn"><b>Live market data, read-only.</b> Real prices from validated ledgers, not a model and not a bond price: no bond value is used for this pair. Nothing here trades; paper trading comes later in M7, and anything live only after Ethan's explicit approval (M8).</p>
       <div class="stack" id="xrBody"></div>
+    </section>
+
+    <section class="sec" id="live" aria-label="Live trading, mainnet">
+      <div class="sec-head">
+        <div class="t"><h2>Live trading</h2>
+          <details class="info"><summary aria-label="About live trading">i</summary><div class="pop">
+            <span>M8: the market-making bot on the real RLUSD/XRP book on the XRP Ledger mainnet, with a EUR 50 budget, 7 to 9 Nov 2026, in three supervised sessions and two budget periods. The run has ended.</span>
+            <span>Read-only. The figures come from the final report (results/m8_live_report.json, checked against the ledger by hash) and from the live and paper databases, opened read-only. Nothing here signs, sends or starts a bot. Report: results/m8_live_report.md.</span>
+          </div></details>
+        </div>
+        <div class="pills" id="liveMeta"></div>
+      </div>
+      <p class="note warn lv-label"><b>MAINNET: real funds, EUR 50 experiment, run ended.</b> Real fills on the XRP Ledger, over 7.55 h of quoting in a falling market. They show how the bot behaved, not whether the strategy makes money.</p>
+      <div class="stack" id="liveBody"></div>
     </section>
 
     <section class="sec" id="risk" aria-label="Risk">
@@ -539,6 +576,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
   let LIFE = null;  // /api/lifecycle, fetched only when reading a scenario database
   let MM = null;    // /api/marketmaker
   let XR = null;    // /api/xrpl
+  let LV = null;    // /api/live
   const live = !window.__SNAPSHOT__;
 
   async function loadLifecycle() {
@@ -561,12 +599,18 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     catch (e) { XR = { error: e.message }; }
   }
 
+  async function loadLive() {
+    if (!live) { LV = DATA.live_detail || null; return; }
+    try { const r = await fetch("api/live"); if (!r.ok) throw new Error("HTTP " + r.status); LV = await r.json(); }
+    catch (e) { LV = { error: e.message }; }
+  }
+
   async function load() {
-    if (!live) { DATA = window.__SNAPSHOT__; await loadLifecycle(); await loadMarketMaker(); await loadXrpl(); render(); return; }
+    if (!live) { DATA = window.__SNAPSHOT__; await loadLifecycle(); await loadMarketMaker(); await loadXrpl(); await loadLive(); render(); return; }
     try {
       const r = await fetch("api/overview");
       if (!r.ok) throw new Error("HTTP " + r.status);
-      DATA = await r.json(); await loadLifecycle(); await loadMarketMaker(); await loadXrpl(); render();
+      DATA = await r.json(); await loadLifecycle(); await loadMarketMaker(); await loadXrpl(); await loadLive(); render();
       // The monitor writes a snapshot every validated ledger (~4 s); keep this one section current.
       setInterval(async () => { await loadXrpl(); xrplSection(XR); }, 10000);
     } catch (e) {
@@ -629,6 +673,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     lifecycleSection(d.lifecycle, LIFE);
     marketMakerSection(MM);
     xrplSection(XR);
+    liveSection(LV);
     shocksTable(bonds);
     longEndTables(bonds);
     pyChart(bonds);
@@ -637,7 +682,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     assumptions([...bonds, ...funds], d.curves);
     auditLog(d.events);
     document.getElementById("footer").textContent =
-      `Version ${d.version} · data mode ${d.data_mode} · ${d.database ? d.database.role + " database " + d.database.path + " · " : ""}page generated ${when(d.generated_at)}. Educational prototype: simulated instruments only. Nothing here is a real security, an offer, or a public-blockchain asset; the RLUSD/XRP section is real market data, read-only.`;
+      `Version ${d.version} · data mode ${d.data_mode} · ${d.database ? d.database.role + " database " + d.database.path + " · " : ""}page generated ${when(d.generated_at)}. Educational prototype: simulated instruments only. Nothing here is a real security, an offer, or a public-blockchain asset; the RLUSD/XRP section is real market data, read-only, and the Live trading section records the M8 run on mainnet with real funds, which has ended.`;
     spy();
   }
 
@@ -1483,6 +1528,335 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
     draw();
   }
 
+  // ---------------------------------------------------------------- live trading (M8 mainnet, ended)
+  const eur = (x, dp = 2) => (Number(x) < 0 ? "−" : Number(x) > 0 ? "+" : "") + "€" + fmt(Math.abs(Number(x)), dp);
+  const cls = (x) => Number(x) < 0 ? "neg" : Number(x) > 0 ? "pos" : "";
+  const hrs = (h) => fmt(h, h < 10 ? 2 : 1) + " h";
+  const hm = (ms) => { const m = Math.round(ms / 60000); return Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0") + " min"; };
+  const hhmm = (t) => new Date(t).toISOString().slice(11, 16);
+  const day = (t) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  const shortHash = (h) => h.slice(0, 8) + "…" + h.slice(-6);
+  const LV_PAGE = 25;
+  let lvShown = LV_PAGE;
+
+  function liveSection(v) {
+    const body = document.getElementById("liveBody"), meta = document.getElementById("liveMeta");
+    if (!body) return;
+    meta.replaceChildren(pill("bad", "Mainnet · real funds"), pill("", "Run ended 9 Nov"), pill("accent", "Read-only"));
+    if (!v || v.error) { body.replaceChildren(el("div", { class: "panel empty", text: "Couldn't load the live run" + (v ? ": " + v.error : " (not in this snapshot).") })); return; }
+    if (!v.enabled) { body.replaceChildren(el("div", { class: "panel empty", text: v.reason })); return; }
+    const bad = v.checks.filter((c) => !c.ok);
+    body.replaceChildren(...[
+      bad.length ? el("p", { class: "note warn" }, el("b", { text: "The databases and the report disagree: " }), bad.map((c) => c.name + " (" + c.detail + ")").join("; ") + ".") : null,
+      lvTiles(v),
+      lvSplit(v),
+      el("div", { class: "grid2" }, lvWhole(v), lvDrawdown(v)),
+      lvCompare(v),
+      lvTimelinePanel(v),
+      lvPathPanel(v),
+      lvRules(v),
+      lvFills(v),
+      lvChecks(v),
+    ].filter(Boolean));
+    lvTimeline(v); lvPath(v);
+  }
+
+  function lvTiles(v) {
+    const h = v.headline, move = Number(h.xrp_move);
+    const tile = (label, big, bigCls, subs, extra) => el("div", { class: "tile" },
+      el("div", { class: "tile-head" }, el("span", { class: "label", text: label }), extra || null),
+      el("div", { class: "big " + (bigCls || "") }, ...big), ...subs);
+    const share = Math.min(1, h.quoting_h / h.target_h);
+    return el("div", { class: "tiles" },
+      tile("Whole account P&L", [eur(h.account_pnl_eur)], cls(h.account_pnl_eur),
+        [el("div", { class: "tile-sub" }, el("span", { class: "num", text: signed(h.account_pnl_rlusd, 4) + " RLUSD" })),
+         el("div", { class: "tile-sub muted small", text: "From " + fmt(h.start_value_rlusd, 2) + " to " + fmt(h.end_value_rlusd, 2) + " RLUSD, " + day(h.opened_at) + " to " + day(h.ended_at) + ". EUR at " + h.usd_per_eur + " USD, 1 RLUSD = 1 USD." })]),
+      tile("Against doing nothing", [eur(h.vs_hold_eur)], cls(h.vs_hold_eur),
+        [el("div", { class: "tile-sub" }, el("span", { class: "num", text: signed(h.vs_hold_rlusd, 4) + " RLUSD" })),
+         el("div", { class: "tile-sub muted small", text: "Holding the opening balances would have made " + signed(h.hold_rlusd, 2) + " RLUSD." })]),
+      tile("XRP over the run", [signed(move * 100, 1) + "%"], "",
+        [el("div", { class: "tile-sub" }, el("span", { class: "num", text: fmt(h.mid_open, 4) + " → " + fmt(h.mid_end, 4) })),
+         el("div", { class: "tile-sub muted small", text: "Reference mid, RLUSD per XRP: a one-way, falling market." })]),
+      tile("Fills", [fmt(h.fills, 0)], "",
+        [el("div", { class: "tile-sub" }, el("span", { class: "num", text: fmt(h.xrp_traded, 0) + " XRP" }), el("span", { class: "muted small", text: "bought and sold" })),
+         el("div", { class: "tile-sub muted small", text: h.taker_fills + " took liquidity; every fill checked on the ledger by hash." })]),
+      tile("Time", [hrs(h.running_h), el("small", { text: "running" })], "",
+        [el("div", { class: "tile-sub" }, el("span", { class: "num", text: hrs(h.quoting_h) }), el("span", { class: "muted small", text: "quoting, of " + h.target_h + " h" })),
+         el("div", { class: "meter", title: fmt(share * 100, 0) + "% of the 24 h" }, el("i", { style: "width:" + (share * 100).toFixed(1) + "%" })),
+         el("div", { class: "tile-sub muted small", text: "Quoting is the uptime rule recorded before any order." })],
+        info("The uptime rule", ["Quoted exactly as recorded:", v.uptime_rule], true)));
+  }
+
+  function lvSplit(v) {
+    const row = (name, s, total) => el("tr", { class: total ? "total" : "" },
+      el("td", {}, name, s.sessions ? el("div", { class: "cell-sub", text: s.sessions.join(", ") }) : null),
+      ...["spread", "fees", "inventory_quoting", "not_quoting", "total"].map((k) => el("td", { class: "num " + cls(s[k]), text: signed(s[k], 4) })),
+      el("td", { class: "num " + cls(s.total_eur), text: eur(s.total_eur) }));
+    const [p1, p2] = v.split.periods, c = v.split.combined;
+    const t = el("table", {},
+      el("thead", {}, el("tr", {}, ...["", "Spread", "Fees", "Inventory, quoting", "Inventory, not quoting", "Total", "EUR"].map((x, i) => el("th", { class: i ? "num" : "", text: x })))),
+      el("tbody", {}, row("Period 1", p1), row("Period 2", p2), row("Both periods", c, true)));
+    const panel = lifeBlock("P&L split, RLUSD", "As for paper: spread is each fill against the mid at that moment; fees are network fees; inventory is the mid's move on what was held, marked at every decision. 'Not quoting' is paused within a session plus stopped between sessions. Each period counts only its own budget.", t);
+    panel.append(el("div", { class: "note", style: "margin:0 16px 16px" },
+      el("b", { text: "Quoting " + signed(c.quoting, 4) }), " over " + hrs(v.headline.quoting_h) + "; ",
+      el("b", { text: "not quoting " + signed(c.not_quoting, 4) }), ": paused " + signed(c.inventory_paused_in_session, 4) + ", stopped overnight holding XRP " + signed(c.inventory_stopped_between_sessions, 4) + "."));
+    return panel;
+  }
+
+  function lvWhole(v) {
+    const w = v.whole_account;
+    const t = el("table", {}, el("thead", {}, el("tr", {}, el("th", { text: "Part" }), el("th", { class: "num", text: "RLUSD" }))),
+      el("tbody", {}, ...w.parts.map((p) => el("tr", {}, el("td", { text: p.part }), el("td", { class: "num " + cls(p.rlusd), text: signed(p.rlusd, 4) }))),
+        el("tr", { class: "total" }, el("td", { text: "Whole account" }), el("td", { class: "num " + cls(w.total), text: signed(w.total, 4) }))));
+    return lifeBlock("How the whole account adds up", "The budgets are what the bot traded with. The rest of the account was set aside and only moved with the price, and between the periods the account held what period 1 ended with.", t);
+  }
+
+  function lvDrawdown(v) {
+    const t = el("table", {}, el("thead", {}, el("tr", {}, el("th", { text: "Period" }), el("th", { class: "num", text: "RLUSD" }), el("th", { text: "From – to (UTC)" }))),
+      el("tbody", {}, ...v.drawdown.map((d) => el("tr", {}, el("td", { text: d.period }), el("td", { class: "num neg", text: "−" + fmt(d.rlusd, 4) }),
+        el("td", { class: "small", text: d.from ? when(d.from) + " – " + when(d.to) : "–" })))));
+    return lifeBlock("Largest drawdown", "The largest fall in each budget's value from a high to a later low, marked as for the P&L split.", t);
+  }
+
+  function lvCompare(v) {
+    const max = Math.max(...v.compare.flatMap((c) => [Number(c.xrp.live), Number(c.xrp.conservative), Number(c.xrp.optimistic)]));
+    const bar = (parts, label, total) => el("div", { class: "lv-bar" },
+      el("span", { class: "lv-bar-name", text: label }),
+      el("span", { class: "lv-track" }, ...parts.filter((p) => Number(p.v) > 0).map((p) => el("i", { class: "lv-seg " + p.c, style: "width:" + (Number(p.v) / max * 100).toFixed(2) + "%", title: p.n + ": " + fmt(p.v, 2) + " XRP" }))),
+      el("span", { class: "num small", text: fmt(total, 0) + " XRP" }));
+    const legend = el("div", { class: "lv-legend" },
+      ...[["s1", "Live, within one paper order per quote"], ["s1r", "Live refills"], ["dbl", "Live double-offer race (R21)"], ["pc", "Paper, conservative"], ["po", "Paper, optimistic"]]
+        .map(([c, n]) => el("span", {}, el("i", { class: "lv-seg " + c }), n)));
+    const blocks = v.compare.map((c) => el("div", { class: "lv-bars" },
+      el("div", { class: "label", text: c.period[0].toUpperCase() + c.period.slice(1) }),
+      bar([{ v: c.xrp.live_capped, c: "s1", n: "Within one paper order" }, { v: c.xrp.refills, c: "s1r", n: "Refills" }, { v: c.xrp.double_offer_beyond, c: "dbl", n: "Double-offer race beyond one paper order" }], "Live", c.xrp.live),
+      bar([{ v: c.xrp.conservative, c: "pc", n: "Paper, conservative" }], "Conservative", c.xrp.conservative),
+      bar([{ v: c.xrp.optimistic, c: "po", n: "Paper, optimistic" }], "Optimistic", c.xrp.optimistic)));
+    const row = (name, f, d) => el("tr", {}, el("td", { text: name }), ...v.compare.flatMap((c) => f(c).map((x) => el("td", { class: "num " + (d ? cls(x) : ""), text: d ? signed(x, 4) : x }))));
+    const xrp = (x) => fmt(x, 2);
+    const t = el("table", {},
+      el("thead", {}, el("tr", {}, el("th", { text: "" }), ...v.compare.flatMap((c) => ["Live", "Conservative", "Optimistic"].map((n, i) => el("th", { class: "num", text: (i ? "" : c.period + " · ") + n }))))),
+      el("tbody", {},
+        row("XRP filled", (c) => [xrp(c.xrp.live), xrp(c.xrp.conservative), xrp(c.xrp.optimistic)]),
+        row("Fills", (c) => [String(c.fills.live), String(c.fills.conservative), String(c.fills.optimistic)]),
+        row("Live capped at one paper order per quote", (c) => [xrp(c.xrp.live_capped), "", ""]),
+        row("Refills, beyond one paper order", (c) => [xrp(c.xrp.refills), "–", "–"]),
+        row("Double-offer race, beyond one paper order", (c) => [xrp(c.xrp.double_offer_beyond), "–", "–"]),
+        row("P&L, RLUSD", (c) => [c.pnl.live, c.pnl.conservative, c.pnl.optimistic], true),
+        row("of which while quoting", (c) => [c.pnl.live_quoting, c.pnl.conservative_quoting, c.pnl.optimistic_quoting], true),
+        row("Network fees, XRP", (c) => [c.fees_xrp.live, c.fees_xrp.conservative, c.fees_xrp.optimistic])));
+    const panel = el("div", { class: "panel flush" },
+      el("div", { class: "panel-head" }, el("div", { class: "t" }, "Live against paper, on the same quotes",
+        info("About live against paper", ["Paper ran alongside on exactly the same quotes, under both fill rules, on its own accounts; live followed the conservative account's orders.",
+          "Refills: after a live offer filled, the bot placed a new one for the same paper order, because that paper order was still open. A paper order can only fill once, so paper can't show this.",
+          "Double-offer race (R21): a replacement went up while the old offer was being filled unseen, so one quote's worth traded twice.",
+          "Capped at one paper order's worth per quote, live falls inside paper's range in both periods. The differences are explained in total, not fill by fill; that waits until after Ethan's exams."]))),
+      el("div", { style: "padding:0 16px 16px", class: "stack" }, legend, el("div", { class: "grid2" }, ...blocks)),
+      el("div", { class: "tbl-wrap" }, t),
+      el("p", { class: "note", style: "margin:16px", text: "Paper's opening balances differed from live's in period 2 (live opened mostly in RLUSD), so the P&L rows aren't like-for-like on inventory; the fill rows are." }));
+    return panel;
+  }
+
+  // Timeline: one row per session, hours since its start on a shared scale.
+  function lvTimelinePanel(v) {
+    const legend = el("div", { class: "lv-legend" },
+      el("span", {}, el("i", { class: "lv-seg run" }), "Running, not quoting"), el("span", {}, el("i", { class: "lv-seg s1" }), "Quoting"),
+      el("span", {}, el("i", { class: "lv-seg pause" }), "Paused"), el("span", {}, el("i", { class: "lv-seg dbl" }), "Budget below zero (R21)"),
+      el("span", {}, el("b", { class: "lv-mark", text: "◆" }), "Fill that took liquidity (R20)"));
+    return el("div", { class: "panel" },
+      el("div", { class: "panel-head" }, el("div", { class: "t" }, "Sessions: running, quoting, paused",
+        info("About the timeline", ["Each row is one session, from its start to Ethan's stop, on the same hour scale.", "Quoting is the recorded uptime rule: time with a quote and no gap over 30 s, counted from the paper-alongside decisions.", "Paused: after a fill that took liquidity, the bot paused in the same ledger and stayed paused until stopped."])),
+        el("span", { class: "hint", text: "Hover for times" })),
+      el("div", { class: "stack" }, legend, el("div", { class: "chart", id: "liveTimeline" })));
+  }
+
+  function lvTimeline(v) {
+    const host = document.getElementById("liveTimeline");
+    if (!host) return;
+    const rows = v.sessions, rowH = 26, top = 8;
+    const narrow = (host.clientWidth || 520) < 640, gap = narrow ? 40 : 22;
+    const H = top + rows.length * (rowH + gap) + 18;
+    const { svg, tip, W } = frame(host, H);
+    const labelW = Math.max(...rows.map((s) => measure(svg, s.session + " · " + day(s.started)))) + 12;
+    const sumW = Math.max(...rows.map((s) => measure(svg, hrs(s.running_h) + " running · " + hrs(s.quoting_h) + " quoting"))) + 12;
+    const left = narrow ? 4 : labelW, right = narrow ? 4 : sumW;
+    const maxH = Math.ceil(Math.max(...rows.map((s) => s.running_h)));
+    const X = (h) => left + h / maxH * (W - left - right);
+    const hT = niceTicks(0, maxH, Math.max(2, Math.floor((W - left - right) / 70)));
+    hT.forEach((h, n) => {
+      svg.append(sv("line", { x1: X(h), x2: X(h), y1: top - 4, y2: H - 18, stroke: css("--grid"), "stroke-width": 1 }));
+      const t = sv("text", { x: X(h), y: H - 4, "text-anchor": h === 0 ? "start" : n === hT.length - 1 ? "end" : "middle" }); t.textContent = h + " h"; svg.append(t);
+    });
+    const hover = (node, head, rowsTip) => {
+      node.style.cursor = "default";
+      node.addEventListener("pointerenter", () => showTip(host, tip, svg, W, Number(node.getAttribute("x") || node.getAttribute("cx") || 0), head, rowsTip));
+      node.addEventListener("pointerleave", () => { tip.hidden = true; });
+    };
+    rows.forEach((s, i) => {
+      const t0 = Date.parse(s.started), y = top + i * (rowH + gap) + (narrow ? 14 : 0);
+      const hx = (iso) => X((Date.parse(iso) - t0) / 3.6e6);
+      const name = s.session + " · " + day(s.started);
+      const lt = sv("text", narrow ? { x: left, y: y - 4 } : { x: 0, y: y + rowH / 2 + 4 }); lt.textContent = name; svg.append(lt);
+      const rt = sv("text", narrow ? { x: left, y: y + rowH + 14 } : { x: W - right + 8, y: y + rowH / 2 + 4 });
+      rt.textContent = hrs(s.running_h) + " running · " + hrs(s.quoting_h) + " quoting"; svg.append(rt);
+      const seg = (a, b, color, extra = {}) => { const x = hx(a), w = Math.max(1.5, hx(b) - x); const r = sv("rect", { x, y, width: w, height: rowH, rx: 3, fill: color, ...extra }); svg.append(r); return r; };
+      const base = seg(s.started, s.stopped, css("--line"));
+      hover(base, name, [{ name: "Running", color: css("--line"), value: hhmm(s.started) + "–" + hhmm(s.stopped) + " UTC" }, { name: "Stopped", color: css("--muted"), value: s.stop_reason }]);
+      s.quoting.forEach(([a, b]) => hover(seg(a, b, css("--s1")), name + ": quoting", [{ name: hhmm(a) + "–" + hhmm(b) + " UTC", color: css("--s1"), value: hm(Date.parse(b) - Date.parse(a)) }]));
+      s.paused.forEach((p) => hover(seg(p.from, p.to, css("--warn"), { "fill-opacity": 0.55 }), name + ": paused by the " + p.by,
+        [{ name: hhmm(p.from) + "–" + hhmm(p.to) + " UTC", color: css("--warn"), value: hm(Date.parse(p.to) - Date.parse(p.from)) }]));
+      v.events.filter((e) => e.kind === "breach" && Date.parse(e.at) >= t0 && Date.parse(e.at) <= Date.parse(s.stopped)).forEach((e) => {
+        const x = hx(e.at), w = Math.max(2, hx(e.to) - x);
+        const r = sv("rect", { x, y: y + rowH - 6, width: w, height: 6, fill: css("--neg") }); svg.append(r);
+        hover(r, "Budget below zero (R21)", [{ name: hhmm(e.at) + "–" + hhmm(e.to) + " UTC", color: css("--neg"), value: e.lowest_xrp + " XRP" }]);
+      });
+      v.events.filter((e) => e.kind === "taker" && Date.parse(e.at) >= t0 && Date.parse(e.at) <= Date.parse(s.stopped)).forEach((e) => {
+        const x = hx(e.at);
+        const d = sv("path", { d: `M${x} ${y - 5} l6 6 l-6 6 l-6 -6 Z`, fill: css("--neg"), stroke: css("--panel"), "stroke-width": 2, x });
+        svg.append(d);
+        hover(d, "Took liquidity: paused in the same ledger", [{ name: hhmm(e.at) + " UTC, ledger " + e.ledger, color: css("--neg"), value: e.side + " " + fmt(e.xrp, 4) + " XRP" }]);
+      });
+    });
+  }
+
+  function lvPathPanel(v) {
+    return el("div", { class: "panel" },
+      el("div", { class: "panel-head" }, el("div", { class: "t" }, "Whole account P&L, and the XRP price",
+        info("About this chart", ["Two charts on one time axis, each with its own scale. Top: the whole account's P&L in RLUSD since the opening on 7 Nov, the budget's balances from the journal plus what was set aside, marked at the reference mid every minute. Bottom: the reference mid.",
+          "Time is running time: the stretches with no session (overnight, and between the periods) are squeezed into the breaks, and the P&L jump across a break is what holding XRP while stopped did. A dotted stretch inside a session had no mark: on 8 Nov the connection dropped at 16:59 and the monitor was stopped at 19:58, both while the bot was paused.", "Shaded: paused. ◆: a fill that took liquidity. The last point is the report's figure."])),
+        el("span", { class: "hint", text: "Hover to read values" })),
+      el("div", { class: "chart", id: "livePath" }));
+  }
+
+  function lvPath(v) {
+    const host = document.getElementById("livePath");
+    if (!host) return;
+    const pts = v.path.map((p) => ({ ...p, ms: Date.parse(p.t) }));
+    const segs = []; pts.forEach((p) => { if (!segs.length || p.gap_before) segs.push([]); segs[segs.length - 1].push(p); });
+    // each segment spans its whole session, start to stop, so a pause at the end of a session is drawn in full
+    const sess = Object.fromEntries(v.sessions.map((s) => [s.session, s]));
+    const ext = segs.map((s) => { const w = sess[s[0].session]; return [Math.min(s[0].ms, w ? Date.parse(w.started) : Infinity), Math.max(s[s.length - 1].ms, w ? Date.parse(w.stopped) : -Infinity)]; });
+    const { svg, tip, W, H } = frame(host, 380);
+    const BREAK = 40, left = Math.max(measure(svg, "−2.00"), measure(svg, "1.160")) + 14, right = 12;
+    const span = ext.reduce((a, [x0, x1]) => a + (x1 - x0), 0);
+    const k = (W - left - right - BREAK * (segs.length - 1)) / span;
+    const offs = []; let acc = left; ext.forEach(([x0, x1]) => { offs.push(acc); acc += (x1 - x0) * k + BREAK; });
+    const segOf = (ms) => ext.findIndex(([x0, x1]) => ms >= x0 && ms <= x1);
+    const X = (ms, i = segOf(ms)) => offs[i] + (ms - ext[i][0]) * k;
+    const pnlTop = 24, pnlBot = 220, pxTop = 262, pxBot = 340;
+    const panelAxis = (lo, hi, y0, y1, dp, title) => {
+      const ticks = niceTicks(lo, hi, 4), a = Math.min(lo, ticks[0]), b = Math.max(hi, ticks[ticks.length - 1]);
+      const Y = (val) => y0 + (b - val) / (b - a) * (y1 - y0);
+      ticks.forEach((t) => {
+        svg.append(sv("line", { x1: left, x2: W - right, y1: Y(t), y2: Y(t), stroke: css(t === 0 ? "--muted" : "--grid"), "stroke-width": 1 }));
+        const tx = sv("text", { x: left - 6, y: Y(t) + 4, "text-anchor": "end" }); tx.textContent = (dp ? fmt(t, dp) : signed(t, 2)); svg.append(tx);
+      });
+      const tt = sv("text", { class: "zone", x: left, y: y0 - 8 }); tt.textContent = title; svg.append(tt);
+      return Y;
+    };
+    const pn = pts.map((p) => p.pnl), md = pts.map((p) => p.mid);
+    const YP = panelAxis(Math.min(0, ...pn), Math.max(0, ...pn), pnlTop, pnlBot, 0, "Whole account P&L, RLUSD");
+    const YM = panelAxis(Math.min(...md), Math.max(...md), pxTop, pxBot, 3, "XRP price, RLUSD per XRP (reference mid)");
+    // paused shading, both charts
+    v.sessions.flatMap((s) => s.paused).forEach((p) => {
+      const a = Date.parse(p.from), b = Date.parse(p.to), i = segOf(a), j = segOf(b);
+      if (i < 0 || i !== j) return;
+      [[pnlTop, pnlBot], [pxTop, pxBot]].forEach(([y0, y1]) => svg.append(sv("rect", { x: X(a, i), y: y0, width: Math.max(1, X(b, i) - X(a, i)), height: y1 - y0, fill: css("--warn"), "fill-opacity": 0.1 })));
+      const t = sv("text", { class: "zone", x: X(a, i) + 4, y: pnlTop + 12, fill: css("--warn-ink") }); t.textContent = "paused"; svg.append(t);
+    });
+    // breaks: dashed connectors and how long nothing ran
+    segs.forEach((s, i) => {
+      if (!i) return;
+      const a = segs[i - 1][segs[i - 1].length - 1], b = s[0], xa = X(a.ms, i - 1), xb = X(b.ms, i);
+      [[YP, "pnl"], [YM, "mid"]].forEach(([Y, key]) => svg.append(sv("line", { x1: xa, x2: xb, y1: Y(a[key]), y2: Y(b[key]), stroke: css("--muted"), "stroke-width": 1.5, "stroke-dasharray": "3 3" })));
+      [pnlTop, pxTop].forEach((y0, n) => svg.append(sv("line", { x1: (xa + xb) / 2, x2: (xa + xb) / 2, y1: y0, y2: n ? pxBot : pnlBot, stroke: css("--line"), "stroke-width": 1, "stroke-dasharray": "2 4" })));
+      const t = sv("text", { x: (xa + xb) / 2, y: H - 8, "text-anchor": "middle" }); t.textContent = fmt((ext[i][0] - ext[i - 1][1]) / 3.6e6, 1) + " h stopped"; svg.append(t);
+    });
+    // x labels: each segment's start, skipped where it would run into the one before
+    let lastRight = -Infinity;
+    segs.forEach((s, i) => {
+      const text = day(ext[i][0]) + " " + hhmm(ext[i][0]), w = measure(svg, text);
+      if (offs[i] < lastRight + 8) return;
+      const t = sv("text", { x: offs[i], y: pxBot + 18, "text-anchor": "start" }); t.textContent = text; svg.append(t);
+      lastRight = offs[i] + w;
+    });
+    // lines
+    segs.forEach((s, i) => {
+      const P = (key, Y) => s.map((p, n) => (n && !p.unmarked_before ? "L" : "M") + X(p.ms, i).toFixed(1) + " " + Y(p[key]).toFixed(1)).join(" ");
+      [["pnl", YP, "--s1"], ["mid", YM, "--s2"]].forEach(([key, Y, c]) => {
+        svg.append(sv("path", { d: P(key, Y), fill: "none", stroke: css(c), "stroke-width": 2, "stroke-linejoin": "round" }));
+        s.forEach((p, n) => { if (n && p.unmarked_before) svg.append(sv("line", { x1: X(s[n - 1].ms, i), x2: X(p.ms, i), y1: Y(s[n - 1][key]), y2: Y(p[key]), stroke: css(c), "stroke-width": 1.5, "stroke-dasharray": "2 4" })); });
+      });
+    });
+    // markers
+    const near = (ms) => pts.reduce((best, p) => Math.abs(p.ms - ms) < Math.abs(best.ms - ms) ? p : best, pts[0]);
+    v.events.forEach((e) => {
+      const ms = Date.parse(e.at), i = segOf(ms); if (i < 0) return;
+      const x = X(ms, i), y = YP(near(ms).pnl);
+      svg.append(sv("path", { d: `M${x} ${y - 7} l6 6 l-6 6 l-6 -6 Z`, fill: css("--neg"), stroke: css("--panel"), "stroke-width": 2 }));
+      const end = x > W - 110;
+      const t = sv("text", { class: "zone", x: end ? x - 8 : x + 8, y: y + 18, "text-anchor": end ? "end" : "start" }); t.textContent = e.kind === "taker" ? "took liquidity" : "R21 breach"; svg.append(t);
+    });
+    const last = pts[pts.length - 1];
+    const lt = sv("text", { class: "dl", x: W - right, y: YP(last.pnl) - 8, "text-anchor": "end", fill: css("--ink") }); lt.textContent = signed(last.pnl, 2) + " RLUSD"; svg.append(lt);
+    // hover
+    const rule = crosshair(svg, pnlTop, pxBot);
+    const dots = [css("--s1"), css("--s2")].map((c) => { const d = sv("circle", { r: 4, fill: c, stroke: css("--panel"), "stroke-width": 2, visibility: "hidden" }); svg.append(d); return d; });
+    const xs = pts.map((p) => X(p.ms));
+    svg.addEventListener("pointermove", (ev) => {
+      const r = svg.getBoundingClientRect(), x = (ev.clientX - r.left) * W / r.width;
+      let n = 0; for (let m = 1; m < xs.length; m++) if (Math.abs(xs[m] - x) < Math.abs(xs[n] - x)) n = m;
+      const p = pts[n];
+      rule.setAttribute("x1", xs[n]); rule.setAttribute("x2", xs[n]); rule.setAttribute("visibility", "visible");
+      dots[0].setAttribute("cx", xs[n]); dots[0].setAttribute("cy", YP(p.pnl)); dots[1].setAttribute("cx", xs[n]); dots[1].setAttribute("cy", YM(p.mid));
+      dots.forEach((d) => d.setAttribute("visibility", "visible"));
+      showTip(host, tip, svg, W, xs[n], when(p.t) + " · " + p.period, [
+        { name: "P&L", color: css("--s1"), value: signed(p.pnl, 4) + " RLUSD (" + eur(p.pnl / Number(v.headline.usd_per_eur)) + ")" },
+        { name: "XRP mid", color: css("--s2"), value: fmt(p.mid, 6) }]);
+    });
+    svg.addEventListener("pointerleave", () => { rule.setAttribute("visibility", "hidden"); dots.forEach((d) => d.setAttribute("visibility", "hidden")); tip.hidden = true; });
+  }
+
+  function lvRules(v) {
+    const r = v.rules;
+    const card = (title, tag, ...texts) => el("div", { class: "panel stack", style: "gap:8px" },
+      el("div", { class: "subhead" }, el("h3", { text: title }), tag), ...texts.map((t) => el("p", { text: t })));
+    return el("div", { class: "grid2" },
+      card("The budget breach (R21)", pill("bad", "Happened, session 1"), r.r21),
+      card("Its fix", pill("ok", "Held in period 2"), r.r21_fix),
+      card("The taker-pause rule (R20)", pill("warn", "Triggered twice"), r.taker),
+      card("How the run ended", pill("", "Ethan, 9 Nov"), r.end, "Uptime rule, as recorded: " + v.uptime_rule));
+  }
+
+  function lvFills(v) {
+    const fl = v.fills.slice(0, lvShown);
+    const t = el("table", {},
+      el("thead", {}, el("tr", {}, ...["Time (UTC)", "Period", "Side", "Role", "XRP", "RLUSD", "Price", "Marked", "Transaction"].map((x, i) => el("th", { class: [4, 5, 6].includes(i) ? "num" : "", text: x })))),
+      el("tbody", {}, ...fl.map((f) => el("tr", {},
+        el("td", { class: "num", text: f.at.slice(5, 10).replace("-", "/") + " " + f.at.slice(11, 19) }),
+        el("td", { text: f.period.replace("period ", "P") }),
+        el("td", { text: f.side }),
+        el("td", {}, f.role === "taker" ? pill("bad", "taker") : el("span", { class: "muted", text: "maker" })),
+        el("td", { class: "num", text: fmt(f.xrp, 6) }), el("td", { class: "num", text: fmt(f.rlusd, 6) }),
+        el("td", { class: "num", text: f.price ? fmt(f.price, 6) : "–" }),
+        el("td", {}, el("span", { class: "pills" }, f.double_offer ? pill("warn", "double offer") : null, f.refill ? pill("accent", "refill") : null)),
+        el("td", { class: "num" }, el("a", { href: f.url, target: "_blank", rel: "noopener", title: f.tx + " (ledger " + f.ledger + ")", text: shortHash(f.tx) }))))));
+    const panel = lifeBlock("Fills, latest first", "Every live fill on mainnet, with its transaction on the XRPL explorer (livenet.xrpl.org). Double offer: a fill of a replacement whose old offer filled unseen (R21). Refill: a later live order for a paper order that live had already filled. Every hash was checked against the validated ledger.", t);
+    panel.querySelector(".panel-head").append(el("span", { class: "hint", text: "Showing " + fl.length + " of " + v.fills.length }));
+    if (lvShown < v.fills.length) {
+      const b = el("button", { type: "button", class: "link", style: "margin:8px 16px 16px", text: "Show " + Math.min(LV_PAGE, v.fills.length - lvShown) + " more" });
+      b.addEventListener("click", () => { lvShown += LV_PAGE; panel.replaceWith(lvFills(v)); });
+      panel.append(b);
+    }
+    return panel;
+  }
+
+  function lvChecks(v) {
+    const t = el("table", {}, el("tbody", {}, ...v.checks.map((c) => el("tr", {},
+      el("td", {}, pill(c.ok ? "ok" : "bad", c.ok ? "agrees" : "differs")), el("td", { text: c.name }), el("td", { class: "muted small", text: c.detail })))));
+    return lifeBlock("Report and databases agree", "This page takes its figures from the final report (" + v.report + ") and reads the live and paper databases in " + v.data_dir + " read-only. These checks run on every load.", t);
+  }
+
   // ---------------------------------------------------------------- page behaviour
   // Highlight the section currently under the top bar.
   const links = [...document.querySelectorAll("#nav a")];
@@ -1511,7 +1885,7 @@ footer { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line)
   }, true);
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") document.querySelectorAll("details.info[open]").forEach((d) => { d.open = false; }); });
 
-  const redrawCharts = () => { if (DATA) { pyChart(DATA.instruments); curveChart(DATA.curves, DATA.instruments); } };
+  const redrawCharts = () => { if (DATA) { pyChart(DATA.instruments); curveChart(DATA.curves, DATA.instruments); if (LV && LV.enabled) { lvTimeline(LV); lvPath(LV); } } };
   let lastW = 0;
   window.addEventListener("resize", () => { const w = document.getElementById("app").clientWidth; if (DATA && Math.abs(w - lastW) > 30) { lastW = w; redrawCharts(); } spy(); });
   // Chart colours are read from CSS at draw time, so redraw when the theme flips.

@@ -21,6 +21,7 @@ from debtlab.instruments import FundShare, load_instruments
 from debtlab.marketmaker.book import load_book_config, seed_book
 from debtlab.marketmaker.controls import seed_limits
 from debtlab.pricing.bond import FixedRateBond
+from debtlab.xrpl_market.liveview import live_view
 from debtlab.xrpl_market.view import xrpl_view
 from debtlab.service import (
     curve_view,
@@ -186,6 +187,12 @@ def create_app(settings: Settings | None = None, clock: Callable[[], datetime] =
         """Read-only. LIVE MARKET DATA from the RLUSD/XRP monitor's own database, opened read-only.
         The monitor runs separately (scripts/xrpl_monitor.py); nothing here trades."""
         return xrpl_view(settings.xrpl_db_path, app.state.s.clock())
+
+    @app.get("/api/live")
+    def get_live() -> dict:
+        """Read-only. MAINNET: real funds. The M8 live run after it ended: the final report's figures and the live and
+        paper databases of both budget periods, each opened read-only. Nothing here signs, sends or starts a bot."""
+        return live_view(settings.live_report_path, settings.xrpl_live_dir, app.state.s.clock())
 
     @app.get("/api/events")
     def events(kind: str | None = None, limit: int = Query(100, ge=1, le=1000)) -> list[dict]:

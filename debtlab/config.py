@@ -22,9 +22,13 @@ class Settings:
     holders_file: Path = ROOT / "config" / "holders.json"
     marketmaker_file: Path = ROOT / "config" / "marketmaker.json"
     xrpl_db_path: Path = ROOT / "data" / "xrpl.sqlite3"  # the RLUSD/XRP monitor's own database (M7), read-only here
+    # M8 mainnet run, read-only here: the final report's figures and the folder holding its live and paper databases
+    live_report_path: Path = ROOT / "results" / "m8_live_report.json"
+    xrpl_live_dir: Path = ROOT / "data"
 
     @classmethod
     def from_env(cls) -> "Settings":
+        xrpl_db = Path(os.getenv("DEBTLAB_XRPL_DB", str(ROOT / "data" / "xrpl.sqlite3")))
         mode = os.getenv("DEBTLAB_DATA_MODE", "offline").strip().lower()
         if mode not in ("offline", "online"):
             raise ValueError("DEBTLAB_DATA_MODE must be 'offline' or 'online'")
@@ -41,5 +45,7 @@ class Settings:
             port=int(os.getenv("DEBTLAB_PORT", "8000")),
             holders_file=Path(os.getenv("DEBTLAB_HOLDERS", str(ROOT / "config" / "holders.json"))),
             marketmaker_file=Path(os.getenv("DEBTLAB_MARKETMAKER", str(ROOT / "config" / "marketmaker.json"))),
-            xrpl_db_path=Path(os.getenv("DEBTLAB_XRPL_DB", str(ROOT / "data" / "xrpl.sqlite3"))),
+            xrpl_db_path=xrpl_db,
+            live_report_path=Path(os.getenv("DEBTLAB_LIVE_REPORT", str(ROOT / "results" / "m8_live_report.json"))),
+            xrpl_live_dir=Path(os.getenv("DEBTLAB_XRPL_LIVE_DIR", str(xrpl_db.parent))),  # by default beside the monitor's
         )

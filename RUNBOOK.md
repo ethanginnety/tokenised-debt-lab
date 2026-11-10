@@ -245,6 +245,8 @@ $env:DEBTLAB_PORT="8001"
 
 Then open http://127.0.0.1:8001. The `$env:` values last only for that window, so set them again each time.
 
+The *Live trading* section (after *RLUSD/XRP*) shows the M8 mainnet run, which has ended: MAINNET, real funds, read-only. It reads `results/m8_live_report.json` (`DEBTLAB_LIVE_REPORT`) and the four live and paper databases the report names, in `DEBTLAB_XRPL_LIVE_DIR`, which defaults to the folder holding `DEBTLAB_XRPL_DB` (so `C:\debtlab-data` with the setting above). Each is opened read-only; nothing signs, sends or starts a bot. On every load it checks that the databases' fill hashes match the report's and recounts the quoting time; a mismatch shows as a warning at the top of the section.
+
 *Couldn't load the RLUSD/XRP monitor: Failed to fetch* means **the app** has stopped, not the monitor: a page left open keeps asking every 10 s and gets no answer. Start the app again and the section recovers by itself within 10 s. A fault in `/api/xrpl` itself would show `HTTP 500` instead.
 
 For the step 4 checkpoint, run it until `status` shows at least **48 hours of actual uptime** (Ethan, 2 Nov 2026: hours up, not hours on the clock), then send Claude the output of `status`. Checkpoint moved by Ethan to the evening of Wednesday 4 Nov 2026 (it was due after 22:50 on 3 Nov) because of the gaps listed in ROADMAP. **Accepted by Ethan on 5 Nov 2026 on 41.33 h of uptime, short of 48 h, because decision C passes by wide margins (his decision).**
