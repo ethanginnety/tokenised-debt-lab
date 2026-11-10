@@ -128,7 +128,10 @@ def test_quote_decisions_are_tagged_with_their_run_and_step(tmp_path):
 
 def test_page_fixes_from_the_browser_check():
     page = render_page("{}")
-    assert page.count("Milestone 4 complete") == 1  # once, in the page head
+    assert page.count("Milestone 8 complete") == 1  # once, in the page head
+    assert "Milestone 4 complete" not in page
+    assert "paper trading comes later" not in page  # RLUSD/XRP intro in the past tense
+    assert "Paper run done 7 Nov (M7)" in page and "live run 7-9 Nov, ended" in page
     assert "[hidden] { display: none !important; }" in page  # an empty banner stays hidden
     assert 'id="logOrders"' in page and '"order_placed", "order_cancelled"' in page  # order events toggle
     assert "bot still running at end of run" in page
