@@ -25,9 +25,11 @@
   - In session 1, the bot went 1.88 XRP over its budget (R21, fixed before session 2).
   - Its offers took liquidity twice (R20); both times the bot paused within the same ledger.
   - The €5 daily loss limit never came close.
-- **Length:** the run ended early, at 7.55 h of uptime out of 24 h, by Ethan's decision on 9 Nov because of his exams this week, not because of the P&L. See *Uptime and the end of the run* for a correction of mine about how uptime was counted.
+- **Length:** 17.5 h running, 7.55 h quoting. The run ended early, at 7.55 h of uptime out of 24 h by the recorded rule, by Ethan's decision on 9 Nov because of his exams this week, not because of the P&L. See *Uptime and the end of the run* for a correction of mine about how uptime was counted.
 
 These are real fills on mainnet, but over a short run in a falling market. They don't show whether the strategy makes money.
+
+**Status: M8 done.** Ethan agreed with this report on 10 Nov 2026. The fill-by-fill explanation of each live against paper difference is deferred, by his decision, until after his exams (*Live against paper*, *Limitations*).
 
 ## The run
 
@@ -50,7 +52,8 @@ Note on session 1: from 20:10 its budget had no XRP left, and the risk check ref
 
 ### Uptime and the end of the run
 
-- **The rule:** recorded on 7 Nov, before any order: up to 24 h of uptime, counted as time quoting, or the hard stop on 11 Nov 20:00 UTC, whichever came first.
+- **The rule,** exactly as recorded in `results/m8_live_cutoff.txt` on 7 Nov 2026 at 11:31 UTC, before any live order: the run's length is "up to 24 h of uptime, summed across supervised sessions (uptime as for paper: time quoting, with no gap over 30 s), OR the hard stop below, whichever comes first." The hard stop: "Wednesday 11 Nov 2026, 20:00 Irish time = 2026-11-11T20:00:00Z".
+- **Both figures:** **17.5 h running** (17 h 30 min, start to stop, three sessions) and **7.55 h quoting** (7 h 33 min, uptime by the rule).
 - **My error:** my session log counted uptime as run time, from start to stop, and told Ethan "17.50 h of 24 h". That was wrong. Under the recorded rule the run reached **7.55 h**. The paused time after each taker fill (9 h 54 min) and the time before the first quote don't count.
 - **Ethan's decisions, 9 Nov:**
   - Keep the uptime rule as it was: no change after seeing results.
@@ -177,7 +180,7 @@ Paper alongside ran on exactly the same quotes, under both fill rules, on its ow
    - Fix 1 stops it breaking the budget. It doesn't stop it happening.
 3. **What's left is within paper's range.** Capped at one paper order per quote, live filled 382.33 XRP against paper's 348.47 to 399.21 in period 1, and 1,571.44 against 1,419.78 to 1,667.40 in period 2.
    - Quote by quote, the differences go both ways. Live filled where conservative paper didn't (104.94 and 467.26 XRP), and conservative paper filled where live didn't (90.28 and 424.01 XRP).
-   - These are queue position, other traders and timing. I haven't attributed them quote by quote, so the requirement to explain every difference is met in aggregate, not for each fill.
+   - These are queue position, other traders and timing. I haven't attributed them quote by quote, so the requirement to explain every difference is met in aggregate, not for each fill. Ethan decided on 10 Nov that the quote-by-quote explanations wait until after his exams.
 4. **Fees.** Live paid 2 to 3.6 times paper's fees. Live pays every 15 to 25 s to refresh offers that expire by themselves; paper is charged only when the price moves. At 0.07 RLUSD in all, fees are small next to the spread and inventory.
 
 **Why live lost more while quoting in period 2:**
@@ -221,7 +224,7 @@ The pause on a taker fill is the rule the plan set: "never intends to take, and 
 - **Short and one-way.** 7.55 h of quoting over three days, in a market that fell 5.5%. That says little about whether the strategy makes money; it says more about how it behaves in a falling market.
 - **Two budget periods.** After the breach, period 2 started from what was left, mostly RLUSD, so its first hours couldn't sell. The periods aren't one continuous €50 experiment.
 - **Paper's starting balances differ from live's** in period 2, so the inventory parts of the P&L aren't like-for-like. The fill comparison is.
-- **Not every difference is explained.** The live against paper differences are attributed in aggregate (refills, races, queue and timing), not fill by fill.
+- **Not every difference is explained.** The live against paper differences are attributed in aggregate (refills, races, queue and timing), not fill by fill. The fill-by-fill explanations are deferred until after Ethan's exams (his decision, 10 Nov 2026).
 - **One mark from the book.** The monitor was down at session 2's stop, so that mark is the order book mid read from the ledger just after (1.144093, ledger 108204075), not the monitor's reference mid.
 - **The euro rate** is the opening rate, 1.1165 USD per EUR, throughout, with RLUSD counted as USD.
 - **The report script has no tests of its own.** Its totals are asserted against the books, and the books were checked against the ledger by hash.
